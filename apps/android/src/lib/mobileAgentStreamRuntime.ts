@@ -14,6 +14,7 @@ import type { AgentStreamEvent, AgentStreamResult } from "./agentStream";
 import { MobileWebRTCBridge } from "./mobileWebRTC";
 import {
   cloneToolCard,
+  projectAwaitingHumanApproval,
   projectToolCallDelta,
   projectToolCallEndDelta,
   projectToolCallStartDelta,
@@ -127,12 +128,13 @@ export async function streamAgentMessageWebRTC(
   params: Record<string, unknown>,
   traceId: string,
   onEvent: (event: AgentStreamEvent) => void,
+  action?: string,
 ): Promise<AgentStreamResult> {
   const summary = createAgentStreamSummary();
   const endPayload = await client.streamAgent<Record<string, unknown>>(params, traceId, (event) => {
     onEvent(event);
     updateAgentStreamSummary(summary, event);
-  });
+  }, action);
   const streamEndSessionId = parseStreamEndSessionId(endPayload);
   if (streamEndSessionId && !summary.result.sessionId) {
     summary.result.sessionId = streamEndSessionId;
@@ -226,7 +228,11 @@ function projectAwaitingHuman(
   projector: MobileAgentStreamProjector,
 ): void {
   const payload = parseAgentAwaitingHumanStreamPayload(event.payload);
-  runtime.message = payload.prompt;
+  if (payload.approval?.id || payload.tool === "codex_approval") {
+    projectAwaitingHumanApproval(runtime, event, payload);
+  } else {
+    runtime.message = payload.prompt;
+  }
   runtime.terminal = true;
   projector.setStatus({ tone: "success", text: "等待用户输入" });
   projector.commitReply(runtime);

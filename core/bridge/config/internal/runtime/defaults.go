@@ -11,6 +11,7 @@ const (
 	DefaultRelayStopPolicy              = RelayStopPolicyAIDecides
 	DefaultRelayMaxRounds               = 20
 	DefaultRelayExecutionTimeoutMS      = 0
+	DefaultExternalCodexPermissionMode  = "default"
 	DefaultMaxTurns                     = 20
 	DefaultLLMCompletionRetryCount      = 1
 	DefaultLLMCompletionRetryIntervalMS = 200

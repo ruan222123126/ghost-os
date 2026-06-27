@@ -1,6 +1,11 @@
 import type { MobileToolCard, MobileToolCardStatus } from "../mobileTypes";
 import { parseAgentToolCallPayload } from "./agentStream";
-import type { AgentCompletionDeltaPayload, AgentStreamEvent, AgentToolCallPayload } from "./agentStream";
+import type {
+  AgentAwaitingHumanStreamPayload,
+  AgentCompletionDeltaPayload,
+  AgentStreamEvent,
+  AgentToolCallPayload,
+} from "./agentStream";
 import type { MobileAgentStreamRuntime } from "./mobileAgentStreamRuntime";
 import type { ToolTagStreamEvent } from "./mobileToolTags";
 
@@ -49,6 +54,25 @@ export function projectToolFinished(
   });
   clearStructuredPreviewLookups(runtime);
   return { toolCallId: tool.tool_call_id, toolName: tool.tool };
+}
+
+export function projectAwaitingHumanApproval(
+  runtime: MobileAgentStreamRuntime,
+  event: AgentStreamEvent,
+  payload: AgentAwaitingHumanStreamPayload,
+): void {
+  const approvalId = payload.approval?.id?.trim() || payload.question_id.trim();
+  const cardId = resolveToolCardId(runtime, event, payload.tool_call_id || approvalId);
+  upsertToolCard(runtime, {
+    approvalId,
+    approvalKind: payload.approval?.kind,
+    id: cardId,
+    input: payload.prompt,
+    status: "pending",
+    toolCallId: payload.tool_call_id,
+    toolName: payload.tool || payload.approval?.tool || "codex_approval",
+    traceId: event.trace_id,
+  });
 }
 
 export function projectToolCallStartDelta(

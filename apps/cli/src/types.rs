@@ -61,6 +61,7 @@ impl ConfigUpdate {
             relay_default_stop_policy: None,
             relay_default_max_rounds: None,
             relay_default_execution_timeout_ms: None,
+            external_codex_permission_mode: None,
             llm_completion_retry_count: None,
             llm_completion_retry_interval_ms: None,
             session_human_log_full_enabled: None,

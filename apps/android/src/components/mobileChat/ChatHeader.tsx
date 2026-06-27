@@ -1,12 +1,20 @@
 import { useEffect, useState } from "react";
-import type { ConfigPayload, ProviderListPayload, StatusMessage } from "../../mobileTypes";
+import type {
+  AgentRuntimeType,
+  ConfigPayload,
+  ExternalCodexPermissionMode,
+  ProviderListPayload,
+  StatusMessage,
+} from "../../mobileTypes";
 import { IconButton, UiIcon } from "./icons";
 import { RuntimeMenu } from "./RuntimeMenu";
 
 const RUNTIME_MENU_ANIMATION_MS = 180;
 
 interface ChatHeaderProps {
+  agentRuntime: AgentRuntimeType;
   runtimeLabel: string;
+  codexPermissionMode?: ExternalCodexPermissionMode;
   config: ConfigPayload | undefined;
   providerList: ProviderListPayload | undefined;
   status: StatusMessage;
@@ -15,6 +23,7 @@ interface ChatHeaderProps {
   onOpenSidebar: () => void;
   onToggleRuntimeMenu: () => void;
   onCloseRuntimeMenu: () => void;
+  onSwitchAgentRuntime: (runtime: AgentRuntimeType) => void;
   onSwitchModel: (model: string) => Promise<boolean>;
   onOpenMoreMenu: () => void;
   onNewSession: () => void;
@@ -58,11 +67,14 @@ function HeaderRuntimeSelector(props: HeaderRuntimeSelectorProps) {
 
       {shouldRenderMenu ? (
         <RuntimeMenu
+          agentRuntime={props.agentRuntime}
+          codexPermissionMode={props.codexPermissionMode}
           config={props.config}
           providerList={props.providerList}
           status={props.status}
           open={props.runtimeMenuOpen}
           onClose={props.onCloseRuntimeMenu}
+          onSwitchAgentRuntime={props.onSwitchAgentRuntime}
           onSwitchModel={props.onSwitchModel}
         />
       ) : null}

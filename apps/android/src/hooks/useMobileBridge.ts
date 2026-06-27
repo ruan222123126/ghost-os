@@ -23,8 +23,11 @@ import { parseSessionDetail, parseSessionMetadataList } from "../lib/sessionPayl
 import { MobileWebRTCBridge } from "../lib/mobileWebRTC";
 import { loadSettings, normalizeBridgeUrl, saveSettings } from "../lib/settingsStorage";
 import type {
+  AgentRuntimeType,
   AgentPayload,
   ConfigPayload,
+  ExternalAgentApprovalDecision,
+  ExternalCodexPermissionMode,
   HostProfile,
   MobileConversationMessage,
   OrchestrationTaskPayload,
@@ -43,11 +46,13 @@ import type {
 
 const SESSION_DETAIL_PAGE_LIMIT = 100;
 const SESSION_FULL_PAGE_LIMIT = 200;
+const EXTERNAL_AGENT_STREAM_PATH = "api/external-agent/stream";
 const UNSUPPORTED_SKILL_MANAGEMENT_TEXT = "电脑端不支持技能管理";
 
 type TaskRunScope = "user" | "orchestration";
 
 interface SendAgentMessageOptions {
+  agentRuntime?: AgentRuntimeType;
   message: string;
   history: MobileConversationMessage[];
   onReply: (reply: AgentPayload) => void;
@@ -66,6 +71,7 @@ interface SendAgentMessageResult {
 }
 
 interface StopAgentRunInput {
+  agentRuntime?: AgentRuntimeType;
   sessionId?: string;
   traceId?: string;
 }
@@ -93,6 +99,19 @@ interface AgentStopPayload {
   message: string;
   session_id?: string;
   status: "stopped" | "not_running";
+}
+
+interface ExternalAgentStopPayload {
+  provider?: string;
+  session_id?: string;
+  status: string;
+  thread_id?: string;
+}
+
+interface ExternalAgentApprovalInput {
+  approvalId: string;
+  decision: ExternalAgentApprovalDecision;
+  sessionId: string;
 }
 
 function connectionTargetKey(settings: StoredSettings, bridgeUrl: string): string {
@@ -187,13 +206,20 @@ function withLocalProviderSelection(
   if (!providerList) {
     return undefined;
   }
-  const activeProvider = providerList.providers.find((provider) => provider.provider_id === settings.localProviderId)
-    ?? providerList.providers.find((provider) => !provider.deleted_at);
+  const activeProvider = resolveProviderForSettings(providerList, settings);
   return {
     ...providerList,
     active_provider: activeProvider?.name || "",
     active_provider_id: activeProvider?.provider_id,
   };
+}
+
+function resolveProviderForSettings(
+  providerList: ProviderListPayload | undefined,
+  settings: StoredSettings,
+): ProviderConfigPayload | undefined {
+  return providerList?.providers.find((provider) => provider.provider_id === settings.localProviderId)
+    ?? providerList?.providers.find((provider) => !provider.deleted_at);
 }
 
 function mergeLocalProvidersWithRemote(
@@ -233,6 +259,10 @@ function escapeRegExp(value: string): string {
 function isUnsupportedActionError(error: unknown, action: string): boolean {
   const pattern = new RegExp(`unsupported action\\s*:?[\\s"']+${escapeRegExp(action)}(?:\\b|["'])`, "iu");
   return pattern.test(errorMessage(error));
+}
+
+function codexPermissionMode(config: ConfigPayload | undefined): ExternalCodexPermissionMode {
+  return config?.external_codex_permission_mode ?? "default";
 }
 
 function skillListErrorText(error: unknown): string {
@@ -1070,17 +1100,35 @@ export function useMobileBridge() {
     [config?.model, loadProviders, requestBridge, settings.remoteExecutionEnabled],
   );
 
+  const updateExternalCodexPermissionMode = useCallback(
+    async (mode: ExternalCodexPermissionMode): Promise<boolean> => {
+      setStatus({ tone: "loading", text: "Codex 权限更新中" });
+      try {
+        const payload = await requestBridge<ConfigPayload>("CONFIG_UPDATE", {
+          external_codex_permission_mode: mode,
+        });
+        setConfig(payload);
+        setStatus({ tone: "success", text: "Codex 权限已更新" });
+        return true;
+      } catch (error) {
+        setStatus({ tone: "error", text: errorMessage(error) });
+        return false;
+      }
+    },
+    [requestBridge],
+  );
+
   const sendAgentMessage = useCallback(
     async (options: SendAgentMessageOptions): Promise<SendAgentMessageResult> => {
+      const agentRuntime = options.agentRuntime ?? "ghost";
       const traceId = options.traceId?.trim() || createTraceId("android-agent-stream");
       const requestId = options.requestId?.trim() || createTraceId("android-agent-stream-request");
       const initialSessionId = options.sessionId?.trim() || "";
-      if (!settings.remoteExecutionEnabled) {
-        const localProvider = localProviderList?.providers.find((provider) => provider.provider_id === settings.localProviderId)
-          ?? localProviderList?.providers.find((provider) => !provider.deleted_at);
+      if (agentRuntime === "ghost" && !settings.remoteExecutionEnabled) {
+        const localProvider = resolveProviderForSettings(mergedProviderList, settings);
         const model = settings.localModel?.trim() || localProvider?.models?.[0]?.trim() || "";
         if (!localProvider || !model) {
-          options.onStatus({ tone: "error", text: "请先配置本地 provider 和模型" });
+          options.onStatus({ tone: "error", text: "请先配置 provider 和模型" });
           return { ok: false };
         }
         options.onStatus({ tone: "loading", text: "本地生成中" });
@@ -1119,17 +1167,34 @@ export function useMobileBridge() {
           return { ok: false };
         }
       }
-      const runtime = createMobileAgentStreamRuntime(initialSessionId);
-      const params: Record<string, unknown> = {
-        message: options.message,
-        ...(initialSessionId ? { session_id: initialSessionId } : {}),
-      };
-      if (config?.provider && config?.model) {
-        params.runtime_overrides = {
-          model: config.model,
-          provider_name: config.provider,
-        };
+      if (agentRuntime === "codex" && !config) {
+        options.onStatus({ tone: "error", text: "请先连接电脑端" });
+        return { ok: false };
       }
+      const runtime = createMobileAgentStreamRuntime(initialSessionId);
+      const params: Record<string, unknown> = agentRuntime === "codex"
+        ? {
+          message: options.message,
+          permission_mode: codexPermissionMode(config),
+          project_root: config?.project_root?.trim() || undefined,
+          provider: "codex",
+          ...(initialSessionId ? { session_id: initialSessionId } : {}),
+        }
+        : {
+          message: options.message,
+          ...(initialSessionId ? { session_id: initialSessionId } : {}),
+          ...((config?.provider && config?.model)
+            ? {
+              runtime_overrides: {
+                model: config.model,
+                provider_name: config.provider,
+              },
+            }
+            : {}),
+        };
+      const streamAction = agentRuntime === "codex"
+        ? initialSessionId ? "EXTERNAL_AGENT_SEND" : "EXTERNAL_AGENT_START"
+        : "AGENT_SEND";
       const projector: MobileAgentStreamProjector = {
         commitReply: (nextRuntime) => {
           options.onReply(createAgentPayloadFromRuntime(nextRuntime));
@@ -1155,13 +1220,21 @@ export function useMobileBridge() {
           ? await streamAgentMessageHTTP({
             apiToken: apiToken.trim() || undefined,
             baseUrl: bridgeUrl,
+            body: params,
             message: options.message,
             onEvent: applyEvent,
+            path: agentRuntime === "codex" ? EXTERNAL_AGENT_STREAM_PATH : undefined,
             requestId,
             sessionId: initialSessionId,
             traceId,
           })
-          : await streamAgentMessageWebRTC(resolveConnectedWebRTCClient(webRTCClientRef.current), params, traceId, applyEvent);
+          : await streamAgentMessageWebRTC(
+            resolveConnectedWebRTCClient(webRTCClientRef.current),
+            params,
+            traceId,
+            applyEvent,
+            streamAction,
+          );
         const resolvedSessionId = result.sessionId?.trim();
         if (resolvedSessionId) {
           runtime.sessionId = resolvedSessionId;
@@ -1185,9 +1258,12 @@ export function useMobileBridge() {
     [
       apiToken,
       bridgeUrl,
+      config,
       config?.model,
       config?.provider,
-      localProviderList?.providers,
+      config?.project_root,
+      config?.external_codex_permission_mode,
+      mergedProviderList,
       refreshSessionsInBackground,
       settings.connectionMode,
       settings.localModel,
@@ -1198,14 +1274,30 @@ export function useMobileBridge() {
 
   const stopAgentRun = useCallback(
     async (input: StopAgentRunInput): Promise<StopAgentRunResult> => {
+      const agentRuntime = input.agentRuntime ?? "ghost";
       const sessionId = input.sessionId?.trim() || "";
       const traceId = input.traceId?.trim() || "";
-      if (!sessionId && !traceId) {
+      if (agentRuntime === "codex" && !sessionId) {
+        return { ok: false };
+      }
+      if (agentRuntime === "ghost" && !sessionId && !traceId) {
         return { ok: false };
       }
 
       setStatus({ tone: "loading", text: "停止中" });
       try {
+        if (agentRuntime === "codex") {
+          const payload = await requestBridge<ExternalAgentStopPayload>("EXTERNAL_AGENT_STOP", {
+            session_id: sessionId,
+          });
+          refreshSessionsInBackground();
+          setStatus({ tone: "success", text: "已停止" });
+          return {
+            ok: true,
+            sessionId: payload.session_id?.trim() || sessionId,
+            status: "stopped",
+          };
+        }
         const payload = await requestBridge<AgentStopPayload>("AGENT_STOP", {
           ...(sessionId ? { session_id: sessionId } : {}),
           ...(traceId ? { trace_id: traceId } : {}),
@@ -1228,8 +1320,34 @@ export function useMobileBridge() {
     [refreshSessionsInBackground, requestBridge],
   );
 
+  const approveExternalAgent = useCallback(
+    async (input: ExternalAgentApprovalInput): Promise<boolean> => {
+      const sessionId = input.sessionId.trim();
+      const approvalId = input.approvalId.trim();
+      if (!sessionId || !approvalId) {
+        return false;
+      }
+      setStatus({ tone: "loading", text: "审批提交中" });
+      try {
+        await requestBridge<unknown>("EXTERNAL_AGENT_APPROVE", {
+          approval_id: approvalId,
+          decision: input.decision,
+          session_id: sessionId,
+        });
+        refreshSessionsInBackground();
+        setStatus({ tone: "success", text: "审批已提交" });
+        return true;
+      } catch (error) {
+        setStatus({ tone: "error", text: errorMessage(error) });
+        return false;
+      }
+    },
+    [refreshSessionsInBackground, requestBridge],
+  );
+
   return {
     activateProvider,
+    approveExternalAgent,
     appendSessionMessages,
     bridgeUrl,
     config,
@@ -1270,6 +1388,7 @@ export function useMobileBridge() {
     taskListError,
     status,
     updateSkill,
+    updateExternalCodexPermissionMode,
     updateProvider,
     deleteSkill,
   };

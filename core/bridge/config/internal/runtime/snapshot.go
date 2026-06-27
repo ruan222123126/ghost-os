@@ -18,6 +18,7 @@ type Snapshot struct {
 	RelayDefaultStopPolicy         string
 	RelayDefaultMaxRounds          int
 	RelayDefaultExecutionTimeoutMS int
+	ExternalCodexPermissionMode    string
 	ModelSelectionEnabled          bool
 	ContextWindowTokens            int
 	ResponseReserveTokens          int
@@ -55,6 +56,7 @@ func Clone(raw Snapshot) Snapshot {
 		RelayDefaultStopPolicy:         raw.RelayDefaultStopPolicy,
 		RelayDefaultMaxRounds:          raw.RelayDefaultMaxRounds,
 		RelayDefaultExecutionTimeoutMS: raw.RelayDefaultExecutionTimeoutMS,
+		ExternalCodexPermissionMode:    raw.ExternalCodexPermissionMode,
 		ModelSelectionEnabled:          raw.ModelSelectionEnabled,
 		ContextWindowTokens:            raw.ContextWindowTokens,
 		ResponseReserveTokens:          raw.ResponseReserveTokens,

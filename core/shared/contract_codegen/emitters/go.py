@@ -166,10 +166,14 @@ type providerCreateRequest = providerConfigInput
 type providerUpdateRequest = providerConfigInput
 
 const (
-\tBusActionAgentSend           = busActionAgentSend
-\tBusStatusSuccess             = busStatusSuccess
-\tBusStatusError               = busStatusError
-\tBusAssistantSessionEndSignal = busAssistantSessionEndSignal
+\tBusActionAgentSend            = busActionAgentSend
+\tBusActionExternalAgentStart   = busActionExternalAgentStart
+\tBusActionExternalAgentSend    = busActionExternalAgentSend
+\tBusActionExternalAgentStop    = busActionExternalAgentStop
+\tBusActionExternalAgentApprove = busActionExternalAgentApprove
+\tBusStatusSuccess              = busStatusSuccess
+\tBusStatusError                = busStatusError
+\tBusAssistantSessionEndSignal  = busAssistantSessionEndSignal
 
 \tDefaultMaxRequestBodyBytes = defaultMaxRequestBodyBytes
 \tTaskListScopeUser          = taskListScopeUser
@@ -190,6 +194,9 @@ type APIRequest = apiRequest
 type APIResponse = apiResponse
 type AgentRequest = agentRequest
 type AgentParams = agentParams
+type ExternalAgentRequest = externalAgentRequest
+type ExternalAgentStopParams = externalAgentStopParams
+type ExternalAgentApprovalParams = externalAgentApprovalParams
 type HumanResponseParams = humanResponseParams
 type SessionIDParams = sessionIDParams
 type SessionSearchParams = sessionSearchParams

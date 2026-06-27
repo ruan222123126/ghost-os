@@ -24,6 +24,7 @@ func normalizeScalarFields(cfg *FileConfig) {
 	cfg.CodexStatelessRetryEnabled = CloneBoolPointer(cfg.CodexStatelessRetryEnabled)
 	cfg.ProjectRoot = CloneOptionalStringPointer(cfg.ProjectRoot)
 	cfg.MaxTurns = CloneIntPointer(cfg.MaxTurns)
+	cfg.ExternalCodexPermissionMode = CloneOptionalStringPointer(cfg.ExternalCodexPermissionMode)
 	cfg.ScriptExecSandboxMemoryMB = CloneIntPointer(cfg.ScriptExecSandboxMemoryMB)
 	cfg.WorkerModel = CloneOptionalStringPointer(cfg.WorkerModel)
 	cfg.PromptsPath = CloneOptionalStringPointer(cfg.PromptsPath)

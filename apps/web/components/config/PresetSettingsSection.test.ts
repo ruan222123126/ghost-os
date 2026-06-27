@@ -17,6 +17,7 @@ describe('components/config/PresetSettingsSection', () => {
     relay_default_stop_policy: 'ai_decides',
     relay_default_max_rounds: 20,
     relay_default_execution_timeout_ms: 0,
+    external_codex_permission_mode: 'default',
     llm_completion_retry_count: 1,
     llm_completion_retry_interval_ms: 200,
     api_key_set: true,

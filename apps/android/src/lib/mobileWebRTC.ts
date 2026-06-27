@@ -184,6 +184,7 @@ export class MobileWebRTCBridge {
     params: Record<string, unknown>,
     traceId: string,
     onEvent: (event: AgentStreamEvent) => void,
+    action = "AGENT_SEND",
   ): Promise<TPayload> {
     if (!this.channel || this.channel.readyState !== "open") {
       throw new Error("WebRTC DataChannel 未连接");
@@ -195,7 +196,7 @@ export class MobileWebRTCBridge {
       this.sendFrame({
         type: FRAME_STREAM_START,
         request_id: requestId,
-        action: "AGENT_SEND",
+        action,
         params,
         trace_id: traceId,
       });

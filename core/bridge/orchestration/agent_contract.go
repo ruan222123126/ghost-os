@@ -77,6 +77,10 @@ type PreparedAgentStream struct {
 	run func(context.Context, streaming.Sink) (string, string, error)
 }
 
+func NewPreparedAgentStream(run func(context.Context, StreamSink) (string, string, error)) PreparedAgentStream {
+	return PreparedAgentStream{run: run}
+}
+
 func (p PreparedAgentStream) Run(ctx context.Context, sink StreamSink) (string, string, error) {
 	if p.run == nil {
 		return "", "", bus.WrapError(ServiceErrorInternal, errPreparedAgentStreamRunnerRequired)

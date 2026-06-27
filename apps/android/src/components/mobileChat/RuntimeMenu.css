@@ -65,11 +65,19 @@
   }
 }
 
+.runtime-agent-options,
 .runtime-menu-options {
   display: flex;
   flex-direction: column;
 }
 
+.runtime-agent-options {
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.runtime-agent-options button,
 .runtime-menu-option {
   width: 100%;
   min-height: 64px;
@@ -84,6 +92,9 @@
   transition: background 140ms ease;
 }
 
+.runtime-agent-options button:hover,
+.runtime-agent-options button:focus-visible,
+.runtime-agent-options button.is-selected,
 .runtime-menu-option:hover,
 .runtime-menu-option:focus-visible,
 .runtime-menu-option.is-selected {
@@ -140,11 +151,19 @@
   }
 
   .runtime-menu-option,
+  .runtime-agent-options button,
   .runtime-option-copy strong,
   .runtime-check {
     color: #e8eaed;
   }
 
+  .runtime-agent-options {
+    border-bottom-color: rgba(63, 63, 70, 0.5);
+  }
+
+  .runtime-agent-options button:hover,
+  .runtime-agent-options button:focus-visible,
+  .runtime-agent-options button.is-selected,
   .runtime-menu-option:hover,
   .runtime-menu-option:focus-visible,
   .runtime-menu-option.is-selected {

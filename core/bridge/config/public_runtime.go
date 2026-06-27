@@ -13,6 +13,7 @@ type Snapshot struct {
 	RelayDefaultStopPolicy         string `json:"relay_default_stop_policy"`
 	RelayDefaultMaxRounds          int    `json:"relay_default_max_rounds"`
 	RelayDefaultExecutionTimeoutMS int    `json:"relay_default_execution_timeout_ms"`
+	ExternalCodexPermissionMode    string `json:"external_codex_permission_mode"`
 	LLMCompletionRetryCount        int    `json:"llm_completion_retry_count"`
 	LLMCompletionRetryIntervalMS   int    `json:"llm_completion_retry_interval_ms"`
 	APIKeySet                      bool   `json:"api_key_set"`
@@ -42,6 +43,7 @@ type UpdateRequest struct {
 	RelayDefaultStopPolicy         *string `json:"relay_default_stop_policy,omitempty"`
 	RelayDefaultMaxRounds          *int    `json:"relay_default_max_rounds,omitempty"`
 	RelayDefaultExecutionTimeoutMS *int    `json:"relay_default_execution_timeout_ms,omitempty"`
+	ExternalCodexPermissionMode    *string `json:"external_codex_permission_mode,omitempty"`
 	LLMCompletionRetryCount        *int    `json:"llm_completion_retry_count,omitempty"`
 	LLMCompletionRetryIntervalMS   *int    `json:"llm_completion_retry_interval_ms,omitempty"`
 	SessionHumanLogFullEnabled     *bool   `json:"session_human_log_full_enabled,omitempty"`

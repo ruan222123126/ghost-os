@@ -11,6 +11,10 @@ import (
 const (
 	busActionAgentSend            = bus.ActionAgentSend
 	busActionAgentStop            = bus.ActionAgentStop
+	busActionExternalAgentStart   = bus.ActionExternalAgentStart
+	busActionExternalAgentSend    = bus.ActionExternalAgentSend
+	busActionExternalAgentStop    = bus.ActionExternalAgentStop
+	busActionExternalAgentApprove = bus.ActionExternalAgentApprove
 	busActionHumanResponse        = bus.ActionHumanResponse
 	busActionSessionsList         = bus.ActionSessionsList
 	busActionSessionsSearch       = bus.ActionSessionsSearch
@@ -48,7 +52,12 @@ type askHumanOption = api.AskHumanOption
 type agentResponse = api.AgentResponse
 type askHumanAwaitingResponse = api.AskHumanAwaitingResponse
 type agentStopParams = api.AgentStopParams
+type externalAgentRequest = api.ExternalAgentRequest
+type externalAgentStopParams = api.ExternalAgentStopParams
 type agentStopResponse = api.AgentStopResponse
+type externalAgentApprovalParams = api.ExternalAgentApprovalParams
+type externalAgentResponse = api.ExternalAgentResponse
+type externalAgentApprovalResponse = api.ExternalAgentApprovalResponse
 type humanResponseParams = api.HumanResponseParams
 type humanResponseAck = api.HumanResponseAck
 type agentStreamEventContract = api.AgentStreamEventContract
@@ -153,10 +162,14 @@ type providerCreateRequest = providerConfigInput
 type providerUpdateRequest = providerConfigInput
 
 const (
-	BusActionAgentSend           = busActionAgentSend
-	BusStatusSuccess             = busStatusSuccess
-	BusStatusError               = busStatusError
-	BusAssistantSessionEndSignal = busAssistantSessionEndSignal
+	BusActionAgentSend            = busActionAgentSend
+	BusActionExternalAgentStart   = busActionExternalAgentStart
+	BusActionExternalAgentSend    = busActionExternalAgentSend
+	BusActionExternalAgentStop    = busActionExternalAgentStop
+	BusActionExternalAgentApprove = busActionExternalAgentApprove
+	BusStatusSuccess              = busStatusSuccess
+	BusStatusError                = busStatusError
+	BusAssistantSessionEndSignal  = busAssistantSessionEndSignal
 
 	DefaultMaxRequestBodyBytes = defaultMaxRequestBodyBytes
 	TaskListScopeUser          = taskListScopeUser
@@ -177,6 +190,9 @@ type APIRequest = apiRequest
 type APIResponse = apiResponse
 type AgentRequest = agentRequest
 type AgentParams = agentParams
+type ExternalAgentRequest = externalAgentRequest
+type ExternalAgentStopParams = externalAgentStopParams
+type ExternalAgentApprovalParams = externalAgentApprovalParams
 type HumanResponseParams = humanResponseParams
 type SessionIDParams = sessionIDParams
 type SessionSearchParams = sessionSearchParams

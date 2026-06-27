@@ -63,7 +63,14 @@ func (s *store) loadUpdateStateLocked(req UpdateRequest) (configUpdateState, err
 }
 
 func validateConfigUpdateRequest(req UpdateRequest, current runtimeConfig) error {
-	return configruntime.ValidateUpdate(configruntime.UpdateRequest{Model: req.Model}, current)
+	if err := configruntime.ValidateUpdate(configruntime.UpdateRequest{Model: req.Model}, current); err != nil {
+		return err
+	}
+	if req.ExternalCodexPermissionMode != nil {
+		_, err := configruntime.NormalizeExternalCodexPermissionMode(*req.ExternalCodexPermissionMode)
+		return err
+	}
+	return nil
 }
 
 func loadCurrentUpdateFileConfig(
@@ -209,6 +216,9 @@ func applyRuntimeUpdatePatch(fileCfg *bridgeFileConfig, req UpdateRequest) error
 	}
 	if req.SessionTitleMode != nil {
 		fileCfg.SessionTitleMode = cloneOptionalStringPointer(req.SessionTitleMode)
+	}
+	if req.ExternalCodexPermissionMode != nil {
+		fileCfg.ExternalCodexPermissionMode = cloneOptionalStringPointer(req.ExternalCodexPermissionMode)
 	}
 	return nil
 }

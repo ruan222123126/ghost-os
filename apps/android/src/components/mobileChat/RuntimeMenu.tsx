@@ -1,13 +1,23 @@
-import type { ConfigPayload, ProviderConfigPayload, ProviderListPayload, StatusMessage } from "../../mobileTypes";
+import type {
+  AgentRuntimeType,
+  ConfigPayload,
+  ExternalCodexPermissionMode,
+  ProviderConfigPayload,
+  ProviderListPayload,
+  StatusMessage,
+} from "../../mobileTypes";
 import { UiIcon } from "./icons";
 import "./RuntimeMenu.css";
 
 interface RuntimeMenuProps {
+  agentRuntime: AgentRuntimeType;
+  codexPermissionMode?: ExternalCodexPermissionMode;
   config: ConfigPayload | undefined;
   providerList: ProviderListPayload | undefined;
   status: StatusMessage;
   open: boolean;
   onClose: () => void;
+  onSwitchAgentRuntime: (runtime: AgentRuntimeType) => void;
   onSwitchModel: (model: string) => Promise<boolean>;
 }
 
@@ -69,6 +79,11 @@ function modelOptions(props: RuntimeMenuProps): ModelOption[] {
 export function RuntimeMenu(props: RuntimeMenuProps) {
   const options = modelOptions(props);
 
+  function selectAgentRuntime(runtime: AgentRuntimeType): void {
+    props.onSwitchAgentRuntime(runtime);
+    props.onClose();
+  }
+
   async function selectModel(option: ModelOption): Promise<void> {
     if (option.selected) {
       props.onClose();
@@ -92,8 +107,34 @@ export function RuntimeMenu(props: RuntimeMenuProps) {
         onClick={props.onClose}
       />
       <div className={`runtime-menu ${props.open ? "is-open" : "is-closing"}`} role="dialog" aria-label="模型选择">
+        <div className="runtime-agent-options" role="group" aria-label="Agent 类型">
+          <button
+            className={props.agentRuntime === "ghost" ? "is-selected" : ""}
+            type="button"
+            aria-pressed={props.agentRuntime === "ghost"}
+            onClick={() => selectAgentRuntime("ghost")}
+          >
+            <span className="runtime-check">{props.agentRuntime === "ghost" ? <UiIcon name="check" /> : null}</span>
+            <span className="runtime-option-copy">
+              <strong>Ghost</strong>
+              <span>Bridge Runtime</span>
+            </span>
+          </button>
+          <button
+            className={props.agentRuntime === "codex" ? "is-selected" : ""}
+            type="button"
+            aria-pressed={props.agentRuntime === "codex"}
+            onClick={() => selectAgentRuntime("codex")}
+          >
+            <span className="runtime-check">{props.agentRuntime === "codex" ? <UiIcon name="check" /> : null}</span>
+            <span className="runtime-option-copy">
+              <strong>Codex</strong>
+              <span>{props.codexPermissionMode ?? "default"}</span>
+            </span>
+          </button>
+        </div>
         <div className="runtime-menu-options">
-          {options.map((option) => (
+          {props.agentRuntime === "ghost" ? options.map((option) => (
             <button
               key={option.id}
               className={`runtime-menu-option ${option.selected ? "is-selected" : ""}`}
@@ -108,7 +149,7 @@ export function RuntimeMenu(props: RuntimeMenuProps) {
                 <span>{option.desc}</span>
               </span>
             </button>
-          ))}
+          )) : null}
         </div>
       </div>
     </>

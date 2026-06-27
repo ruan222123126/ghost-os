@@ -22,6 +22,10 @@ type SkillUpdateParams struct {
 type DefaultHandlers struct {
 	AgentSend            TypedHandler[api.AgentParams]
 	AgentStop            TypedHandler[api.AgentStopParams]
+	ExternalAgentStart   TypedHandler[api.ExternalAgentRequest]
+	ExternalAgentSend    TypedHandler[api.ExternalAgentRequest]
+	ExternalAgentStop    TypedHandler[api.ExternalAgentStopParams]
+	ExternalAgentApprove TypedHandler[api.ExternalAgentApprovalParams]
 	ConfigGet            TraceHandler
 	ConfigUpdate         TypedHandler[api.ConfigUpdateRequest]
 	ConfigProvidersGet   TraceHandler
@@ -58,6 +62,10 @@ func RegisterDefaultActions(router *Router, handlers DefaultHandlers) {
 func registerAgentActions(router *Router, handlers DefaultHandlers) {
 	RegisterTyped(router, bus.ActionAgentSend, handlers.AgentSend)
 	RegisterTyped(router, bus.ActionAgentStop, handlers.AgentStop)
+	RegisterTyped(router, bus.ActionExternalAgentStart, handlers.ExternalAgentStart)
+	RegisterTyped(router, bus.ActionExternalAgentSend, handlers.ExternalAgentSend)
+	RegisterTyped(router, bus.ActionExternalAgentStop, handlers.ExternalAgentStop)
+	RegisterTyped(router, bus.ActionExternalAgentApprove, handlers.ExternalAgentApprove)
 }
 
 func registerConfigActions(router *Router, handlers DefaultHandlers) {

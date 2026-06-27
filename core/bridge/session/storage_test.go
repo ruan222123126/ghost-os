@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
 	"ghost-os/bridge/llm"
 )
@@ -52,6 +53,30 @@ func TestStoreSaveAndLoadSession(t *testing.T) {
 		TraceID:        "trace-relay-1",
 	})
 	s.FinishRelayRuntime("completed", "relay_complete", "done", "patched config")
+	externalRuntimeAt := time.Date(2026, 6, 27, 12, 0, 0, 0, time.UTC)
+	s.SetExternalRuntime(&ExternalRuntime{
+		Provider:       "codex",
+		Status:         "awaiting_approval",
+		ThreadID:       "thread-1",
+		TurnID:         "turn-1",
+		PermissionMode: "safe-yolo",
+		Model:          "gpt-5-codex",
+		Effort:         "high",
+		CWD:            "/repo",
+		ProjectRoot:    "/repo",
+		PendingApprovals: []ExternalPendingApproval{{
+			ID:        "approval-1",
+			Provider:  "codex",
+			Kind:      "exec",
+			Tool:      "codex_exec",
+			CallID:    "call-1",
+			Prompt:    "Approve command execution",
+			Payload:   map[string]any{"command": "go test ./..."},
+			CreatedAt: externalRuntimeAt,
+		}},
+		StartedAt: externalRuntimeAt,
+		UpdatedAt: externalRuntimeAt,
+	})
 	s.AssistantDraft = &AssistantDraft{
 		Text:      "partial answer",
 		TraceID:   "trace-draft",
@@ -120,6 +145,9 @@ func TestStoreSaveAndLoadSession(t *testing.T) {
 	}
 	if !reflect.DeepEqual(loaded.RelayRuntime, s.RelayRuntime) {
 		t.Fatalf("relay runtime mismatch: got=%+v want=%+v", loaded.RelayRuntime, s.RelayRuntime)
+	}
+	if !reflect.DeepEqual(loaded.ExternalRuntime, s.ExternalRuntime) {
+		t.Fatalf("external runtime mismatch: got=%+v want=%+v", loaded.ExternalRuntime, s.ExternalRuntime)
 	}
 	if !reflect.DeepEqual(loaded.AssistantDraft, s.AssistantDraft) {
 		t.Fatalf("assistant draft mismatch: got=%+v want=%+v", loaded.AssistantDraft, s.AssistantDraft)

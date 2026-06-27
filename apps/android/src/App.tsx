@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import {
   AssistantIntro,
@@ -16,7 +16,15 @@ import { useBodyScrollLock } from "./hooks/useBodyScrollLock";
 import { useChatFeedScroll } from "./hooks/useChatFeedScroll";
 import { useMobileBridge } from "./hooks/useMobileBridge";
 import { useMobileSessions } from "./hooks/useMobileSessions";
-import type { AgentPayload, ConfigPayload, MobileConversationMessage, ProviderListPayload, StatusMessage, StoredSettings } from "./mobileTypes";
+import type {
+  AgentPayload,
+  AgentRuntimeType,
+  ConfigPayload,
+  MobileConversationMessage,
+  ProviderListPayload,
+  StatusMessage,
+  StoredSettings,
+} from "./mobileTypes";
 import "markstream-react/index.css";
 import "./App.css";
 import "./components/mobileChat/Messages.css";
@@ -27,7 +35,10 @@ function isNonEmptyMessage(value: string): boolean {
   return value.trim().length > 0;
 }
 
-function displayRuntime(config: ReturnType<typeof useMobileBridge>["config"]): string {
+function displayRuntime(agentRuntime: AgentRuntimeType, config: ReturnType<typeof useMobileBridge>["config"]): string {
+  if (agentRuntime === "codex") {
+    return `Codex / ${config?.external_codex_permission_mode ?? "default"}`;
+  }
   if (config?.provider && config.model) {
     return `${config.provider} / ${config.model}`;
   }
@@ -61,6 +72,7 @@ function App() {
   const {
     activateProvider,
     appendSessionMessages,
+    approveExternalAgent,
     bridgeUrl,
     config,
     connectBridge,
@@ -99,18 +111,28 @@ function App() {
     taskListError,
     status,
     updateSkill,
+    updateExternalCodexPermissionMode,
     updateProvider,
   } = useMobileBridge();
   const [message, setMessage] = useState("");
+  const [agentRuntime, setAgentRuntime] = useState<AgentRuntimeType>("ghost");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isRuntimeMenuOpen, setIsRuntimeMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [pinnedHistoryIds, setPinnedHistoryIds] = useState<string[]>([]);
-  const localRuntimeConfig = useMemo(() => buildLocalRuntimeConfig(localProviderList, settings), [localProviderList, settings]);
+  const localRuntimeConfig = useMemo(() => buildLocalRuntimeConfig(providerList, settings), [providerList, settings]);
   const chatConfig = settings.remoteExecutionEnabled ? config : localRuntimeConfig;
-  const chatProviderList = settings.remoteExecutionEnabled ? providerList : localProviderList;
+  const chatProviderList = providerList;
+  const sendAgentMessageForRuntime = useCallback(
+    (options: Parameters<typeof sendAgentMessage>[0]) => sendAgentMessage({ ...options, agentRuntime }),
+    [agentRuntime, sendAgentMessage],
+  );
+  const stopAgentRunForRuntime = useCallback(
+    (input: Parameters<typeof stopAgentRun>[0]) => stopAgentRun({ ...input, agentRuntime }),
+    [agentRuntime, stopAgentRun],
+  );
   const mobileSessions = useMobileSessions({
     bridgeConnected: Boolean(config),
     appendSessionMessages,
@@ -119,17 +141,22 @@ function App() {
     getSession,
     pinnedHistoryIds,
     persistComputerSessionsEnabled: settings.persistComputerSessionsEnabled,
-    sendAvailable: settings.remoteExecutionEnabled
+    sendAvailable: agentRuntime === "codex"
+      ? Boolean(config)
+      : settings.remoteExecutionEnabled
       ? Boolean(config)
       : Boolean(localRuntimeConfig?.provider && localRuntimeConfig?.model),
-    sendAgentMessage,
+    sendAgentMessage: sendAgentMessageForRuntime,
     sessions,
     sessionsLoaded,
-    stopAgentRun,
+    stopAgentRun: stopAgentRunForRuntime,
   });
   const displayStatus = mobileSessions.activeStatus.tone === "idle" ? status : mobileSessions.activeStatus;
   const canSend = isNonEmptyMessage(message) && mobileSessions.canSend;
-  const runtimeLabel = useMemo(() => displayRuntime(chatConfig), [chatConfig]);
+  const runtimeLabel = useMemo(
+    () => displayRuntime(agentRuntime, agentRuntime === "codex" ? config : chatConfig),
+    [agentRuntime, chatConfig, config],
+  );
   const isModalOpen = isSidebarOpen || isSearchOpen || isSettingsOpen || isMoreMenuOpen;
   const hasLocalConversation = mobileSessions.hasConversation;
   const {
@@ -255,7 +282,9 @@ function App() {
       >
         <ChatHeader
           runtimeLabel={runtimeLabel}
-          config={chatConfig}
+          agentRuntime={agentRuntime}
+          config={agentRuntime === "codex" ? config : chatConfig}
+          codexPermissionMode={config?.external_codex_permission_mode}
           providerList={chatProviderList}
           status={displayStatus}
           hasConversation={hasLocalConversation}
@@ -264,6 +293,7 @@ function App() {
           onToggleRuntimeMenu={() => setIsRuntimeMenuOpen((current) => !current)}
           onCloseRuntimeMenu={() => setIsRuntimeMenuOpen(false)}
           onSwitchModel={switchModel}
+          onSwitchAgentRuntime={setAgentRuntime}
           onOpenMoreMenu={() => {
             setIsRuntimeMenuOpen(false);
             setIsMoreMenuOpen(true);
@@ -288,12 +318,14 @@ function App() {
                 key={item.id}
                 reply={conversationMessageToAgentPayload(item)}
                 status={assistantMessageStatus()}
+                onApproveExternalAgent={approveExternalAgent}
               />
             ),
           )}
           <AssistantReply
             reply={mobileSessions.activeReply}
             status={displayStatus}
+            onApproveExternalAgent={approveExternalAgent}
           />
           <div aria-hidden="true" style={{ height: trailingSpacerPx }} />
         </main>
@@ -303,10 +335,10 @@ function App() {
         <ChatComposer
           value={message}
           disabled={!canSend}
-          canStop={settings.remoteExecutionEnabled && mobileSessions.canStop}
+          canStop={(settings.remoteExecutionEnabled || agentRuntime === "codex") && mobileSessions.canStop}
           loading={mobileSessions.activeStatus.tone === "loading"}
           onSubmit={sendMessage}
-          onStop={settings.remoteExecutionEnabled ? async () => {
+          onStop={(settings.remoteExecutionEnabled || agentRuntime === "codex") ? async () => {
             await mobileSessions.stopCurrentRun();
           } : undefined}
           onChange={setMessage}
@@ -318,6 +350,7 @@ function App() {
         open={isSettingsOpen}
         settings={settings}
         config={chatConfig}
+        codexPermissionMode={config?.external_codex_permission_mode}
         computerSessionPersistStatus={mobileSessions.computerSessionPersistStatus}
         connectionStatus={connectionStatus}
         providerList={providerList}
@@ -339,6 +372,7 @@ function App() {
         onSetOrchestrationEnabled={setOrchestrationEnabled}
         onSetTaskEnabled={setTaskEnabled}
         onUpdateSkill={updateSkill}
+        onUpdateCodexPermission={updateExternalCodexPermissionMode}
         onUpdateProvider={updateProvider}
         runningTaskId={runningTaskId}
         skillListError={skillListError}

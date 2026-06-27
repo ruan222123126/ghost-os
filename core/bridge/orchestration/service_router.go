@@ -8,6 +8,7 @@ import (
 	agentadapter "ghost-os/bridge/orchestration/internal/adapters/agent"
 	serviceruntime "ghost-os/bridge/orchestration/internal/adapters/serviceruntime"
 	sessionartifacts "ghost-os/bridge/orchestration/internal/adapters/sessionartifacts"
+	appexternal "ghost-os/bridge/orchestration/internal/app/externalagent"
 	appsessions "ghost-os/bridge/orchestration/internal/app/sessions"
 	appskills "ghost-os/bridge/orchestration/internal/app/skills"
 	"ghost-os/bridge/orchestration/internal/dispatch"
@@ -66,7 +67,6 @@ type agentStreamExecutorFunc func(
 	sink streaming.Sink,
 ) (string, string, error)
 
-// bridgeService 负责 action 分发，不承载 transport 细节。
 type bridgeService struct {
 	configStore     bridgeconfig.Store
 	sessionStore    *session.Store
@@ -75,13 +75,13 @@ type bridgeService struct {
 	actionRouter    *dispatch.Router
 	skillHandler    *bridgeskills.ActionHandler
 	agentRunner     SessionTurnRunner
+	externalAgents  *appexternal.Manager
 	runRegistry     *RunRegistry
 	runtimeFactory  AgentRuntimeFactory
 	artifactStore   appsessions.ArtifactStore
 	artifactInitErr error
 }
 
-// newBridgeService 组装 action -> handler 映射，并初始化会话与记忆依赖。
 func newBridgeService(store bridgeconfig.Store, sessionStore *session.Store, executor agentExecutorFunc) *bridgeService {
 	return newBridgeServiceWithStreamExecutor(store, sessionStore, executor, nil)
 }
@@ -162,7 +162,6 @@ func (s *bridgeService) taskInitErr() error {
 	return s.runtimeState.TaskInitErr()
 }
 
-// StartBackgroundRuntimes 显式初始化 service 依赖的后台 runtime。
 func (s *bridgeService) StartBackgroundRuntimes() error {
 	if s == nil {
 		return nil
@@ -170,7 +169,6 @@ func (s *bridgeService) StartBackgroundRuntimes() error {
 	return s.runtimeState.Start(s.configStore, taskExecutorAdapter{service: s})
 }
 
-// BootstrapSystemTasks 将系统调度任务同步到 task runtime。
 func (s *bridgeService) BootstrapSystemTasks() error {
 	if s == nil {
 		return nil
@@ -184,15 +182,16 @@ func (s *bridgeService) skillLogFunc() bridgeskills.LogFunc {
 	}
 }
 
-// Close 释放 service 级后台资源。
 func (s *bridgeService) Close() {
 	if s == nil {
 		return
 	}
 	s.lifecycle.Close()
+	if s.externalAgents != nil {
+		s.externalAgents.Close()
+	}
 }
 
-// dispatchAction 根据 action 查找处理器；未知 action 返回显式可选列表。
 func (s *bridgeService) dispatchAction(ctx context.Context, action string, params json.RawMessage, traceID string) (ServiceResult, error) {
 	return s.actionRouter.Dispatch(ctx, action, params, traceID)
 }
@@ -204,9 +203,7 @@ func (s *bridgeService) registeredActionNames() []string {
 	return s.actionRouter.ActionNames()
 }
 
-func validateBusRequest(req apiRequest) error {
-	return dispatch.ValidateBusRequest(req)
-}
+func validateBusRequest(req apiRequest) error { return dispatch.ValidateBusRequest(req) }
 
 func (s *Service) ExecuteConfigGetAction(traceID string) (ServiceResult, error) {
 	return s.inner.executeConfigGetAction(traceID)
@@ -229,8 +226,12 @@ func registerDefaultActions(service *bridgeService) {
 
 func defaultActionHandlers(service *bridgeService) dispatch.DefaultHandlers {
 	return dispatch.DefaultHandlers{
-		AgentSend: service.executeAgentAction,
-		AgentStop: service.executeAgentStopAction,
+		AgentSend:            service.executeAgentAction,
+		AgentStop:            service.executeAgentStopAction,
+		ExternalAgentStart:   service.executeExternalAgentStartAction,
+		ExternalAgentSend:    service.executeExternalAgentSendAction,
+		ExternalAgentStop:    service.executeExternalAgentStopAction,
+		ExternalAgentApprove: service.executeExternalAgentApproveAction,
 		ConfigGet: func(_ context.Context, traceID string) (ServiceResult, error) {
 			return service.executeConfigGetAction(traceID)
 		},

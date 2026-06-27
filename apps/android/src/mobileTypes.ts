@@ -6,6 +6,9 @@ export interface HostProfile {
 }
 
 export type ConnectionMode = "webrtc" | "http";
+export type AgentRuntimeType = "ghost" | "codex";
+export type ExternalCodexPermissionMode = "read-only" | "default" | "safe-yolo" | "yolo";
+export type ExternalAgentApprovalDecision = "approved" | "approved_for_session" | "denied" | "abort";
 
 export interface MobilePairingInfo {
   deviceId: string;
@@ -40,6 +43,7 @@ export interface ConfigPayload {
   provider_type?: string;
   model?: string;
   project_root?: string;
+  external_codex_permission_mode?: ExternalCodexPermissionMode;
   api_key_set?: boolean;
   model_selection_enabled?: boolean;
   task_execution_timeout_ms?: number;
@@ -327,6 +331,10 @@ export interface MobileToolCard {
   output?: string;
   error?: string;
   traceId?: string;
+  approvalDecision?: ExternalAgentApprovalDecision;
+  approvalId?: string;
+  approvalInFlight?: boolean;
+  approvalKind?: string;
 }
 
 export interface StoredMobileConversation {

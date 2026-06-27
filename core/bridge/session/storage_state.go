@@ -15,6 +15,7 @@ type sessionStoredState struct {
 	Title             string                          `json:"title,omitempty"`
 	ConversationState llm.ConversationState           `json:"conversation_state,omitempty"`
 	RelayRuntime      *RelayRuntime                   `json:"relay_runtime,omitempty"`
+	ExternalRuntime   *ExternalRuntime                `json:"external_runtime,omitempty"`
 	PendingQuestions  map[string]PendingHumanQuestion `json:"pending_questions,omitempty"`
 	HumanAnswers      map[string]string               `json:"human_answers,omitempty"`
 	DynamicToolLoads  map[string]DynamicToolLoad      `json:"dynamic_tool_loads,omitempty"`
@@ -41,6 +42,7 @@ func encodeSessionState(sess *Session) (string, error) {
 		Title:             strings.TrimSpace(sess.Title),
 		ConversationState: sess.ConversationState,
 		RelayRuntime:      cloneRelayRuntime(sess.RelayRuntime),
+		ExternalRuntime:   cloneExternalRuntime(sess.ExternalRuntime),
 		PendingQuestions:  clonePendingQuestions(sess.PendingQuestions),
 		HumanAnswers:      cloneHumanAnswers(sess.HumanAnswers),
 		DynamicToolLoads:  cloneDynamicToolLoads(sess.DynamicToolLoads),
@@ -86,6 +88,7 @@ func sessionFromRecord(record sessionRecord, messages []llm.Message) *Session {
 		WindowTokenCount:  record.WindowTokenCount,
 		ConversationState: record.State.ConversationState,
 		RelayRuntime:      cloneRelayRuntime(record.State.RelayRuntime),
+		ExternalRuntime:   cloneExternalRuntime(record.State.ExternalRuntime),
 		PendingQuestions:  clonePendingQuestions(record.State.PendingQuestions),
 		HumanAnswers:      cloneHumanAnswers(record.State.HumanAnswers),
 		DynamicToolLoads:  cloneDynamicToolLoads(record.State.DynamicToolLoads),

@@ -47,10 +47,17 @@ export interface AgentToolCallPayload {
 }
 
 export interface AgentAwaitingHumanStreamPayload {
+  approval?: AgentStreamApprovalPayload;
   tool?: string;
   tool_call_id?: string;
   question_id: string;
   prompt: string;
+}
+
+export interface AgentStreamApprovalPayload {
+  id?: string;
+  kind?: string;
+  tool?: string;
 }
 
 export interface AgentStreamMessagePayload {
@@ -85,9 +92,12 @@ export interface AgentStreamSummary {
 interface StreamAgentMessageHTTPOptions {
   apiToken?: string;
   baseUrl: string;
+  body?: Record<string, unknown>;
   message: string;
   onEvent: (event: AgentStreamEvent) => void;
+  path?: string;
   requestId: string;
+  runtimeOverrides?: Record<string, unknown>;
   sessionId?: string;
   traceId: string;
 }
@@ -95,8 +105,11 @@ interface StreamAgentMessageHTTPOptions {
 interface BridgeAgentStreamCommand {
   apiToken?: string;
   baseUrl: string;
+  body?: Record<string, unknown>;
   message: string;
+  path?: string;
   requestId: string;
+  runtimeOverrides?: Record<string, unknown>;
   sessionId?: string;
   traceId: string;
 }
@@ -263,12 +276,25 @@ export function parseAgentToolCallPayload(payload: unknown): AgentToolCallPayloa
 
 export function parseAgentAwaitingHumanStreamPayload(payload: unknown): AgentAwaitingHumanStreamPayload {
   const record = expectRecord(payload, "agent awaiting_human payload");
+  const approval = record.approval === undefined
+    ? undefined
+    : parseAgentStreamApprovalPayload(record.approval);
 
   return {
+    approval,
     prompt: expectString(record.prompt, "agent awaiting_human payload.prompt"),
     question_id: expectString(record.question_id, "agent awaiting_human payload.question_id"),
     tool: parseOptionalString(record.tool, "agent awaiting_human payload.tool"),
     tool_call_id: parseOptionalString(record.tool_call_id, "agent awaiting_human payload.tool_call_id"),
+  };
+}
+
+function parseAgentStreamApprovalPayload(payload: unknown): AgentStreamApprovalPayload {
+  const record = expectRecord(payload, "agent awaiting_human payload.approval");
+  return {
+    id: parseOptionalString(record.id, "agent awaiting_human payload.approval.id"),
+    kind: parseOptionalString(record.kind, "agent awaiting_human payload.approval.kind"),
+    tool: parseOptionalString(record.tool, "agent awaiting_human payload.approval.tool"),
   };
 }
 
@@ -323,8 +349,11 @@ function buildBridgeAgentStreamCommand(options: StreamAgentMessageHTTPOptions): 
   return {
     apiToken: options.apiToken?.trim() || undefined,
     baseUrl: options.baseUrl,
+    body: options.body,
     message: options.message,
+    path: options.path,
     requestId: options.requestId,
+    runtimeOverrides: options.runtimeOverrides,
     sessionId: options.sessionId?.trim() || undefined,
     traceId: options.traceId,
   };

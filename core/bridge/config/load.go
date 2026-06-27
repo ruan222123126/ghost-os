@@ -232,6 +232,7 @@ func composeConfig(
 		RelayDefaultStopPolicy:         runtime.RelayDefaultStopPolicy,
 		RelayDefaultMaxRounds:          runtime.RelayDefaultMaxRounds,
 		RelayDefaultExecutionTimeoutMS: runtime.RelayDefaultExecutionTimeoutMS,
+		ExternalCodexPermissionMode:    runtime.ExternalCodexPermissionMode,
 		SessionHumanLogFullEnabled:     runtime.SessionHumanLogFullEnabled,
 		SessionSystemPromptVisible:     runtime.SessionSystemPromptVisible,
 		AssistantMarkdownEnabled:       runtime.AssistantMarkdownEnabled,

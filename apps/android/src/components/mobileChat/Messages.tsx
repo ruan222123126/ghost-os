@@ -1,5 +1,10 @@
 import { forwardRef, useEffect, useRef, useState, type ReactNode } from "react";
-import type { AgentPayload, MobileToolCard, StatusMessage } from "../../mobileTypes";
+import type {
+  AgentPayload,
+  ExternalAgentApprovalDecision,
+  MobileToolCard,
+  StatusMessage,
+} from "../../mobileTypes";
 import { buildMobileToolCardViewModel, type MobileToolTone } from "../../lib/mobileToolCardViewModel";
 import { EMPTY_STATE_SUGGESTIONS } from "./data";
 import { AssistantMarkdownContent } from "./AssistantMarkdownContent";
@@ -50,8 +55,15 @@ function SuggestionButton(props: {
 }
 
 interface AssistantReplyProps {
+  onApproveExternalAgent?: (input: ExternalApprovalActionInput) => Promise<boolean>;
   reply: AgentPayload | undefined;
   status: StatusMessage;
+}
+
+interface ExternalApprovalActionInput {
+  approvalId: string;
+  decision: ExternalAgentApprovalDecision;
+  sessionId: string;
 }
 
 export function AssistantReply(props: AssistantReplyProps) {
@@ -79,7 +91,13 @@ export function AssistantReply(props: AssistantReplyProps) {
             onToggleExpanded={toggleThinkingPanel}
           />
         ) : null}
-        {props.reply?.tools?.length ? <ToolCardList tools={props.reply.tools} /> : null}
+        {props.reply?.tools?.length ? (
+          <ToolCardList
+            sessionId={props.reply.session_id}
+            tools={props.reply.tools}
+            onApproveExternalAgent={props.onApproveExternalAgent}
+          />
+        ) : null}
         {props.status.tone === "error" ? (
           <>
             {replyMessage ? <AssistantMarkdownContent content={replyMessage} /> : null}
@@ -113,23 +131,53 @@ export function AssistantReply(props: AssistantReplyProps) {
   );
 }
 
-function ToolCardList(props: { tools: MobileToolCard[] }) {
+function ToolCardList(props: {
+  onApproveExternalAgent?: (input: ExternalApprovalActionInput) => Promise<boolean>;
+  sessionId?: string;
+  tools: MobileToolCard[];
+}) {
   return (
     <div className="tool-card-list">
       {props.tools.map((tool) => (
-        <ToolCard key={tool.id} tool={tool} />
+        <ToolCard
+          key={tool.id}
+          sessionId={props.sessionId}
+          tool={tool}
+          onApproveExternalAgent={props.onApproveExternalAgent}
+        />
       ))}
     </div>
   );
 }
 
-function ToolCard(props: { tool: MobileToolCard }) {
-  const [expanded, setExpanded] = useState(false);
+function ToolCard(props: {
+  onApproveExternalAgent?: (input: ExternalApprovalActionInput) => Promise<boolean>;
+  sessionId?: string;
+  tool: MobileToolCard;
+}) {
+  const [expanded, setExpanded] = useState(Boolean(props.tool.approvalId));
+  const [pendingDecision, setPendingDecision] = useState<ExternalAgentApprovalDecision | "">("");
   const viewModel = buildMobileToolCardViewModel(props.tool);
   const displayTitle = viewModel.titleMode === "plain"
     ? viewModel.title
     : buildToolStatusTitle(viewModel.tone, viewModel.title);
   const displayStatus = buildToolStatusLabel(viewModel.tone, viewModel.statusLabel);
+  const approvalDisabled = Boolean(
+    pendingDecision || props.tool.approvalDecision || !props.sessionId?.trim() || !props.onApproveExternalAgent,
+  );
+
+  async function approve(decision: ExternalAgentApprovalDecision): Promise<void> {
+    const approvalId = props.tool.approvalId?.trim();
+    const sessionId = props.sessionId?.trim();
+    if (!approvalId || !sessionId || !props.onApproveExternalAgent || approvalDisabled) {
+      return;
+    }
+    setPendingDecision(decision);
+    const ok = await props.onApproveExternalAgent({ approvalId, decision, sessionId });
+    if (!ok) {
+      setPendingDecision("");
+    }
+  }
 
   return (
     <section className={`tool-card is-${viewModel.tone}`}>
@@ -165,9 +213,44 @@ function ToolCard(props: { tool: MobileToolCard }) {
                 : <UiIcon name="check" />}
             <span className="tool-card-status-label">{displayStatus}</span>
           </div>
+          {props.tool.approvalId ? (
+            <ApprovalActions
+              disabled={approvalDisabled}
+              pendingDecision={pendingDecision}
+              onApprove={approve}
+            />
+          ) : null}
         </div>
       ) : null}
     </section>
+  );
+}
+
+function ApprovalActions(props: {
+  disabled: boolean;
+  pendingDecision: ExternalAgentApprovalDecision | "";
+  onApprove: (decision: ExternalAgentApprovalDecision) => Promise<void>;
+}) {
+  const actions: Array<{ decision: ExternalAgentApprovalDecision; label: string }> = [
+    { decision: "approved", label: "批准一次" },
+    { decision: "approved_for_session", label: "本会话" },
+    { decision: "denied", label: "拒绝" },
+    { decision: "abort", label: "中止" },
+  ];
+
+  return (
+    <div className="tool-approval-actions">
+      {actions.map((action) => (
+        <button
+          key={action.decision}
+          type="button"
+          disabled={props.disabled}
+          onClick={() => void props.onApprove(action.decision)}
+        >
+          {props.pendingDecision === action.decision ? "处理中" : action.label}
+        </button>
+      ))}
+    </div>
   );
 }
 

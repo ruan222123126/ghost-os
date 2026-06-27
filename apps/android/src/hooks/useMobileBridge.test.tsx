@@ -364,6 +364,74 @@ describe("useMobileBridge", () => {
     });
   });
 
+  it("uses the synced computer provider for local sends when model following is off", async () => {
+    window.localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        apiToken: "token",
+        bridgeUrl: "http://100.80.12.34:8080",
+        connectionMode: "http",
+        remoteExecutionEnabled: false,
+      }),
+    );
+    vi.mocked(invoke).mockImplementation(async (command: string, args?: unknown) => {
+      if (command === "mobile_local_llm_send") {
+        return {
+          message: "local reply",
+          model: "gpt-4o",
+          provider_id: "remote-provider-1",
+        };
+      }
+      if (command !== "bridge_bus_request") {
+        return {};
+      }
+
+      const request = bridgeBusRequestFromArgs(args);
+      return {
+        error: "",
+        payload: request.action === "CONFIG_PROVIDERS_GET"
+          ? remoteProviderListPayload()
+          : payloadForAction(request.action, request.params),
+        status: "success",
+      };
+    });
+    const onReply = vi.fn();
+    const onSessionId = vi.fn();
+    const onStatus = vi.fn();
+    const { result } = renderHook(() => useMobileBridge());
+
+    await act(async () => {
+      await result.current.connectBridge();
+    });
+    await waitFor(() => {
+      expect(result.current.providerList?.providers[0]).toMatchObject({
+        provider_id: "remote-provider-1",
+      });
+    });
+
+    let sent = { ok: false };
+    await act(async () => {
+      sent = await result.current.sendAgentMessage({
+        history: [],
+        message: "hello",
+        onReply,
+        onSessionId,
+        onStatus,
+      });
+    });
+
+    expect(sent).toMatchObject({ mode: "local", ok: true });
+    const localSend = vi.mocked(invoke).mock.calls.find(([command]) => command === "mobile_local_llm_send");
+    expect(localSend?.[1]).toMatchObject({
+      request: {
+        model: "gpt-4o",
+        providerId: "remote-provider-1",
+      },
+    });
+    expect(onReply).toHaveBeenCalledWith(expect.objectContaining({ message: "local reply" }));
+    expect(onStatus).not.toHaveBeenCalledWith(expect.objectContaining({ text: "请先配置 provider 和模型" }));
+  });
+
   it("switches the local model without updating computer config when model following is off", async () => {
     useHTTPSettings();
     const { result } = renderHook(() => useMobileBridge());

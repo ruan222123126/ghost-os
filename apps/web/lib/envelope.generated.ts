@@ -1,7 +1,7 @@
 // CODE GENERATED. DO NOT EDIT. Source: core/shared/schema.json
 // Source: core/shared/schema.json (https://ghost-os.dev/schemas/bus-envelope.schema.json)
 
-export type BusAction = 'AGENT_SEND' | 'AGENT_STOP' | 'HUMAN_RESPONSE' | 'SESSIONS_LIST' | 'SESSIONS_SEARCH' | 'SESSION_GET' | 'SESSION_APPEND' | 'CONFIG_GET' | 'CONFIG_UPDATE' | 'CONFIG_PROVIDERS_GET' | 'CONFIG_PROVIDER_CREATE' | 'CONFIG_PROVIDER_UPDATE' | 'CONFIG_PROVIDER_DELETE' | 'SKILL_LIST' | 'SKILL_UPDATE' | 'SKILL_DELETE' | 'TASK_CREATE' | 'TASK_LIST' | 'TASK_GET' | 'TASK_UPDATE' | 'TASK_RUN_NOW' | 'TASK_STOP' | 'TASK_LOGS' | 'TASK_DELETE';
+export type BusAction = 'AGENT_SEND' | 'AGENT_STOP' | 'EXTERNAL_AGENT_START' | 'EXTERNAL_AGENT_SEND' | 'EXTERNAL_AGENT_STOP' | 'EXTERNAL_AGENT_APPROVE' | 'HUMAN_RESPONSE' | 'SESSIONS_LIST' | 'SESSIONS_SEARCH' | 'SESSION_GET' | 'SESSION_APPEND' | 'CONFIG_GET' | 'CONFIG_UPDATE' | 'CONFIG_PROVIDERS_GET' | 'CONFIG_PROVIDER_CREATE' | 'CONFIG_PROVIDER_UPDATE' | 'CONFIG_PROVIDER_DELETE' | 'SKILL_LIST' | 'SKILL_UPDATE' | 'SKILL_DELETE' | 'TASK_CREATE' | 'TASK_LIST' | 'TASK_GET' | 'TASK_UPDATE' | 'TASK_RUN_NOW' | 'TASK_STOP' | 'TASK_LOGS' | 'TASK_DELETE';
 export type BusStatus = 'success' | 'error';
 
 export interface ApiRequest<TParams extends object> {
@@ -69,10 +69,46 @@ export interface AgentStopRequest {
   trace_id?: string;
 }
 
+export interface ExternalAgentRequest {
+  provider?: string;
+  message?: string;
+  session_id?: string;
+  permission_mode?: 'read-only' | 'default' | 'safe-yolo' | 'yolo';
+  model?: string;
+  effort?: string;
+  project_root?: string;
+}
+
+export interface ExternalAgentStopParams {
+  session_id: string;
+}
+
 export interface AgentStopResponsePayload {
   status: 'stopped' | 'not_running';
   message: string;
   session_id?: string;
+}
+
+export interface ExternalAgentApprovalParams {
+  session_id: string;
+  approval_id: string;
+  decision: 'approved' | 'approved_for_session' | 'denied' | 'abort';
+}
+
+export interface ExternalAgentResponse {
+  status: string;
+  provider?: string;
+  session_id?: string;
+  thread_id?: string;
+  turn_id?: string;
+  permission_mode?: string;
+}
+
+export interface ExternalAgentApprovalResponse {
+  session_id: string;
+  approval_id: string;
+  decision: string;
+  accepted: boolean;
 }
 
 export interface HumanResponseRequest {
@@ -349,6 +385,7 @@ export interface BridgeConfig {
   relay_default_stop_policy: 'ai_decides' | 'max_rounds';
   relay_default_max_rounds: number;
   relay_default_execution_timeout_ms: number;
+  external_codex_permission_mode: 'read-only' | 'default' | 'safe-yolo' | 'yolo';
   llm_completion_retry_count: number;
   llm_completion_retry_interval_ms: number;
   api_key_set: boolean;
@@ -384,6 +421,7 @@ export interface ConfigUpdate {
   relay_default_stop_policy?: 'ai_decides' | 'max_rounds';
   relay_default_max_rounds?: number;
   relay_default_execution_timeout_ms?: number;
+  external_codex_permission_mode?: 'read-only' | 'default' | 'safe-yolo' | 'yolo';
   llm_completion_retry_count?: number;
   llm_completion_retry_interval_ms?: number;
   session_human_log_full_enabled?: boolean;

@@ -456,10 +456,18 @@ func (p *peerSession) handleStream(frame mobile.Frame) {
 	p.trackRequest(frame.RequestID, cancel)
 	defer p.finishRequest(frame.RequestID)
 
-	if strings.ToUpper(strings.TrimSpace(frame.Action)) != "AGENT_SEND" {
-		p.sendStreamEnd(frame.RequestID, "error", "stream_start only supports AGENT_SEND", map[string]any{})
-		return
+	action := strings.ToUpper(strings.TrimSpace(frame.Action))
+	switch action {
+	case bridgeorchestration.BusActionAgentSend:
+		p.handleAgentStream(ctx, frame)
+	case bridgeorchestration.BusActionExternalAgentStart, bridgeorchestration.BusActionExternalAgentSend:
+		p.handleExternalAgentStream(ctx, frame, action == bridgeorchestration.BusActionExternalAgentStart)
+	default:
+		p.sendStreamEnd(frame.RequestID, "error", "unsupported stream_start action: "+action, map[string]any{})
 	}
+}
+
+func (p *peerSession) handleAgentStream(ctx context.Context, frame mobile.Frame) {
 	var params bridgeorchestration.AgentParams
 	if err := json.Unmarshal(mobile.RequestRawParams(frame), &params); err != nil {
 		p.sendStreamEnd(frame.RequestID, "error", fmt.Sprintf("decode AGENT_SEND params: %v", err), map[string]any{})
@@ -470,10 +478,33 @@ func (p *peerSession) handleStream(frame mobile.Frame) {
 		p.sendStreamEnd(frame.RequestID, "error", err.Error(), map[string]any{})
 		return
 	}
+	p.runPreparedStream(ctx, frame, prepared, params.SessionID)
+}
+
+func (p *peerSession) handleExternalAgentStream(ctx context.Context, frame mobile.Frame, forceStart bool) {
+	var params bridgeorchestration.ExternalAgentRequest
+	if err := json.Unmarshal(mobile.RequestRawParams(frame), &params); err != nil {
+		p.sendStreamEnd(frame.RequestID, "error", fmt.Sprintf("decode %s params: %v", frame.Action, err), map[string]any{})
+		return
+	}
+	prepared, _, err := p.transport.service.PrepareExternalAgentStreamAction(params, frame.TraceID, forceStart)
+	if err != nil {
+		p.sendStreamEnd(frame.RequestID, "error", err.Error(), map[string]any{})
+		return
+	}
+	p.runPreparedStream(ctx, frame, prepared, params.SessionID)
+}
+
+func (p *peerSession) runPreparedStream(
+	ctx context.Context,
+	frame mobile.Frame,
+	prepared bridgeorchestration.PreparedAgentStream,
+	inputSessionID string,
+) {
 	sink := dataChannelStreamSink{peer: p, requestID: frame.RequestID}
 	_, sessionID, err := prepared.Run(ctx, sink)
 	if err != nil {
-		p.sendStreamEnd(frame.RequestID, "error", err.Error(), map[string]any{"session_id": sessionID})
+		p.sendStreamEnd(frame.RequestID, "error", err.Error(), map[string]any{"session_id": firstNonEmpty(sessionID, inputSessionID)})
 		return
 	}
 	p.sendStreamEnd(frame.RequestID, "success", "", map[string]any{"session_id": sessionID})

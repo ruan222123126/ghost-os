@@ -7,10 +7,12 @@ import (
 	"errors"
 
 	taskservice "ghost-os/bridge/orchestration/internal/adapters/taskservice"
+	appexternal "ghost-os/bridge/orchestration/internal/app/externalagent"
 	appsessions "ghost-os/bridge/orchestration/internal/app/sessions"
 	apptasks "ghost-os/bridge/orchestration/internal/app/tasks"
 	"ghost-os/bridge/orchestration/internal/contracts/bus"
 	internaltrace "ghost-os/bridge/orchestration/internal/trace"
+	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
 )
 
@@ -276,5 +278,21 @@ func mapHumanResponseErrorKind(err error) ServiceErrorKind {
 		return ServiceErrorNotFound
 	default:
 		return mapSessionAppErrorKind(err)
+	}
+}
+
+func mapExternalAgentError(err error) ServiceErrorKind {
+	switch {
+	case errors.Is(err, session.ErrInvalidSessionID),
+		errors.Is(err, appexternal.ErrSessionRequired),
+		errors.Is(err, appexternal.ErrNotImplemented):
+		return ServiceErrorInvalidInput
+	case errors.Is(err, session.ErrSessionNotFound),
+		errors.Is(err, appexternal.ErrApprovalNotFound):
+		return ServiceErrorNotFound
+	case errors.Is(err, appexternal.ErrExternalRunActive):
+		return ServiceErrorConflict
+	default:
+		return ServiceErrorInternal
 	}
 }

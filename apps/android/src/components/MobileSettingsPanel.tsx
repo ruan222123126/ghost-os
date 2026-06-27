@@ -5,6 +5,7 @@ import { deleteMobileCredential, saveMobileCredential } from "../lib/mobileCrede
 import { hasTurnServer, parsePairingUri } from "../lib/mobileWebRTC";
 import type {
   ConfigPayload,
+  ExternalCodexPermissionMode,
   ProviderConfigInputPayload,
   ProviderListPayload,
   SkillPayload,
@@ -24,6 +25,7 @@ interface MobileSettingsPanelProps {
   computerSessionPersistStatus: StatusMessage;
   connectionStatus: StatusMessage;
   localProviderList?: ProviderListPayload;
+  codexPermissionMode?: ExternalCodexPermissionMode;
   open: boolean;
   providerList: ProviderListPayload | undefined;
   onActivateProvider: (name: string) => Promise<boolean>;
@@ -43,6 +45,7 @@ interface MobileSettingsPanelProps {
   onSetTaskEnabled: (id: string, enabled: boolean) => Promise<boolean>;
   onSetOrchestrationEnabled: (id: string, enabled: boolean) => Promise<boolean>;
   onUpdateSkill: (id: string, enabled: boolean) => Promise<boolean>;
+  onUpdateCodexPermission: (mode: ExternalCodexPermissionMode) => Promise<boolean>;
   onUpdateProvider: (name: string, provider: ProviderConfigInputPayload) => Promise<boolean>;
   runningTaskId: string;
   settings: StoredSettings;
@@ -235,6 +238,8 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
               )}
               persistComputerSessionsEnabled={props.settings.persistComputerSessionsEnabled}
               persistComputerSessionsStatus={props.computerSessionPersistStatus}
+              codexPermissionDisabled={props.connectionStatus.tone !== "success"}
+              codexPermissionMode={props.codexPermissionMode ?? "default"}
               remoteExecutionEnabled={props.settings.remoteExecutionEnabled}
               remoteExecutionLocked={props.connectionStatus.tone !== "success"}
               taskDisabled={taskEntryDisabled(props.connectionStatus)}
@@ -244,6 +249,7 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
               skillDisabled={skillEntryDisabled(props.connectionStatus)}
               skillSublabel={skillSublabel(props.connectionStatus, props.skillList, props.skillListError)}
               onSetAutoConnectEnabled={setAutoConnectEnabled}
+              onSetCodexPermission={props.onUpdateCodexPermission}
               onSetPersistComputerSessionsEnabled={setPersistComputerSessionsEnabled}
               onSetRemoteExecutionEnabled={setRemoteExecutionEnabled}
               onOpenConnection={() => setView("connection")}
@@ -290,6 +296,8 @@ function SettingsButton(props: {
 
 function SettingsRoot(props: {
   autoConnectEnabled: boolean;
+  codexPermissionDisabled: boolean;
+  codexPermissionMode: ExternalCodexPermissionMode;
   connectionSublabel: string;
   orchestrationDisabled: boolean;
   orchestrationSublabel: string;
@@ -309,6 +317,7 @@ function SettingsRoot(props: {
   onOpenSkills: () => void;
   onOpenTasks: () => void;
   onSetAutoConnectEnabled: (enabled: boolean) => void;
+  onSetCodexPermission: (mode: ExternalCodexPermissionMode) => Promise<boolean>;
   onSetPersistComputerSessionsEnabled: (enabled: boolean) => void;
   onSetRemoteExecutionEnabled: (enabled: boolean) => void;
 }) {
@@ -374,7 +383,50 @@ function SettingsRoot(props: {
           <SettingsButton icon={Globe} label="语言" sublabel="中文" />
         </div>
       </SettingsSection>
+
+      <SettingsSection title="Agent">
+        <div className="mobile-settings-card">
+          <CodexPermissionSelector
+            disabled={props.codexPermissionDisabled}
+            mode={props.codexPermissionMode}
+            onChange={props.onSetCodexPermission}
+          />
+        </div>
+      </SettingsSection>
     </>
+  );
+}
+
+function CodexPermissionSelector(props: {
+  disabled: boolean;
+  mode: ExternalCodexPermissionMode;
+  onChange: (mode: ExternalCodexPermissionMode) => Promise<boolean>;
+}) {
+  const options: Array<{ label: string; mode: ExternalCodexPermissionMode }> = [
+    { label: "只读", mode: "read-only" },
+    { label: "默认", mode: "default" },
+    { label: "自动重试", mode: "safe-yolo" },
+    { label: "完全访问", mode: "yolo" },
+  ];
+
+  return (
+    <div className="mobile-settings-codex-permission">
+      <span className="mobile-settings-codex-permission-title">Codex 权限</span>
+      <div className="mobile-settings-codex-permission-grid" role="group" aria-label="Codex 权限">
+        {options.map((option) => (
+          <button
+            key={option.mode}
+            type="button"
+            className={props.mode === option.mode ? "is-active" : ""}
+            disabled={props.disabled}
+            aria-pressed={props.mode === option.mode}
+            onClick={() => void props.onChange(option.mode)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 

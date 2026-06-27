@@ -64,6 +64,18 @@ export function buildMobileToolCardViewModel(
   tool: MobileToolCard,
   options: MobileToolCardViewModelOptions = {},
 ): MobileToolCardViewModel {
+  if (tool.approvalId) {
+    const tone = getMobileToolTone(tool.status);
+    return {
+      details: tool.input?.trim() || "Codex 请求审批",
+      showTerminalIcon: false,
+      statusLabel: "WAITING",
+      title: "Codex 审批",
+      titleMode: "plain",
+      tone,
+    };
+  }
+
   const action = formatToolAction(tool);
   const tone = getMobileToolTone(tool.status);
   const plainTitle = buildPlainActionTitle(action, tool);

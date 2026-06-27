@@ -25,6 +25,11 @@ type AgentUsecase interface {
 		params bridgeorchestration.AgentParams,
 		traceID string,
 	) (bridgeorchestration.PreparedAgentStream, bridgeorchestration.ServiceResult, error)
+	PrepareExternalStream(
+		params bridgeorchestration.ExternalAgentRequest,
+		traceID string,
+		forceStart bool,
+	) (bridgeorchestration.PreparedAgentStream, bridgeorchestration.ServiceResult, error)
 }
 
 type SessionUsecase interface {
@@ -202,6 +207,14 @@ func (a orchestrationAgentAdapter) PrepareStream(
 	traceID string,
 ) (bridgeorchestration.PreparedAgentStream, bridgeorchestration.ServiceResult, error) {
 	return a.service.PrepareAgentStreamAction(ctx, params, traceID)
+}
+
+func (a orchestrationAgentAdapter) PrepareExternalStream(
+	params bridgeorchestration.ExternalAgentRequest,
+	traceID string,
+	forceStart bool,
+) (bridgeorchestration.PreparedAgentStream, bridgeorchestration.ServiceResult, error) {
+	return a.service.PrepareExternalAgentStreamAction(params, traceID, forceStart)
 }
 
 type orchestrationSessionAdapter struct {

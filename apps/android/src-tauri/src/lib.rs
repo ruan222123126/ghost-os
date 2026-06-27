@@ -8,6 +8,7 @@ use std::time::Duration;
 use tauri::{Emitter, Manager};
 
 const BRIDGE_AGENT_STREAM_PATH: &str = "api/agent/stream";
+const BRIDGE_EXTERNAL_AGENT_STREAM_PATH: &str = "api/external-agent/stream";
 const BRIDGE_AGENT_STREAM_CHUNK_EVENT: &str = "bridge-agent-stream-chunk";
 const BRIDGE_BUS_PATH: &str = "api/bus";
 const MOBILE_CONVERSATIONS_FILE: &str = "mobile-conversations.v1.json";
@@ -40,7 +41,9 @@ struct BridgeBusCommand {
 struct BridgeAgentStreamCommand {
     base_url: String,
     api_token: Option<String>,
+    body: Option<Value>,
     message: String,
+    path: Option<String>,
     request_id: String,
     runtime_overrides: Option<Value>,
     session_id: Option<String>,
@@ -256,21 +259,10 @@ async fn bridge_agent_stream(
     app: tauri::AppHandle,
     request: BridgeAgentStreamCommand,
 ) -> Result<(), String> {
-    validate_agent_stream_request(&request)?;
-    let url = bridge_agent_stream_url(&request.base_url)?;
-    let message = request.message.trim();
+    let stream_path = validate_agent_stream_request(&request)?;
+    let url = bridge_stream_url(&request.base_url, stream_path)?;
     let trace_id = request.trace_id.trim();
-    let session_id = request
-        .session_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
-    let body = BridgeAgentStreamBody {
-        message,
-        runtime_overrides: request.runtime_overrides.as_ref(),
-        session_id,
-        trace_id,
-    };
+    let body = build_agent_stream_body(&request)?;
 
     let client = reqwest::Client::builder()
         .build()
@@ -278,6 +270,7 @@ async fn bridge_agent_stream(
     let mut builder = client
         .post(url)
         .header(reqwest::header::ACCEPT, SSE_CONTENT_TYPE)
+        .header("X-Trace-ID", trace_id)
         .json(&body);
     if let Some(token) = normalized_token(request.api_token.clone()) {
         builder = builder.header("X-API-Token", token);
@@ -340,7 +333,9 @@ fn mobile_conversations_save(
 }
 
 #[tauri::command]
-fn mobile_local_provider_list(app: tauri::AppHandle) -> Result<MobileLocalProviderListPayload, String> {
+fn mobile_local_provider_list(
+    app: tauri::AppHandle,
+) -> Result<MobileLocalProviderListPayload, String> {
     let state = read_mobile_local_provider_state(&mobile_local_providers_path(&app)?)?;
     let secrets = read_mobile_local_provider_secrets(&mobile_local_provider_secrets_path(&app)?)?;
     Ok(build_mobile_local_provider_payload(state, &secrets))
@@ -429,13 +424,20 @@ async fn mobile_local_llm_send(
     let provider = state
         .providers
         .iter()
-        .find(|provider| provider.provider_id == request.provider_id.trim() && provider.deleted_at.is_none())
+        .find(|provider| {
+            provider.provider_id == request.provider_id.trim() && provider.deleted_at.is_none()
+        })
         .cloned()
         .ok_or_else(|| format!("local provider not found: {}", request.provider_id.trim()))?;
     let api_key = secrets
         .get(request.provider_id.trim())
         .cloned()
-        .ok_or_else(|| format!("local provider secret not found: {}", request.provider_id.trim()))?;
+        .ok_or_else(|| {
+            format!(
+                "local provider secret not found: {}",
+                request.provider_id.trim()
+            )
+        })?;
     let message = send_mobile_local_llm_request(&provider, &api_key, &request).await?;
     Ok(MobileLocalLLMSendResponse {
         message,
@@ -449,7 +451,11 @@ fn bridge_bus_url(base_url: &str) -> Result<reqwest::Url, String> {
 }
 
 fn bridge_agent_stream_url(base_url: &str) -> Result<reqwest::Url, String> {
-    bridge_api_url(base_url, BRIDGE_AGENT_STREAM_PATH)
+    bridge_stream_url(base_url, BRIDGE_AGENT_STREAM_PATH)
+}
+
+fn bridge_stream_url(base_url: &str, path: &str) -> Result<reqwest::Url, String> {
+    bridge_api_url(base_url, path)
 }
 
 fn bridge_api_url(base_url: &str, path: &str) -> Result<reqwest::Url, String> {
@@ -480,17 +486,62 @@ fn validate_envelope(envelope: &BridgeBusEnvelope<'_>) -> Result<(), String> {
     Ok(())
 }
 
-fn validate_agent_stream_request(request: &BridgeAgentStreamCommand) -> Result<(), String> {
+fn validate_agent_stream_request(
+    request: &BridgeAgentStreamCommand,
+) -> Result<&'static str, String> {
     if request.request_id.trim().is_empty() {
         return Err("stream request_id is required".to_string());
-    }
-    if request.message.trim().is_empty() {
-        return Err("agent message is required".to_string());
     }
     if request.trace_id.trim().is_empty() {
         return Err("trace_id is required".to_string());
     }
+    let path = normalize_agent_stream_path(request.path.as_deref())?;
+    if let Some(body) = request.body.as_ref() {
+        validate_stream_body_message(body)?;
+    } else if request.message.trim().is_empty() {
+        return Err("agent message is required".to_string());
+    }
+    Ok(path)
+}
+
+fn normalize_agent_stream_path(path: Option<&str>) -> Result<&'static str, String> {
+    match path.map(str::trim).filter(|value| !value.is_empty()) {
+        None => Ok(BRIDGE_AGENT_STREAM_PATH),
+        Some(BRIDGE_AGENT_STREAM_PATH) => Ok(BRIDGE_AGENT_STREAM_PATH),
+        Some(BRIDGE_EXTERNAL_AGENT_STREAM_PATH) => Ok(BRIDGE_EXTERNAL_AGENT_STREAM_PATH),
+        Some(other) => Err(format!("unsupported bridge stream path: {other}")),
+    }
+}
+
+fn validate_stream_body_message(body: &Value) -> Result<(), String> {
+    let message = body
+        .get("message")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("");
+    if message.is_empty() {
+        return Err("agent message is required".to_string());
+    }
     Ok(())
+}
+
+fn build_agent_stream_body(request: &BridgeAgentStreamCommand) -> Result<Value, String> {
+    if let Some(body) = request.body.clone() {
+        return Ok(body);
+    }
+
+    let session_id = request
+        .session_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    serde_json::to_value(BridgeAgentStreamBody {
+        message: request.message.trim(),
+        runtime_overrides: request.runtime_overrides.as_ref(),
+        session_id,
+        trace_id: request.trace_id.trim(),
+    })
+    .map_err(|err| format!("encode bridge stream body failed: {err}"))
 }
 
 fn normalized_token(token: Option<String>) -> Option<String> {
@@ -664,9 +715,12 @@ fn read_mobile_local_provider_state(path: &Path) -> Result<MobileLocalProviderSt
             if raw.trim().is_empty() {
                 return Ok(MobileLocalProviderState::default());
             }
-            serde_json::from_str(&raw).map_err(|err| format!("decode local providers failed: {err}"))
+            serde_json::from_str(&raw)
+                .map_err(|err| format!("decode local providers failed: {err}"))
         }
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(MobileLocalProviderState::default()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            Ok(MobileLocalProviderState::default())
+        }
         Err(err) => Err(format!("read local providers failed: {err}")),
     }
 }
@@ -676,9 +730,11 @@ fn write_mobile_local_provider_state(
     state: &MobileLocalProviderState,
 ) -> Result<(), String> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|err| format!("create local provider directory failed: {err}"))?;
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("create local provider directory failed: {err}"))?;
     }
-    let encoded = serde_json::to_vec_pretty(state).map_err(|err| format!("encode local providers failed: {err}"))?;
+    let encoded = serde_json::to_vec_pretty(state)
+        .map_err(|err| format!("encode local providers failed: {err}"))?;
     fs::write(path, encoded).map_err(|err| format!("write local providers failed: {err}"))?;
     set_private_file_permissions(path, "local providers")
 }
@@ -689,7 +745,8 @@ fn read_mobile_local_provider_secrets(path: &Path) -> Result<BTreeMap<String, St
             if raw.trim().is_empty() {
                 return Ok(BTreeMap::new());
             }
-            serde_json::from_str(&raw).map_err(|err| format!("decode local provider secrets failed: {err}"))
+            serde_json::from_str(&raw)
+                .map_err(|err| format!("decode local provider secrets failed: {err}"))
         }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(BTreeMap::new()),
         Err(err) => Err(format!("read local provider secrets failed: {err}")),
@@ -701,11 +758,13 @@ fn write_mobile_local_provider_secrets(
     secrets: &BTreeMap<String, String>,
 ) -> Result<(), String> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|err| format!("create local provider secrets directory failed: {err}"))?;
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("create local provider secrets directory failed: {err}"))?;
     }
     let encoded = serde_json::to_vec_pretty(secrets)
         .map_err(|err| format!("encode local provider secrets failed: {err}"))?;
-    fs::write(path, encoded).map_err(|err| format!("write local provider secrets failed: {err}"))?;
+    fs::write(path, encoded)
+        .map_err(|err| format!("write local provider secrets failed: {err}"))?;
     set_private_file_permissions(path, "local provider secrets")
 }
 
@@ -794,9 +853,7 @@ fn upsert_mobile_local_provider(
     };
     let mut replaced = false;
     for record in state.providers.iter_mut() {
-        if record.provider_id == provider_id
-            || record.name.trim().eq_ignore_ascii_case(name)
-        {
+        if record.provider_id == provider_id || record.name.trim().eq_ignore_ascii_case(name) {
             *record = next.clone();
             replaced = true;
             break;
@@ -862,19 +919,18 @@ async fn send_mobile_local_llm_request(
             .json::<Value>()
             .await
             .map_err(|err| format!("decode local anthropic response failed: {err}"))?;
-        return Ok(
-            body.get("content")
-                .and_then(Value::as_array)
-                .map(|items| {
-                    items
-                        .iter()
-                        .filter_map(|item| item.get("text").and_then(Value::as_str))
-                        .collect::<Vec<_>>()
-                        .join("")
-                })
-                .filter(|text| !text.trim().is_empty())
-                .ok_or_else(|| "local anthropic response did not include text".to_string())?,
-        );
+        return Ok(body
+            .get("content")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| item.get("text").and_then(Value::as_str))
+                    .collect::<Vec<_>>()
+                    .join("")
+            })
+            .filter(|text| !text.trim().is_empty())
+            .ok_or_else(|| "local anthropic response did not include text".to_string())?);
     }
 
     let url = bridge_api_url(&provider.base_url, "chat/completions")?;

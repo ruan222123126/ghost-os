@@ -25,6 +25,8 @@ type PresetCreateRequest = bridgeconfig.PresetCreateRequest
 type PresetUpdateRequest = bridgeconfig.PresetUpdateRequest
 type SkillIDParams = bridgeskills.SkillIDParams
 type SkillUpdateRequest = bridgeskills.SkillUpdateRequest
+type SessionAppendRequest = sessionAppendRequest
+type SessionAppendResponse = sessionAppendResponse
 
 const (
 	ServiceOutcomeSuccess  = bus.ServiceOutcomeSuccess
@@ -146,26 +148,17 @@ func (s *Service) ExecuteAgentAction(ctx context.Context, params AgentParams, tr
 	return s.inner.executeAgentAction(ctx, params, traceID)
 }
 
-func ServiceErrorKindOf(err error) ServiceErrorKind {
-	return bus.ErrorKindOf(err)
-}
-
-func ServiceErrorKindFromError(err error) ServiceErrorKind {
-	return ServiceErrorKindOf(err)
-}
-
+func ServiceErrorKindOf(err error) ServiceErrorKind        { return bus.ErrorKindOf(err) }
+func ServiceErrorKindFromError(err error) ServiceErrorKind { return ServiceErrorKindOf(err) }
 func (s *Service) ExecuteProvidersGetAction(traceID string) (ServiceResult, error) {
 	return s.inner.executeProvidersGetAction(traceID)
 }
-
 func (s *Service) ExecuteProviderCreateAction(req ProviderCreateRequest, traceID string) (ServiceResult, error) {
 	return s.inner.executeProviderCreateAction(req, traceID)
 }
-
 func (s *Service) ExecuteProviderUpdateAction(name string, req ProviderUpdateRequest, traceID string) (ServiceResult, error) {
 	return s.inner.executeProviderUpdateAction(name, req, traceID)
 }
-
 func (s *Service) ExecuteProviderDeleteAction(name string, traceID string) (ServiceResult, error) {
 	return s.inner.executeProviderDeleteAction(name, traceID)
 }
@@ -212,6 +205,22 @@ func (s *Service) ExecuteAgentStreamAction(ctx context.Context, params AgentPara
 
 func (s *Service) PrepareAgentStreamAction(ctx context.Context, params AgentParams, traceID string) (PreparedAgentStream, ServiceResult, error) {
 	return s.inner.prepareAgentStreamAction(ctx, params, traceID)
+}
+
+func (s *Service) PrepareExternalAgentStreamAction(
+	params ExternalAgentRequest,
+	traceID string,
+	forceStart bool,
+) (PreparedAgentStream, ServiceResult, error) {
+	return s.inner.prepareExternalAgentStreamAction(params, traceID, forceStart)
+}
+
+func (s *Service) ExecuteExternalAgentStopAction(ctx context.Context, params ExternalAgentStopParams, traceID string) (ServiceResult, error) {
+	return s.inner.executeExternalAgentStopAction(ctx, params, traceID)
+}
+
+func (s *Service) ExecuteExternalAgentApproveAction(ctx context.Context, params ExternalAgentApprovalParams, traceID string) (ServiceResult, error) {
+	return s.inner.executeExternalAgentApproveAction(ctx, params, traceID)
 }
 
 func (s *Service) ExecuteSkillListAction(traceID string) (ServiceResult, error) {

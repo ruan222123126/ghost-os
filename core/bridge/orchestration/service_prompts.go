@@ -2,6 +2,7 @@ package orchestration
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	bridgeconfig "ghost-os/bridge/config"
@@ -13,7 +14,9 @@ import (
 	appskills "ghost-os/bridge/orchestration/internal/app/skills"
 	apptools "ghost-os/bridge/orchestration/internal/app/tools"
 	"ghost-os/bridge/orchestration/internal/contracts/bus"
+	internaltrace "ghost-os/bridge/orchestration/internal/trace"
 	bridgeskills "ghost-os/bridge/skills"
+	"ghost-os/bridge/streaming"
 )
 
 const screenControlToolID = apptools.ScreenControlToolID
@@ -64,6 +67,24 @@ func (s *bridgeService) toolRuntimeFactory() toolruntime.RuntimeFactory {
 	return toolruntime.RuntimeFactoryFunc(func(store bridgeconfig.Store) (toolruntime.RuntimeDependencies, error) {
 		return s.runtimeFactory.Build(store)
 	})
+}
+
+func (s *bridgeService) prepareExternalAgentStreamAction(
+	params externalAgentRequest,
+	traceID string,
+	forceStart bool,
+) (PreparedAgentStream, ServiceResult, error) {
+	manager := s.externalAgentManager()
+	if manager == nil {
+		err := errors.New("external agent manager is not configured")
+		return PreparedAgentStream{}, ServiceResult{}, bus.WrapError(ServiceErrorInternal, err)
+	}
+	return PreparedAgentStream{
+		run: func(ctx context.Context, sink streaming.Sink) (string, string, error) {
+			broadcastSink := internaltrace.NewSessionStreamBroadcastSink(sink, s.sessionPushHub())
+			return manager.ExecuteStream(ctx, params, traceID, broadcastSink, forceStart)
+		},
+	}, bus.ResultSuccess(map[string]any{}), nil
 }
 
 func (s *bridgeService) executeSystemPromptGetAction(traceID string) (ServiceResult, error) {

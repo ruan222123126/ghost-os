@@ -222,6 +222,7 @@ func snapshotFromRuntimeConfig(runtime runtimeConfig) Snapshot {
 		RelayDefaultStopPolicy:         runtime.RelayDefaultStopPolicy,
 		RelayDefaultMaxRounds:          runtime.RelayDefaultMaxRounds,
 		RelayDefaultExecutionTimeoutMS: runtime.RelayDefaultExecutionTimeoutMS,
+		ExternalCodexPermissionMode:    runtime.ExternalCodexPermissionMode,
 		LLMCompletionRetryCount:        runtime.LLMCompletionRetryCount,
 		LLMCompletionRetryIntervalMS:   runtime.LLMCompletionRetryIntervalMS,
 		APIKeySet:                      runtime.APIKey != "",

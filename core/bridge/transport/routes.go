@@ -11,6 +11,7 @@ var transportRoutes = []transportRoute{
 	{pattern: "/api/bus", handler: (*transport).handleBus},
 	{pattern: "/api/agent", handler: (*transport).handleAgent},
 	{pattern: "/api/agent/stream", handler: (*transport).handleAgentStream},
+	{pattern: "/api/external-agent/stream", handler: (*transport).handleExternalAgentStream},
 	{pattern: "/api/questions/answer", handler: (*transport).handleQuestionAnswer},
 	{pattern: "/api/questions/answer/stream", handler: (*transport).handleQuestionAnswerStream},
 	{pattern: "/api/config", handler: (*transport).handleConfig},

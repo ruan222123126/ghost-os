@@ -132,6 +132,10 @@ func Normalize(raw Snapshot) Snapshot {
 	if out.RelayDefaultExecutionTimeoutMS < 0 {
 		out.RelayDefaultExecutionTimeoutMS = DefaultRelayExecutionTimeoutMS
 	}
+	externalCodexPermissionMode, err := NormalizeExternalCodexPermissionMode(out.ExternalCodexPermissionMode)
+	if err == nil {
+		out.ExternalCodexPermissionMode = externalCodexPermissionMode
+	}
 	out.WebSearchTavilyURL = strings.TrimSpace(out.WebSearchTavilyURL)
 	out.WebSearchExaURL = strings.TrimSpace(out.WebSearchExaURL)
 	out.WebSearchTavilyAPIKey = strings.TrimSpace(out.WebSearchTavilyAPIKey)

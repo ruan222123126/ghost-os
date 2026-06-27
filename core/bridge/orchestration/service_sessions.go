@@ -1,5 +1,3 @@
-// Session use cases for create/list/get/update/delete operations.
-
 package orchestration
 
 import (
@@ -18,7 +16,6 @@ var errSessionEnded = errors.New("session has already ended")
 
 type BinaryDownload = appdownloads.BinaryDownload
 
-// executeSessionsListAction 汇总全部会话元数据，并映射为 API 返回结构。
 func (s *bridgeService) executeSessionsListAction(traceID string) (ServiceResult, error) {
 	usecase, err := s.sessionUsecase()
 	if err != nil {
@@ -58,7 +55,6 @@ func (s *bridgeService) executeSessionsSearchQueryAction(query string, limit int
 	return bus.ResultSuccess(metadata), nil
 }
 
-// executeSessionGetAction 读取并返回单会话详情页。
 func (s *bridgeService) executeSessionGetAction(params sessionGetParams, traceID string) (ServiceResult, error) {
 	usecase, err := s.sessionUsecase()
 	if err != nil {
@@ -98,7 +94,6 @@ func (s *bridgeService) executeSessionSourcesAction(traceID string) (ServiceResu
 	return bus.ResultSuccess(resolution), nil
 }
 
-// executeSessionDeleteAction 删除指定会话，并返回幂等友好的删除结果结构。
 func (s *bridgeService) executeSessionDeleteAction(params sessionIDParams, traceID string) (ServiceResult, error) {
 	usecase, err := s.sessionUsecase()
 	if err != nil {
@@ -144,14 +139,12 @@ func (s *bridgeService) executeSessionSidebarPartitionsPutAction(
 func (s *Service) ExecuteSessionSidebarPartitionsGetAction(traceID string) (ServiceResult, error) {
 	return s.inner.executeSessionSidebarPartitionsGetAction(traceID)
 }
-
 func (s *Service) ExecuteSessionSidebarPartitionsPutAction(
 	req SessionSidebarPartitionPutRequest,
 	traceID string,
 ) (ServiceResult, error) {
 	return s.inner.executeSessionSidebarPartitionsPutAction(req, traceID)
 }
-
 func (s *Service) OpenSessionArtifactDownload(sessionID string, artifactID string) (BinaryDownload, error) {
 	usecase, err := s.inner.sessionArtifactUsecase()
 	if err != nil {
@@ -181,7 +174,6 @@ func (s *bridgeService) sessionUsecase() (appsessions.Service, error) {
 		Logger:    serviceActionLogger{},
 	}, nil
 }
-
 func (s *bridgeService) sessionSourcesUsecase(traceID string) (appsessions.Service, error) {
 	store, code, err := s.requireTaskStore()
 	if err != nil {
@@ -193,7 +185,6 @@ func (s *bridgeService) sessionSourcesUsecase(traceID string) (appsessions.Servi
 		Logger:    serviceActionLogger{},
 	}, nil
 }
-
 func (s *bridgeService) sessionArtifactUsecase() (appsessions.Service, error) {
 	if s.artifactInitErr != nil {
 		return appsessions.Service{}, bus.WrapError(ServiceErrorInternal, s.artifactInitErr)
@@ -229,7 +220,6 @@ func mapSessionAppErrorKind(err error) ServiceErrorKind {
 	}
 }
 
-// requireSessionStore 确保当前 service 已配置持久化会话存储。
 func (s *bridgeService) requireSessionStore() (*session.Store, error) {
 	if s.sessionStore == nil {
 		return nil, bus.WrapError(ServiceErrorInternal, errors.New("session store is not configured"))
@@ -237,7 +227,6 @@ func (s *bridgeService) requireSessionStore() (*session.Store, error) {
 	return s.sessionStore, nil
 }
 
-// requireSessionID 对输入 id 做最小合法性校验并返回 trim 后值。
 func requireSessionID(id string) (string, error) {
 	trimmed := strings.TrimSpace(id)
 	if trimmed == "" {
@@ -259,7 +248,6 @@ func mapSessionStorageErrorKind(err error) ServiceErrorKind {
 	}
 }
 
-// ensureSessionActive 在继续已有会话前校验其可续跑状态。
 func (s *bridgeService) ensureSessionActive(sessionID string) error {
 	id := strings.TrimSpace(sessionID)
 	if id == "" {
@@ -285,7 +273,6 @@ func (s *bridgeService) ensureSessionActive(sessionID string) error {
 	return bus.WrapError(ServiceErrorConflict, fmt.Errorf("%w: session_id=%s", errSessionEnded, id))
 }
 
-// markSessionEnded 在收到结构化结束信号后把会话状态持久化为 ended。
 func (s *bridgeService) markSessionEnded(sessionID string) error {
 	store := s.sessionStore
 	if store == nil {

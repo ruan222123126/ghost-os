@@ -15,6 +15,7 @@ describe('lib/api/config/parser', () => {
       relay_default_stop_policy: 'ai_decides',
       relay_default_max_rounds: 20,
       relay_default_execution_timeout_ms: 0,
+      external_codex_permission_mode: 'default',
       llm_completion_retry_count: 1,
       llm_completion_retry_interval_ms: 200,
       api_key_set: true,
@@ -53,6 +54,7 @@ describe('lib/api/config/parser', () => {
       relay_default_stop_policy: 'max_rounds',
       relay_default_max_rounds: 12,
       relay_default_execution_timeout_ms: 0,
+      external_codex_permission_mode: 'safe-yolo',
       llm_completion_retry_count: 0,
       llm_completion_retry_interval_ms: 150,
       api_key_set: true,
@@ -77,6 +79,7 @@ describe('lib/api/config/parser', () => {
     expect(parsed.relay_default_stop_policy).toBe('max_rounds');
     expect(parsed.relay_default_max_rounds).toBe(12);
     expect(parsed.relay_default_execution_timeout_ms).toBe(0);
+    expect(parsed.external_codex_permission_mode).toBe('safe-yolo');
     expect(parsed.llm_completion_retry_count).toBe(0);
     expect(parsed.llm_completion_retry_interval_ms).toBe(150);
     expect(parsed.tool_call_compact_output_enabled).toBe(true);

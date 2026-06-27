@@ -141,6 +141,73 @@ func TestConfigStoreUpdatePersistsMaxTurns(t *testing.T) {
 	}
 }
 
+func TestConfigStoreUpdatePersistsExternalCodexPermissionMode(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
+	t.Setenv("GHOST_PROVIDER", "custom")
+	t.Setenv("GHOST_BASE_URL", "https://initial.example/v1")
+
+	store, err := newStoreFromEnv()
+	if err != nil {
+		t.Fatalf("newStoreFromEnv: %v", err)
+	}
+
+	if store.RuntimeConfig().ExternalCodexPermissionMode != DefaultExternalCodexPermissionMode {
+		t.Fatalf(
+			"unexpected default external_codex_permission_mode: got %q want %q",
+			store.RuntimeConfig().ExternalCodexPermissionMode,
+			DefaultExternalCodexPermissionMode,
+		)
+	}
+
+	value := ExternalCodexPermissionSafeYolo
+	if err := store.Update(configUpdateRequest{ExternalCodexPermissionMode: &value}); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if store.RuntimeConfig().ExternalCodexPermissionMode != value {
+		t.Fatalf("expected runtime external_codex_permission_mode to be %q", value)
+	}
+	if store.Snapshot().ExternalCodexPermissionMode != value {
+		t.Fatalf("expected snapshot external_codex_permission_mode to be %q", value)
+	}
+
+	publicSnapshot, err := store.PublicSnapshot()
+	if err != nil {
+		t.Fatalf("PublicSnapshot: %v", err)
+	}
+	if publicSnapshot.ExternalCodexPermissionMode != value {
+		t.Fatalf("expected public snapshot external_codex_permission_mode to be %q", value)
+	}
+
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		t.Fatalf("loadBridgeFileConfig: %v", err)
+	}
+	if fileCfg.ExternalCodexPermissionMode == nil || *fileCfg.ExternalCodexPermissionMode != value {
+		t.Fatalf("unexpected persisted external_codex_permission_mode: %#v", fileCfg.ExternalCodexPermissionMode)
+	}
+}
+
+func TestConfigStoreUpdateRejectsInvalidExternalCodexPermissionMode(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
+	t.Setenv("GHOST_PROVIDER", "custom")
+	t.Setenv("GHOST_BASE_URL", "https://initial.example/v1")
+
+	store, err := newStoreFromEnv()
+	if err != nil {
+		t.Fatalf("newStoreFromEnv: %v", err)
+	}
+
+	value := "unrestricted"
+	if err := store.Update(configUpdateRequest{ExternalCodexPermissionMode: &value}); err == nil {
+		t.Fatal("expected Update to reject invalid external_codex_permission_mode")
+	}
+	if store.RuntimeConfig().ExternalCodexPermissionMode != DefaultExternalCodexPermissionMode {
+		t.Fatalf("invalid update should not mutate runtime config: %+v", store.RuntimeConfig())
+	}
+}
+
 func TestConfigStoreUpdatePersistsTaskExecutionTimeoutMS(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	t.Setenv("GHOST_CONFIG_PATH", configPath)

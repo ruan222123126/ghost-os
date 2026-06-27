@@ -13,18 +13,19 @@ import (
 func TestTopLevelProductionFilesStayFacadeOnly(t *testing.T) {
 	configDir := currentConfigDir(t)
 	allowed := map[string]bool{
-		"config.go":            true,
-		"internal_adapters.go": true,
-		"load.go":              true,
-		"preset_activation.go": true,
-		"project_root.go":      true,
-		"public_defaults.go":   true,
-		"public_facades.go":    true,
-		"public_runtime.go":    true,
-		"public_store.go":      true,
-		"store.go":             true,
-		"store_domains.go":     true,
-		"store_update.go":      true,
+		"config.go":              true,
+		"internal_adapters.go":   true,
+		"load.go":                true,
+		"preset_activation.go":   true,
+		"project_root.go":        true,
+		"provider_sync_store.go": true,
+		"public_defaults.go":     true,
+		"public_facades.go":      true,
+		"public_runtime.go":      true,
+		"public_store.go":        true,
+		"store.go":               true,
+		"store_domains.go":       true,
+		"store_update.go":        true,
 	}
 
 	entries, err := os.ReadDir(configDir)
@@ -45,7 +46,7 @@ func TestTopLevelProductionFilesStayFacadeOnly(t *testing.T) {
 	}
 	sort.Strings(production)
 	sort.Strings(unexpected)
-	if len(production) > 15 {
+	if len(production) > 16 {
 		t.Fatalf("top-level config production files exceed budget: got %d files: %s", len(production), strings.Join(production, ", "))
 	}
 	if len(unexpected) > 0 {

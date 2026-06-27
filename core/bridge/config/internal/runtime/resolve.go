@@ -37,6 +37,7 @@ func FallbackFromEnv(env storage.EnvSnapshot) (Snapshot, error) {
 		RelayDefaultStopPolicy:         settings.RelayDefaultStopPolicy,
 		RelayDefaultMaxRounds:          settings.RelayDefaultMaxRounds,
 		RelayDefaultExecutionTimeoutMS: settings.RelayDefaultExecutionTimeoutMS,
+		ExternalCodexPermissionMode:    settings.ExternalCodexPermissionMode,
 		LLMCompletionRetryCount:        settings.LLMCompletionRetryCount,
 		LLMCompletionRetryIntervalMS:   settings.LLMCompletionRetryIntervalMS,
 		ModelSelectionEnabled:          settings.ModelSelectionEnabled,
@@ -85,6 +86,7 @@ type fallbackSettings struct {
 	RelayDefaultStopPolicy         string
 	RelayDefaultMaxRounds          int
 	RelayDefaultExecutionTimeoutMS int
+	ExternalCodexPermissionMode    string
 	LLMCompletionRetryCount        int
 	LLMCompletionRetryIntervalMS   int
 	ModelSelectionEnabled          bool
@@ -107,6 +109,7 @@ type fileSettings struct {
 	RelayDefaultStopPolicy         string
 	RelayDefaultMaxRounds          int
 	RelayDefaultExecutionTimeoutMS int
+	ExternalCodexPermissionMode    string
 	LLMCompletionRetryCount        int
 	LLMCompletionRetryIntervalMS   int
 	ModelSelectionEnabled          bool
@@ -179,6 +182,7 @@ func resolveFallbackSettings(env storage.EnvSnapshot) (fallbackSettings, error) 
 		RelayDefaultStopPolicy:         relayDefaults.stopPolicy,
 		RelayDefaultMaxRounds:          relayDefaults.maxRounds,
 		RelayDefaultExecutionTimeoutMS: relayDefaults.executionTimeoutMS,
+		ExternalCodexPermissionMode:    DefaultExternalCodexPermissionMode,
 		LLMCompletionRetryCount:        retryCount,
 		LLMCompletionRetryIntervalMS:   retryIntervalMS,
 		ModelSelectionEnabled:          DefaultModelSelectionEnabled,
@@ -253,6 +257,10 @@ func resolveFileSettings(fileCfg storage.FileConfig, fallback Snapshot) (fileSet
 	if err != nil {
 		return fileSettings{}, err
 	}
+	externalCodexPermissionMode, err := resolveExternalCodexPermissionMode(fileCfg, fallback)
+	if err != nil {
+		return fileSettings{}, err
+	}
 	return fileSettings{
 		WebSearch: fileWebSearchSettings(fileCfg, webSearchSettings{
 			TavilyURL:    fallback.WebSearchTavilyURL,
@@ -268,6 +276,7 @@ func resolveFileSettings(fileCfg storage.FileConfig, fallback Snapshot) (fileSet
 		RelayDefaultStopPolicy:         relayDefaults.stopPolicy,
 		RelayDefaultMaxRounds:          relayDefaults.maxRounds,
 		RelayDefaultExecutionTimeoutMS: relayDefaults.executionTimeoutMS,
+		ExternalCodexPermissionMode:    externalCodexPermissionMode,
 		LLMCompletionRetryCount:        retryCount,
 		LLMCompletionRetryIntervalMS:   retryIntervalMS,
 		ModelSelectionEnabled:          resolveModelSelectionEnabled(fileCfg, fallback),

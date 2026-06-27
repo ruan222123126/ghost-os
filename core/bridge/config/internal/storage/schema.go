@@ -86,6 +86,7 @@ type FileConfig struct {
 	RelayDefaultStopPolicy         *string                       `toml:"relay_default_stop_policy,omitempty"`
 	RelayDefaultMaxRounds          *int                          `toml:"relay_default_max_rounds,omitempty"`
 	RelayDefaultExecutionTimeoutMS *int                          `toml:"relay_default_execution_timeout_ms,omitempty"`
+	ExternalCodexPermissionMode    *string                       `toml:"external_codex_permission_mode,omitempty"`
 	MaxTurns                       *int                          `toml:"max_turns,omitempty"`
 	WorkerMaxConcurrency           *int                          `toml:"worker_max_concurrency,omitempty"`
 	WorkerMaxFiles                 *int                          `toml:"worker_max_files,omitempty"`

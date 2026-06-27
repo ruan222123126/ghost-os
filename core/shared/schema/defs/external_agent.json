@@ -1,0 +1,161 @@
+{
+  "$defs": {
+    "externalAgentRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "permission_mode": {
+          "type": "string",
+          "enum": [
+            "read-only",
+            "default",
+            "safe-yolo",
+            "yolo"
+          ]
+        },
+        "model": {
+          "type": "string"
+        },
+        "effort": {
+          "type": "string"
+        },
+        "project_root": {
+          "type": "string"
+        }
+      },
+      "x-codegen": {
+        "order": 58,
+        "go": { "name": "externalAgentRequest" },
+        "ts": { "name": "ExternalAgentRequest" },
+        "rust": { "name": "ExternalAgentRequest" }
+      }
+    },
+    "externalAgentStopParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "session_id"
+      ],
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "x-codegen": {
+        "order": 59,
+        "go": { "name": "externalAgentStopParams" },
+        "ts": { "name": "ExternalAgentStopParams" },
+        "rust": { "name": "ExternalAgentStopParams" }
+      }
+    },
+    "externalAgentApprovalParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "session_id",
+        "approval_id",
+        "decision"
+      ],
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "approval_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "decision": {
+          "type": "string",
+          "enum": [
+            "approved",
+            "approved_for_session",
+            "denied",
+            "abort"
+          ]
+        }
+      },
+      "x-codegen": {
+        "order": 60,
+        "go": { "name": "externalAgentApprovalParams" },
+        "ts": { "name": "ExternalAgentApprovalParams" },
+        "rust": { "name": "ExternalAgentApprovalParams" }
+      }
+    },
+    "externalAgentResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "thread_id": {
+          "type": "string"
+        },
+        "turn_id": {
+          "type": "string"
+        },
+        "permission_mode": {
+          "type": "string"
+        }
+      },
+      "x-codegen": {
+        "order": 61,
+        "go": { "name": "externalAgentResponse" },
+        "ts": { "name": "ExternalAgentResponse" },
+        "rust": { "name": "ExternalAgentResponse" }
+      }
+    },
+    "externalAgentApprovalResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "session_id",
+        "approval_id",
+        "decision",
+        "accepted"
+      ],
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "approval_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "decision": {
+          "type": "string"
+        },
+        "accepted": {
+          "type": "boolean"
+        }
+      },
+      "x-codegen": {
+        "order": 62,
+        "go": { "name": "externalAgentApprovalResponse" },
+        "ts": { "name": "ExternalAgentApprovalResponse" },
+        "rust": { "name": "ExternalAgentApprovalResponse" }
+      }
+    }
+  }
+}

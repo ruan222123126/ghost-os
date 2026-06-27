@@ -9,6 +9,7 @@ import (
 	agentadapter "ghost-os/bridge/orchestration/internal/adapters/agent"
 	"ghost-os/bridge/orchestration/internal/app/agentturn"
 	"ghost-os/bridge/orchestration/internal/app/agentturn/turnstate"
+	"ghost-os/bridge/orchestration/internal/contracts/bus"
 	internaltrace "ghost-os/bridge/orchestration/internal/trace"
 	bridgeruntime "ghost-os/bridge/runtime"
 	"ghost-os/bridge/session"
@@ -62,6 +63,34 @@ func applyRequestRuntimeOptionsToStore(
 		return store
 	}
 	return bridgeconfig.WithProjectRootOverride(store, options.ProjectRoot)
+}
+
+func (s *bridgeService) executeExternalAgentStopAction(ctx context.Context, params externalAgentStopParams, traceID string) (ServiceResult, error) {
+	manager := s.externalAgentManager()
+	if manager == nil {
+		return ServiceResult{}, bus.WrapError(ServiceErrorInternal, errors.New("external agent manager is not configured"))
+	}
+	response, err := manager.Stop(ctx, params)
+	if err != nil {
+		logAction(traceID, BusActionExternalAgentStop, "error", err)
+		return ServiceResult{}, bus.WrapError(mapExternalAgentError(err), err)
+	}
+	logAction(traceID, BusActionExternalAgentStop, "success", nil)
+	return bus.ResultSuccess(response), nil
+}
+
+func (s *bridgeService) executeExternalAgentApproveAction(_ context.Context, params externalAgentApprovalParams, traceID string) (ServiceResult, error) {
+	manager := s.externalAgentManager()
+	if manager == nil {
+		return ServiceResult{}, bus.WrapError(ServiceErrorInternal, errors.New("external agent manager is not configured"))
+	}
+	response, err := manager.Approve(params)
+	if err != nil {
+		logAction(traceID, BusActionExternalAgentApprove, "error", err)
+		return ServiceResult{}, bus.WrapError(mapExternalAgentError(err), err)
+	}
+	logAction(traceID, BusActionExternalAgentApprove, "success", nil)
+	return bus.ResultSuccess(response), nil
 }
 
 type sessionTurnSetupError = agentturn.SessionSetupError

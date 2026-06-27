@@ -5,6 +5,10 @@
       "enum": [
         "AGENT_SEND",
         "AGENT_STOP",
+        "EXTERNAL_AGENT_START",
+        "EXTERNAL_AGENT_SEND",
+        "EXTERNAL_AGENT_STOP",
+        "EXTERNAL_AGENT_APPROVE",
         "HUMAN_RESPONSE",
         "SESSIONS_LIST",
         "SESSIONS_SEARCH",

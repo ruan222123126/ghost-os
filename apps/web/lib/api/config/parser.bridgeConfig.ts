@@ -11,6 +11,7 @@ import type { BridgeConfig } from '@/lib/types';
 const PROVIDER_TYPES = ['openai', 'anthropic', 'custom', 'codex'] as const;
 const RELAY_STOP_POLICIES = ['ai_decides', 'max_rounds'] as const;
 const SESSION_TITLE_MODES = ['session_id', 'first_message', 'ai_generated'] as const;
+const EXTERNAL_CODEX_PERMISSION_MODES = ['read-only', 'default', 'safe-yolo', 'yolo'] as const;
 const BRIDGE_CONFIG_KEYS = [
   'provider',
   'provider_type',
@@ -23,6 +24,7 @@ const BRIDGE_CONFIG_KEYS = [
   'relay_default_stop_policy',
   'relay_default_max_rounds',
   'relay_default_execution_timeout_ms',
+  'external_codex_permission_mode',
   'llm_completion_retry_count',
   'llm_completion_retry_interval_ms',
   'api_key_set',
@@ -74,6 +76,7 @@ function parseBridgeExecutionFields(record: BridgeConfigRecord): Pick<
   | 'relay_default_stop_policy'
   | 'relay_default_max_rounds'
   | 'relay_default_execution_timeout_ms'
+  | 'external_codex_permission_mode'
   | 'llm_completion_retry_count'
   | 'llm_completion_retry_interval_ms'
 > {
@@ -95,6 +98,11 @@ function parseBridgeExecutionFields(record: BridgeConfigRecord): Pick<
     relay_default_execution_timeout_ms: expectNumber(
       record.relay_default_execution_timeout_ms,
       'bridge config.relay_default_execution_timeout_ms',
+    ),
+    external_codex_permission_mode: expectStringEnum(
+      record.external_codex_permission_mode,
+      EXTERNAL_CODEX_PERMISSION_MODES,
+      'bridge config.external_codex_permission_mode',
     ),
     llm_completion_retry_count: expectNumber(
       record.llm_completion_retry_count,

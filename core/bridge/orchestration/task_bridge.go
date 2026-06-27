@@ -8,10 +8,14 @@ import (
 	runtimeadapter "ghost-os/bridge/orchestration/internal/adapters/runtime"
 	"ghost-os/bridge/orchestration/internal/adapters/toolregistry"
 	apprelay "ghost-os/bridge/orchestration/internal/app/agentturn/relay"
+	appexternal "ghost-os/bridge/orchestration/internal/app/externalagent"
 	apptasks "ghost-os/bridge/orchestration/internal/app/tasks"
 	"ghost-os/bridge/orchestration/internal/contracts/bus"
 	"ghost-os/bridge/orchestration/internal/dispatch"
 	workflowdomain "ghost-os/bridge/orchestration/internal/domain/workflow"
+	internaltrace "ghost-os/bridge/orchestration/internal/trace"
+	"ghost-os/bridge/session"
+	"ghost-os/bridge/streaming"
 	"ghost-os/bridge/taskdefs"
 	bridgeTasks "ghost-os/bridge/tasks"
 )
@@ -206,6 +210,63 @@ func cloneScheduledTask(task ScheduledTask) ScheduledTask {
 
 func cloneTaskRuntimeOverrides(input *TaskRuntimeOverrides) *TaskRuntimeOverrides {
 	return taskdefs.CloneTaskRuntimeOverrides(input)
+}
+
+func (s *bridgeService) externalAgentManager() *appexternal.Manager {
+	if s == nil {
+		return nil
+	}
+	if s.externalAgents == nil {
+		s.externalAgents = appexternal.NewManager(s.configStore, s.sessionStore)
+	}
+	return s.externalAgents
+}
+
+func (s *bridgeService) executeExternalAgentStartAction(ctx context.Context, params externalAgentRequest, traceID string) (ServiceResult, error) {
+	return s.executeExternalAgentStreamless(ctx, params, traceID, true)
+}
+
+func (s *bridgeService) executeExternalAgentSendAction(ctx context.Context, params externalAgentRequest, traceID string) (ServiceResult, error) {
+	return s.executeExternalAgentStreamless(ctx, params, traceID, false)
+}
+
+func (s *bridgeService) executeExternalAgentStreamless(ctx context.Context, params externalAgentRequest, traceID string, forceStart bool) (ServiceResult, error) {
+	manager := s.externalAgentManager()
+	if manager == nil {
+		return ServiceResult{}, bus.WrapError(ServiceErrorInternal, errors.New("external agent manager is not configured"))
+	}
+	action := BusActionExternalAgentSend
+	if forceStart {
+		action = BusActionExternalAgentStart
+	}
+	logAction(traceID, action, "running", nil)
+	sink := internaltrace.NewSessionStreamBroadcastSink(streaming.NopSink{}, s.sessionPushHub())
+	message, sessionID, err := manager.ExecuteStream(ctx, params, traceID, sink, forceStart)
+	if err != nil {
+		logAction(traceID, action, "error", err)
+		return ServiceResult{}, bus.WrapError(mapExternalAgentError(err), err)
+	}
+	logAction(traceID, action, "success", nil)
+	return bus.ResultSuccess(externalAgentResponse{
+		Status:    appexternal.StatusIdle,
+		Provider:  appexternal.ProviderCodex,
+		SessionID: sessionID,
+		ThreadID:  externalThreadID(s.sessionStore, sessionID),
+		TurnID:    "",
+	}), validateExternalStreamlessMessage(message)
+}
+
+func validateExternalStreamlessMessage(_ string) error { return nil }
+
+func externalThreadID(store *session.Store, sessionID string) string {
+	if store == nil || sessionID == "" {
+		return ""
+	}
+	sess, err := store.Load(sessionID)
+	if err != nil || sess.ExternalRuntime == nil {
+		return ""
+	}
+	return sess.ExternalRuntime.ThreadID
 }
 
 // Implementation moved to task_executor_adapter.go.

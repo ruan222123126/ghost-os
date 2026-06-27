@@ -3,6 +3,10 @@ package bus
 const (
 	ActionAgentSend            = "AGENT_SEND"
 	ActionAgentStop            = "AGENT_STOP"
+	ActionExternalAgentStart   = "EXTERNAL_AGENT_START"
+	ActionExternalAgentSend    = "EXTERNAL_AGENT_SEND"
+	ActionExternalAgentStop    = "EXTERNAL_AGENT_STOP"
+	ActionExternalAgentApprove = "EXTERNAL_AGENT_APPROVE"
 	ActionHumanResponse        = "HUMAN_RESPONSE"
 	ActionSessionsList         = "SESSIONS_LIST"
 	ActionSessionsSearch       = "SESSIONS_SEARCH"

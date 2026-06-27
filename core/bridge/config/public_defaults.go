@@ -17,6 +17,7 @@ const (
 	defaultRelayStopPolicy              = configruntime.DefaultRelayStopPolicy
 	defaultRelayMaxRounds               = configruntime.DefaultRelayMaxRounds
 	defaultRelayExecutionTimeoutMS      = configruntime.DefaultRelayExecutionTimeoutMS
+	defaultExternalCodexPermissionMode  = configruntime.DefaultExternalCodexPermissionMode
 	defaultMaxTurns                     = configruntime.DefaultMaxTurns
 	defaultLLMCompletionRetryCount      = configruntime.DefaultLLMCompletionRetryCount
 	defaultLLMCompletionRetryIntervalMS = configruntime.DefaultLLMCompletionRetryIntervalMS
@@ -53,6 +54,7 @@ const (
 	DefaultRelayStopPolicy              = defaultRelayStopPolicy
 	DefaultRelayMaxRounds               = defaultRelayMaxRounds
 	DefaultRelayExecutionTimeoutMS      = defaultRelayExecutionTimeoutMS
+	DefaultExternalCodexPermissionMode  = defaultExternalCodexPermissionMode
 	DefaultMaxTurns                     = defaultMaxTurns
 	DefaultLLMCompletionRetryCount      = defaultLLMCompletionRetryCount
 	DefaultLLMCompletionRetryIntervalMS = defaultLLMCompletionRetryIntervalMS
@@ -76,6 +78,13 @@ const (
 const (
 	RelayStopPolicyAIDecides = configruntime.RelayStopPolicyAIDecides
 	RelayStopPolicyMaxRounds = configruntime.RelayStopPolicyMaxRounds
+)
+
+const (
+	ExternalCodexPermissionReadOnly = configruntime.ExternalCodexPermissionReadOnly
+	ExternalCodexPermissionDefault  = configruntime.ExternalCodexPermissionDefault
+	ExternalCodexPermissionSafeYolo = configruntime.ExternalCodexPermissionSafeYolo
+	ExternalCodexPermissionYolo     = configruntime.ExternalCodexPermissionYolo
 )
 
 const (

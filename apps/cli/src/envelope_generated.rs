@@ -101,11 +101,64 @@ pub struct AgentStopRequest {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct ExternalAgentRequest {
+    #[serde(default)]
+    pub provider: Option<String>,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub permission_mode: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub effort: Option<String>,
+    #[serde(default)]
+    pub project_root: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct ExternalAgentStopParams {
+    pub session_id: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct AgentStopResponsePayload {
     pub status: String,
     pub message: String,
     #[serde(default)]
     pub session_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct ExternalAgentApprovalParams {
+    pub session_id: String,
+    pub approval_id: String,
+    pub decision: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct ExternalAgentResponse {
+    pub status: String,
+    #[serde(default)]
+    pub provider: Option<String>,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub thread_id: Option<String>,
+    #[serde(default)]
+    pub turn_id: Option<String>,
+    #[serde(default)]
+    pub permission_mode: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct ExternalAgentApprovalResponse {
+    pub session_id: String,
+    pub approval_id: String,
+    pub decision: String,
+    pub accepted: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -495,6 +548,7 @@ pub struct BridgeConfig {
     pub relay_default_stop_policy: String,
     pub relay_default_max_rounds: i64,
     pub relay_default_execution_timeout_ms: i64,
+    pub external_codex_permission_mode: String,
     pub llm_completion_retry_count: i64,
     pub llm_completion_retry_interval_ms: i64,
     pub api_key_set: bool,
@@ -544,6 +598,8 @@ pub struct ConfigUpdate {
     pub relay_default_max_rounds: Option<i64>,
     #[serde(default)]
     pub relay_default_execution_timeout_ms: Option<i64>,
+    #[serde(default)]
+    pub external_codex_permission_mode: Option<String>,
     #[serde(default)]
     pub llm_completion_retry_count: Option<i64>,
     #[serde(default)]

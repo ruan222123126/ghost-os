@@ -158,5 +158,6 @@ type Config struct {
 	RelayDefaultStopPolicy         string
 	RelayDefaultMaxRounds          int
 	RelayDefaultExecutionTimeoutMS int
+	ExternalCodexPermissionMode    string
 	MaxTurns                       int
 }

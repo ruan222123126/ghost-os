@@ -108,6 +108,25 @@ func TestOrchestrationMemberRuntimeOverridesApplyToAgentRuntime(t *testing.T) {
 	assertMemberRuntimeRun(t, run, factory, completer, preset.ID)
 }
 
+func TestExternalAgentActionsAreRegisteredInDefaultDispatch(t *testing.T) {
+	_, service, _ := newTestHandlerWithService(t, nil, nil)
+	registered := map[string]bool{}
+	for _, action := range service.registeredActionNames() {
+		registered[action] = true
+	}
+
+	for _, action := range []string{
+		BusActionExternalAgentStart,
+		BusActionExternalAgentSend,
+		BusActionExternalAgentStop,
+		BusActionExternalAgentApprove,
+	} {
+		if !registered[action] {
+			t.Fatalf("expected action %s to be registered; got %v", action, service.registeredActionNames())
+		}
+	}
+}
+
 func assertMemberRuntimeRun(
 	t *testing.T,
 	run taskRunPayload,

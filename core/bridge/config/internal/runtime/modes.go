@@ -18,6 +18,13 @@ const (
 	RelayStopPolicyMaxRounds = "max_rounds"
 )
 
+const (
+	ExternalCodexPermissionReadOnly = "read-only"
+	ExternalCodexPermissionDefault  = "default"
+	ExternalCodexPermissionSafeYolo = "safe-yolo"
+	ExternalCodexPermissionYolo     = "yolo"
+)
+
 type relayDefaultSettings struct {
 	stopPolicy         string
 	maxRounds          int
@@ -44,6 +51,29 @@ func resolveSessionTitleMode(fileCfg storage.FileConfig, fallback Snapshot) (str
 		return NormalizeSessionTitleMode(fallback.SessionTitleMode)
 	}
 	return NormalizeSessionTitleMode(*fileCfg.SessionTitleMode)
+}
+
+func NormalizeExternalCodexPermissionMode(raw string) (string, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return DefaultExternalCodexPermissionMode, nil
+	}
+	switch value {
+	case ExternalCodexPermissionReadOnly,
+		ExternalCodexPermissionDefault,
+		ExternalCodexPermissionSafeYolo,
+		ExternalCodexPermissionYolo:
+		return value, nil
+	default:
+		return "", fmt.Errorf("invalid external_codex_permission_mode: %q", value)
+	}
+}
+
+func resolveExternalCodexPermissionMode(fileCfg storage.FileConfig, fallback Snapshot) (string, error) {
+	if fileCfg.ExternalCodexPermissionMode == nil {
+		return NormalizeExternalCodexPermissionMode(fallback.ExternalCodexPermissionMode)
+	}
+	return NormalizeExternalCodexPermissionMode(*fileCfg.ExternalCodexPermissionMode)
 }
 
 func defaultRelaySettings() (relayDefaultSettings, error) {

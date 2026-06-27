@@ -138,6 +138,40 @@ func (t *transport) handleAgentStream(w http.ResponseWriter, r *http.Request) {
 	emitUnhandledStreamError(r.Context(), sink, traceID, firstNonEmpty(sessionID, req.SessionID), err)
 }
 
+func (t *transport) handleExternalAgentStream(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodPost) {
+		return
+	}
+
+	var req bridgeorchestration.ExternalAgentRequest
+	if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &req) {
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "streaming not supported", "")
+		return
+	}
+
+	traceID := resolveTraceID("", r)
+	prepared, result, err := t.usecases.agent.PrepareExternalStream(req, traceID, true)
+	if err != nil {
+		respondServiceContractActionResult(w, traceID, bridgeorchestration.BusActionExternalAgentStart, result, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.Header().Set("X-Trace-ID", traceID)
+
+	sink := newObservedSSEStreamSink(newSSEEventSink(w, flusher, traceID))
+	_, sessionID, err := prepared.Run(r.Context(), sink)
+	emitUnhandledStreamError(r.Context(), sink, traceID, firstNonEmpty(sessionID, req.SessionID), err)
+}
+
 // dispatchAction 统一调用 service 并按 action 语义输出响应 envelope。
 func (t *transport) dispatchAction(w http.ResponseWriter, r *http.Request, action string, params json.RawMessage, traceID string) {
 	result, err := t.usecases.bus.Dispatch(r.Context(), action, params, traceID)

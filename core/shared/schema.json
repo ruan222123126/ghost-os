@@ -66,6 +66,21 @@
         "agentStopResponsePayload": {
             "$ref": "./schema/defs/agent_human.json#/$defs/agentStopResponsePayload"
         },
+        "externalAgentRequest": {
+            "$ref": "./schema/defs/external_agent.json#/$defs/externalAgentRequest"
+        },
+        "externalAgentStopParams": {
+            "$ref": "./schema/defs/external_agent.json#/$defs/externalAgentStopParams"
+        },
+        "externalAgentApprovalParams": {
+            "$ref": "./schema/defs/external_agent.json#/$defs/externalAgentApprovalParams"
+        },
+        "externalAgentResponse": {
+            "$ref": "./schema/defs/external_agent.json#/$defs/externalAgentResponse"
+        },
+        "externalAgentApprovalResponse": {
+            "$ref": "./schema/defs/external_agent.json#/$defs/externalAgentApprovalResponse"
+        },
         "humanResponseRequest": {
             "$ref": "./schema/defs/agent_human.json#/$defs/humanResponseRequest"
         },
