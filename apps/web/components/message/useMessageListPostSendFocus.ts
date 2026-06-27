@@ -183,6 +183,13 @@ function continuePostSendFocus(options: PostSendStateMachineOptions) {
   if (!container || state.mode === 'idle') {
     return;
   }
+  if (!options.autoFollowRef.current) {
+    releasePostSendFocus(options, {
+      nextToken: options.token,
+      shouldScrollToBottom: false,
+    });
+    return;
+  }
 
   const decision = resolvePostSendOverflowDecision({
     anchorStartPx: state.anchorStartPx,

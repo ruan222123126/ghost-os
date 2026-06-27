@@ -11,6 +11,17 @@ import {
 import { useMessageListPostSendFocus } from './useMessageListPostSendFocus';
 
 const LOAD_OLDER_TRIGGER_ROWS = 5;
+const MANUAL_SCROLL_INTENT_CLEAR_DELAY_MS = 500;
+const MANUAL_SCROLL_KEYS = new Set([
+  'ArrowDown',
+  'ArrowUp',
+  'End',
+  'Home',
+  'PageDown',
+  'PageUp',
+  ' ',
+  'Spacebar',
+]);
 
 interface PrependAnchor {
   firstVisibleCommittedMessageId: string | null;
@@ -163,6 +174,8 @@ function useAutoFollowTracking(
   postSendFollowTrackingRef: MutableRefObject<PostSendFollowTrackingState>,
   setPostSendFollowTracking: (value: PostSendFollowTrackingState) => void,
 ) {
+  const manualScrollIntentRef = useRef(false);
+  const manualScrollIntentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncAutoFollow = useCallback(() => {
     const container = scrollElementRef.current;
     if (!container) {
@@ -170,7 +183,9 @@ function useAutoFollowTracking(
     }
 
     const tracking = postSendFollowTrackingRef.current;
-    const nextAutoFollow = resolveMessageListAutoFollow(container, tracking);
+    const nextAutoFollow = resolveMessageListAutoFollow(container, tracking, {
+      manualScrollIntent: manualScrollIntentRef.current,
+    });
     autoFollowRef.current = nextAutoFollow;
     if (shouldClearPostSendProgrammaticScrollTarget(container, tracking)) {
       setPostSendFollowTracking({
@@ -204,6 +219,33 @@ function useAutoFollowTracking(
     });
   }, [postSendFollowTrackingRef, setPostSendFollowTracking]);
 
+  const clearManualScrollIntentTimer = useCallback(() => {
+    if (manualScrollIntentTimerRef.current === null) {
+      return;
+    }
+
+    clearTimeout(manualScrollIntentTimerRef.current);
+    manualScrollIntentTimerRef.current = null;
+  }, []);
+
+  const markManualScrollIntent = useCallback(() => {
+    manualScrollIntentRef.current = true;
+    clearProgrammaticScrollTarget();
+    clearManualScrollIntentTimer();
+    manualScrollIntentTimerRef.current = setTimeout(() => {
+      manualScrollIntentRef.current = false;
+      manualScrollIntentTimerRef.current = null;
+    }, MANUAL_SCROLL_INTENT_CLEAR_DELAY_MS);
+  }, [clearManualScrollIntentTimer, clearProgrammaticScrollTarget]);
+
+  const markKeyboardScrollIntent = useCallback((event: KeyboardEvent) => {
+    if (!MANUAL_SCROLL_KEYS.has(event.key)) {
+      return;
+    }
+
+    markManualScrollIntent();
+  }, [markManualScrollIntent]);
+
   useEffect(() => {
     const container = scrollElementRef.current;
     if (!container) {
@@ -212,14 +254,25 @@ function useAutoFollowTracking(
 
     syncAutoFollow();
     container.addEventListener('scroll', syncAutoFollow, { passive: true });
-    container.addEventListener('touchstart', clearProgrammaticScrollTarget, { passive: true });
-    container.addEventListener('wheel', clearProgrammaticScrollTarget, { passive: true });
+    container.addEventListener('keydown', markKeyboardScrollIntent);
+    container.addEventListener('touchmove', markManualScrollIntent, { passive: true });
+    container.addEventListener('touchstart', markManualScrollIntent, { passive: true });
+    container.addEventListener('wheel', markManualScrollIntent, { passive: true });
     return () => {
       container.removeEventListener('scroll', syncAutoFollow);
-      container.removeEventListener('touchstart', clearProgrammaticScrollTarget);
-      container.removeEventListener('wheel', clearProgrammaticScrollTarget);
+      container.removeEventListener('keydown', markKeyboardScrollIntent);
+      container.removeEventListener('touchmove', markManualScrollIntent);
+      container.removeEventListener('touchstart', markManualScrollIntent);
+      container.removeEventListener('wheel', markManualScrollIntent);
+      clearManualScrollIntentTimer();
     };
-  }, [clearProgrammaticScrollTarget, scrollElementRef, syncAutoFollow]);
+  }, [
+    clearManualScrollIntentTimer,
+    markKeyboardScrollIntent,
+    markManualScrollIntent,
+    scrollElementRef,
+    syncAutoFollow,
+  ]);
 }
 
 function useOlderHistoryLoading(options: UseOlderHistoryLoadingOptions) {

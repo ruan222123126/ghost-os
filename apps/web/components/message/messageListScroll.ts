@@ -10,6 +10,10 @@ interface ScrollMetrics {
   scrollTop: number;
 }
 
+interface ResolveMessageListAutoFollowOptions {
+  manualScrollIntent?: boolean;
+}
+
 export interface PostSendFollowTrackingState {
   mode: 'idle' | 'anchoring' | 'waiting_overflow';
   controlledScrollTopPx: number | null;
@@ -58,12 +62,16 @@ export function isMessageListNearBottom(metrics: ScrollMetrics): boolean {
 export function resolveMessageListAutoFollow(
   metrics: ScrollMetrics,
   tracking: PostSendFollowTrackingState,
+  options: ResolveMessageListAutoFollowOptions = {},
 ): boolean {
   if (isPostSendFocusLocked(tracking)) {
     if (tracking.controlledScrollTopPx === null) {
       return false;
     }
     if (isPostSendProgrammaticScrollInProgress(metrics, tracking)) {
+      return true;
+    }
+    if (!options.manualScrollIntent) {
       return true;
     }
     return metrics.scrollTop + POST_SEND_SCROLL_LOCK_EPSILON_PX >= tracking.controlledScrollTopPx;

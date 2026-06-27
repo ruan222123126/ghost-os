@@ -125,6 +125,21 @@ describe('components/message/messageListScroll', () => {
     )).toBe(true);
   });
 
+  it('keeps the post-send lock when layout shifts scroll above the anchor', () => {
+    expect(resolveMessageListAutoFollow(
+      {
+        scrollHeight: 1200,
+        clientHeight: 400,
+        scrollTop: 500,
+      },
+      {
+        mode: 'waiting_overflow',
+        controlledScrollTopPx: 540,
+      },
+      { manualScrollIntent: false },
+    )).toBe(true);
+  });
+
   it('releases auto-follow once the user drags away from the post-send anchor lock', () => {
     expect(resolveMessageListAutoFollow(
       {
@@ -136,6 +151,7 @@ describe('components/message/messageListScroll', () => {
         mode: 'waiting_overflow',
         controlledScrollTopPx: 540,
       },
+      { manualScrollIntent: true },
     )).toBe(false);
   });
 
