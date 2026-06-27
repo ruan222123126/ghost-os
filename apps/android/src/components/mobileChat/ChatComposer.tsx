@@ -1,17 +1,20 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, FormEvent, KeyboardEvent, RefObject } from "react";
-import type { ChatSelectedSkill, SkillPayload } from "../../mobileTypes";
+import type { AgentRuntimeType, ChatSelectedSkill, SkillPayload } from "../../mobileTypes";
 import { COMPOSER_MENU_OPTIONS } from "./data";
 import { UiIcon } from "./icons";
 import "./ChatComposer.css";
 
 interface ChatComposerProps {
+  agentRuntime: AgentRuntimeType;
+  canEnableCodexMode?: boolean;
   value: string;
   canStop?: boolean;
   disabled: boolean;
   loading: boolean;
   selectedSkill?: ChatSelectedSkill | null;
   skills?: SkillPayload[];
+  onSwitchAgentRuntime?: (runtime: AgentRuntimeType) => void;
   onClearSelectedSkill?: () => void;
   onRefreshSkills?: () => Promise<boolean> | Promise<void> | boolean | void;
   onSelectSkill?: (skill: SkillPayload) => void;
@@ -21,6 +24,7 @@ interface ChatComposerProps {
 }
 
 const COMPOSER_SKILL_EMPTY_LABEL = "暂无";
+const COMPOSER_CODEX_DISABLED_LABEL = "连接电脑后可用";
 const COMPOSER_TEXTAREA_COLLAPSED_HEIGHT_PX = 52;
 const COMPOSER_TEXTAREA_MAX_HEIGHT_PX = 200;
 const TEXTAREA_SCROLL_HEIGHT_EPSILON_PX = 1;
@@ -29,7 +33,7 @@ type ComposerDockStyle = CSSProperties & {
   "--composer-keyboard-inset": string;
 };
 
-type ComposerMenuView = "attachment" | "skills" | null;
+type ComposerMenuView = "attachment" | "features" | "skills" | null;
 
 export function ChatComposer(props: ChatComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -45,7 +49,15 @@ export function ChatComposer(props: ChatComposerProps) {
   const isMultiLine = props.value.includes("\n") || wrapsPastSingleLine;
   const keyboardInset = useKeyboardInset(focused);
   const attachmentMenuOpen = menuView === "attachment";
+  const featureMenuOpen = menuView === "features";
   const skillMenuOpen = menuView === "skills";
+  const codexModeEnabled = props.agentRuntime === "codex";
+  const codexModeToggleEnabled = Boolean(props.onSwitchAgentRuntime) && (codexModeEnabled || props.canEnableCodexMode === true);
+  const codexModeDescription = codexModeEnabled
+    ? "已开启，当前发送到 Codex"
+    : codexModeToggleEnabled
+    ? "已关闭，点击后切换到 Codex"
+    : COMPOSER_CODEX_DISABLED_LABEL;
   const enabledSkills = sortEnabledSkills(props.skills ?? []);
   const dockStyle: ComposerDockStyle = {
     "--composer-keyboard-inset": `${keyboardInset}px`,
@@ -77,23 +89,44 @@ export function ChatComposer(props: ChatComposerProps) {
     props.onClearSelectedSkill();
   }
 
-  function handleMenuOption(label: string, unavailable: boolean): void {
-    if (unavailable) {
+  function handleMenuOption(option: (typeof COMPOSER_MENU_OPTIONS)[number]): void {
+    if (option.unavailable) {
       return;
     }
 
-    if (label !== "技能") {
+    if (option.id === "skills") {
+      setMenuView("skills");
+      void props.onRefreshSkills?.();
+      textareaRef.current?.focus();
+      return;
+    }
+
+    if (option.id === "features") {
+      setMenuView("features");
+    } else {
       setMenuView(null);
-      return;
     }
 
-    setMenuView("skills");
-    void props.onRefreshSkills?.();
     textareaRef.current?.focus();
   }
 
   function handleSelectSkill(skill: SkillPayload): void {
     props.onSelectSkill?.(skill);
+    setMenuView(null);
+    textareaRef.current?.focus();
+  }
+
+  function handleToggleCodexMode(): void {
+    if (!props.onSwitchAgentRuntime) {
+      return;
+    }
+
+    const nextRuntime: AgentRuntimeType = codexModeEnabled ? "ghost" : "codex";
+    if (nextRuntime === "codex" && props.canEnableCodexMode !== true) {
+      return;
+    }
+
+    props.onSwitchAgentRuntime(nextRuntime);
     setMenuView(null);
     textareaRef.current?.focus();
   }
@@ -110,7 +143,7 @@ export function ChatComposer(props: ChatComposerProps) {
               role="menuitem"
               disabled={option.unavailable}
               title={option.unavailable ? "暂未接入" : option.label}
-              onClick={() => handleMenuOption(option.label, option.unavailable)}
+              onClick={() => handleMenuOption(option)}
             >
               <span className="composer-menu-icon">
                 <UiIcon name={option.icon} />
@@ -118,6 +151,30 @@ export function ChatComposer(props: ChatComposerProps) {
               <span>{option.label}</span>
             </button>
           ))}
+        </div>
+      ) : null}
+
+      {featureMenuOpen ? (
+        <div className="composer-feature-menu" role="menu" aria-label="功能">
+          <div className="composer-skill-menu-head">
+            <span>功能</span>
+          </div>
+          <button
+            type="button"
+            className="composer-feature-item"
+            role="menuitemcheckbox"
+            aria-checked={codexModeEnabled}
+            disabled={!codexModeToggleEnabled}
+            onClick={handleToggleCodexMode}
+          >
+            <span className="composer-feature-item-copy">
+              <span className="composer-feature-item-name">Codex 模式</span>
+              <span className="composer-feature-item-desc">{codexModeDescription}</span>
+            </span>
+            <span className={`composer-feature-switch ${codexModeEnabled ? "is-active" : ""}`}>
+              {codexModeEnabled ? "开" : "关"}
+            </span>
+          </button>
         </div>
       ) : null}
 

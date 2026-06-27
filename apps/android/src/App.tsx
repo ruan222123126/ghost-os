@@ -373,6 +373,8 @@ function App() {
         {showScrollDown ? <ScrollDownButton onClick={() => scrollToBottom()} /> : null}
 
         <ChatComposer
+          agentRuntime={agentRuntime}
+          canEnableCodexMode={Boolean(config)}
           value={message}
           disabled={!canSend}
           canStop={(settings.remoteExecutionEnabled || agentRuntime === "codex") && mobileSessions.canStop}
@@ -382,6 +384,7 @@ function App() {
           onClearSelectedSkill={() => setSelectedSkill(null)}
           onRefreshSkills={supportsComposerSkills ? refreshSkills : undefined}
           onSelectSkill={supportsComposerSkills ? (skill) => setSelectedSkill({ id: skill.id, name: skill.name }) : undefined}
+          onSwitchAgentRuntime={setAgentRuntime}
           onSubmit={sendMessage}
           onStop={(settings.remoteExecutionEnabled || agentRuntime === "codex") ? async () => {
             await mobileSessions.stopCurrentRun();

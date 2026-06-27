@@ -237,7 +237,8 @@
   font-weight: 600;
 }
 
-.composer-skill-menu {
+.composer-skill-menu,
+.composer-feature-menu {
   position: absolute;
   bottom: calc(100% - 10px);
   left: max(16px, calc((100vw - var(--mobile-home-content-width)) / 2 + 16px));
@@ -323,6 +324,68 @@
   color: #6b7280;
   font-size: 0.86rem;
   line-height: 1.5;
+}
+
+.composer-feature-item {
+  width: 100%;
+  border-radius: 16px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #111827;
+  background: transparent;
+  text-align: left;
+  transition:
+    background 140ms ease,
+    opacity 140ms ease;
+}
+
+.composer-feature-item:hover,
+.composer-feature-item:focus-visible {
+  background: #f3f4f6;
+}
+
+.composer-feature-item:disabled {
+  opacity: 0.48;
+}
+
+.composer-feature-item-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.composer-feature-item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.92rem;
+  font-weight: 650;
+}
+
+.composer-feature-item-desc {
+  color: #6b7280;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.composer-feature-switch {
+  min-width: 38px;
+  border-radius: 999px;
+  padding: 6px 10px;
+  flex: 0 0 auto;
+  color: #6b7280;
+  background: #f3f4f6;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.composer-feature-switch.is-active {
+  color: #2046a8;
+  background: #e7efff;
 }
 
 .send-button {
@@ -420,7 +483,8 @@
 
   .composer-attachment-menu,
   .composer-menu-icon,
-  .composer-skill-menu {
+  .composer-skill-menu,
+  .composer-feature-menu {
     border-color: #303236;
     color: #e8eaed;
     background: #1e1f20;
@@ -450,18 +514,32 @@
 
   .composer-skill-refresh:hover,
   .composer-skill-refresh:focus-visible,
+  .composer-feature-item:hover,
+  .composer-feature-item:focus-visible,
   .composer-skill-item:hover,
   .composer-skill-item:focus-visible {
     color: #e8eaed;
     background: #282a2c;
   }
 
+  .composer-feature-item-name,
   .composer-skill-item-name {
     color: #e8eaed;
   }
 
+  .composer-feature-item-desc,
   .composer-skill-status {
     color: #a3a7ad;
+  }
+
+  .composer-feature-switch {
+    color: #c9d1d9;
+    background: #2b2d30;
+  }
+
+  .composer-feature-switch.is-active {
+    color: #dbe4ff;
+    background: #27304a;
   }
 
   .send-button {
