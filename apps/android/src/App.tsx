@@ -142,6 +142,7 @@ function App() {
     trailingSpacerPx,
   } = useChatFeedScroll({
     messages: mobileSessions.activeMessages,
+    postSendFocusRequest: mobileSessions.postSendFocusRequest,
     reply: mobileSessions.activeReply,
     statusTone: mobileSessions.activeStatus.tone,
   });

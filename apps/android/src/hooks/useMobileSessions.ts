@@ -111,6 +111,11 @@ interface PersistConversationInput {
   updatedAt?: string;
 }
 
+interface PostSendFocusRequest {
+  messageId: string;
+  token: number;
+}
+
 const HOME_IDLE_STATUS: StatusMessage = { tone: "idle", text: "首页" };
 const PERSIST_DISABLED_STATUS: StatusMessage = { tone: "idle", text: "未开启" };
 
@@ -122,9 +127,11 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
   const [sessionViews, setSessionViews] = useState<Record<string, MobileSessionView>>({});
   const [storedConversations, setStoredConversations] = useState<StoredMobileConversation[]>(() => initialStoredConversations());
   const [storageLoaded, setStorageLoaded] = useState(() => !hasTauriRuntime());
+  const [postSendFocusRequest, setPostSendFocusRequest] = useState<PostSendFocusRequest | null>(null);
   const [computerSessionPersistStatus, setComputerSessionPersistStatus] =
     useState<StatusMessage>(PERSIST_DISABLED_STATUS);
   const activeSessionIdRef = useRef<string | undefined>(undefined);
+  const postSendFocusTokenRef = useRef(0);
   const stoppingRunKeysRef = useRef<Set<string>>(new Set());
   const storedConversationsRef = useRef<StoredMobileConversation[]>(storedConversations);
   const syncRunIdRef = useRef(0);
@@ -264,6 +271,11 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     const traceId = createClientRunId("trace");
     const userMessage = createUserConversationMessage(trimmed, initialSessionId);
     const optimisticMessages = [...activeMessages, userMessage];
+    postSendFocusTokenRef.current += 1;
+    setPostSendFocusRequest({
+      messageId: userMessage.id,
+      token: postSendFocusTokenRef.current,
+    });
 
     if (initialSessionId) {
       setSessionViews((current) =>
@@ -371,6 +383,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       return;
     }
 
+    setPostSendFocusRequest(null);
     const stored = storedConversations.find((conversation) => conversation.id === trimmedSessionId);
     const existing = sessionViews[trimmedSessionId];
     activeSessionIdRef.current = trimmedSessionId;
@@ -432,6 +445,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     setHomeMessages([]);
     setHomeReply(undefined);
     setHomeRun(createIdleRunState("新会话"));
+    setPostSendFocusRequest(null);
   }
 
   function clearCurrentConversation(): void {
@@ -440,6 +454,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     setHomeMessages([]);
     setHomeReply(undefined);
     setHomeRun(createIdleRunState("本地消息已清空"));
+    setPostSendFocusRequest(null);
   }
 
   function applyReply(sessionId: string, reply: AgentPayload): void {
@@ -761,6 +776,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     computerSessionPersistStatus,
     hasConversation: activeMessages.length > 0 || Boolean(activeReply),
     historyItems,
+    postSendFocusRequest,
     selectSession,
     sendMessage,
     startNewSession,

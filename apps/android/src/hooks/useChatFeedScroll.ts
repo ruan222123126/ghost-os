@@ -3,12 +3,17 @@ import type { MobileConversationMessage, StatusMessage } from "../mobileTypes";
 
 const SCROLL_DOWN_THRESHOLD_PX = 50;
 const SCROLL_ANCHOR_TOLERANCE_PX = 2;
-const LOCAL_USER_MESSAGE_ID_PATTERN = /^[^:]+:user:\d+$/;
 
 interface UseChatFeedScrollOptions {
   messages: MobileConversationMessage[];
+  postSendFocusRequest?: PostSendFocusRequest | null;
   reply: unknown;
   statusTone: StatusMessage["tone"];
+}
+
+interface PostSendFocusRequest {
+  messageId: string;
+  token: number;
 }
 
 interface PostSendLock {
@@ -21,7 +26,7 @@ interface PostSendLock {
 export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   const scrollRef = useRef<HTMLElement>(null);
   const userMessageRowsRef = useRef(new Map<string, HTMLDivElement>());
-  const previousMessagesRef = useRef<MobileConversationMessage[] | null>(null);
+  const handledPostSendTokenRef = useRef<number | null>(null);
   const postSendLockRef = useRef<PostSendLock | null>(null);
   const postSendLockJustStartedRef = useRef(false);
   const autoFollowRef = useRef(true);
@@ -47,17 +52,17 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   }, []);
 
   useLayoutEffect(() => {
-    const previousMessages = previousMessagesRef.current;
-    previousMessagesRef.current = options.messages;
-    if (!previousMessages || !isAppendedLocalUserMessage(previousMessages, options.messages)) {
+    const request = options.postSendFocusRequest;
+    if (!request || handledPostSendTokenRef.current === request.token) {
       return;
     }
-
-    const lastMessage = options.messages[options.messages.length - 1];
-    if (lastMessage) {
-      focusUserMessage(lastMessage.id, "smooth");
+    if (!hasUserMessage(options.messages, request.messageId)) {
+      return;
     }
-  }, [options.messages]);
+    if (focusUserMessage(request.messageId, "smooth")) {
+      handledPostSendTokenRef.current = request.token;
+    }
+  }, [options.messages, options.postSendFocusRequest]);
 
   useLayoutEffect(() => {
     if (postSendLockRef.current) {
@@ -147,11 +152,11 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     }
   }
 
-  function focusUserMessage(messageId: string, behavior: ScrollBehavior): void {
+  function focusUserMessage(messageId: string, behavior: ScrollBehavior): boolean {
     const anchorTop = measureUserMessageAnchorTop(messageId);
     const element = scrollRef.current;
     if (anchorTop === null || !element) {
-      return;
+      return false;
     }
 
     postSendLockRef.current = {
@@ -164,6 +169,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     setTrailingSpacerPx(requiredTrailingSpacerPx(element, anchorTop, trailingSpacerPxRef.current));
     setShowScrollDown(false);
     scheduleScroll(() => scrollToAnchor(anchorTop, behavior));
+    return true;
   }
 
   function syncPostSendLock(): void {
@@ -246,23 +252,8 @@ function shouldShowScrollDown(element: HTMLElement): boolean {
   return element.scrollHeight - element.scrollTop - element.clientHeight > SCROLL_DOWN_THRESHOLD_PX;
 }
 
-function isAppendedLocalUserMessage(
-  previousMessages: MobileConversationMessage[],
-  messages: MobileConversationMessage[],
-): boolean {
-  if (messages.length !== previousMessages.length + 1) {
-    return false;
-  }
-  for (const [index, message] of previousMessages.entries()) {
-    if (messages[index]?.id !== message.id) {
-      return false;
-    }
-  }
-  const lastMessage = messages[messages.length - 1];
-  return Boolean(
-    lastMessage?.role === "user"
-      && LOCAL_USER_MESSAGE_ID_PATTERN.test(lastMessage.id),
-  );
+function hasUserMessage(messages: MobileConversationMessage[], messageId: string): boolean {
+  return messages.some((message) => message.id === messageId && message.role === "user");
 }
 
 function requiredTrailingSpacerPx(element: HTMLElement, anchorTop: number, currentSpacerPx: number): number {

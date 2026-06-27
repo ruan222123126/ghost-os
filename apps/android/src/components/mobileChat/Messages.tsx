@@ -61,7 +61,7 @@ export function AssistantReply(props: AssistantReplyProps) {
   const thinkingActive = props.status.tone === "loading" && hasThinkingText;
   const replyFinal = props.status.tone !== "loading";
   const thinkingStartedAtMs = useThinkingStartedAtMs(thinkingActive);
-  const [thinkingPanelOpen, toggleThinkingPanel] = useThinkingPanelOpen(thinkingText, replyMessage);
+  const [thinkingPanelOpen, toggleThinkingPanel] = useThinkingPanelOpen(thinkingText, replyMessage, thinkingActive);
 
   if (!props.reply && props.status.tone !== "error") {
     return null;
@@ -271,10 +271,17 @@ function buildToolStatusLabel(tone: MobileToolTone, statusLabel: string): string
   }
 }
 
-function useThinkingPanelOpen(thinkingText: string, replyMessage: string): [boolean, () => void] {
-  const [open, setOpen] = useState(false);
-  const hadThinkingTextRef = useRef(false);
-  const hadReplyMessageRef = useRef(false);
+function useThinkingPanelOpen(
+  thinkingText: string,
+  replyMessage: string,
+  thinkingActive: boolean,
+): [boolean, () => void] {
+  const initialHasThinkingText = thinkingText.trim().length > 0;
+  const initialHasReplyMessage = replyMessage.trim().length > 0;
+  const [open, setOpen] = useState(thinkingActive && initialHasThinkingText && !initialHasReplyMessage);
+  const hadThinkingTextRef = useRef(initialHasThinkingText);
+  const hadReplyMessageRef = useRef(initialHasReplyMessage);
+  const wasThinkingActiveRef = useRef(thinkingActive);
 
   useEffect(() => {
     const hasThinkingText = thinkingText.trim().length > 0;
@@ -282,13 +289,20 @@ function useThinkingPanelOpen(thinkingText: string, replyMessage: string): [bool
 
     if (!hasThinkingText) {
       setOpen(false);
-    } else if (hasReplyMessage && !hadReplyMessageRef.current) {
+    } else if (thinkingActive && !hadThinkingTextRef.current) {
+      setOpen(true);
+    }
+    if (hasThinkingText && hasReplyMessage && !hadReplyMessageRef.current) {
+      setOpen(false);
+    }
+    if (hasThinkingText && !thinkingActive && wasThinkingActiveRef.current) {
       setOpen(false);
     }
 
     hadThinkingTextRef.current = hasThinkingText;
     hadReplyMessageRef.current = hasReplyMessage;
-  }, [replyMessage, thinkingText]);
+    wasThinkingActiveRef.current = thinkingActive;
+  }, [replyMessage, thinkingActive, thinkingText]);
 
   return [open, () => setOpen((current) => !current)];
 }

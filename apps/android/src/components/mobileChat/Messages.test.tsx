@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AssistantReply } from "./Messages";
 import type { AgentPayload, StatusMessage } from "../../mobileTypes";
 
@@ -19,6 +19,63 @@ vi.mock("./AssistantMarkdownContent", () => ({
 describe("AssistantReply", () => {
   beforeEach(() => {
     markdownMock.mockClear();
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("opens streaming thinking when thinking text first appears", () => {
+    render(
+      <AssistantReply
+        reply={agentReply({ thinking: "内部思考内容" })}
+        status={{ tone: "loading", text: "思考中" }}
+      />,
+    );
+
+    const toggle = screen.getByRole("button", { name: /正在思考/ });
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("内部思考内容")).toBeTruthy();
+  });
+
+  it("closes streaming thinking when answer text starts", () => {
+    const { rerender } = render(
+      <AssistantReply
+        reply={agentReply({ thinking: "内部思考内容" })}
+        status={{ tone: "loading", text: "思考中" }}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /正在思考/ }).getAttribute("aria-expanded")).toBe("true");
+
+    rerender(
+      <AssistantReply
+        reply={agentReply({ message: "完成", thinking: "内部思考内容" })}
+        status={{ tone: "loading", text: "生成中" }}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /正在思考/ }).getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText("内部思考内容")).toBeNull();
+  });
+
+  it("closes streaming thinking when thinking completes without answer text", () => {
+    const { rerender } = render(
+      <AssistantReply
+        reply={agentReply({ thinking: "内部思考内容" })}
+        status={{ tone: "loading", text: "思考中" }}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /正在思考/ }).getAttribute("aria-expanded")).toBe("true");
+
+    rerender(
+      <AssistantReply
+        reply={agentReply({ thinking: "内部思考内容" })}
+        status={successStatus}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "已思考" }).getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText("内部思考内容")).toBeNull();
   });
 
   it("keeps completed thinking collapsed until the user opens it", () => {

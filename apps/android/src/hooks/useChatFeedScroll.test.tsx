@@ -15,6 +15,11 @@ interface HookSnapshot {
   trailingSpacerPx: number;
 }
 
+interface PostSendFocusRequest {
+  messageId: string;
+  token: number;
+}
+
 const hookSnapshots: HookSnapshot[] = [];
 let rafCallbacks: FrameRequestCallback[] = [];
 
@@ -48,15 +53,17 @@ describe("useChatFeedScroll", () => {
     expect(latestSnapshot().trailingSpacerPx).toBe(0);
   });
 
-  it("focuses an appended local user message at its row top", () => {
+  it("focuses a requested post-send user message at its row top", () => {
     const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 300 });
+    const userMessage = message("pending:user:1710000000000", "user");
     const { rerender } = render(<ScrollHarness messages={[]} metrics={metrics} />);
 
     rerender(
       <ScrollHarness
-        messages={[message("pending:user:1710000000000", "user")]}
+        messages={[userMessage]}
         metrics={metrics}
-        rowTops={{ "pending:user:1710000000000": 120 }}
+        postSendFocusRequest={postSendRequest(userMessage.id)}
+        rowTops={{ [userMessage.id]: 120 }}
       />,
     );
     flushRaf();
@@ -65,7 +72,7 @@ describe("useChatFeedScroll", () => {
     expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 120, behavior: "smooth" });
   });
 
-  it("does not focus appended historical user ids", () => {
+  it("does not focus appended messages without a post-send request", () => {
     const metrics = feedMetrics();
     const { rerender } = render(<ScrollHarness messages={[]} metrics={metrics} />);
 
@@ -82,15 +89,65 @@ describe("useChatFeedScroll", () => {
     expect(latestSnapshot().trailingSpacerPx).toBe(0);
   });
 
-  it("calculates enough spacer to keep the user message at the viewport top", () => {
-    const metrics = feedMetrics({ clientHeight: 640, scrollHeight: 460 });
+  it("focuses requested user messages without depending on id shape", () => {
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 300 });
+    const userMessage = message("session-1:3:user", "user");
     const { rerender } = render(<ScrollHarness messages={[]} metrics={metrics} />);
 
     rerender(
       <ScrollHarness
-        messages={[message("session-1:user:1710000000000", "user")]}
+        messages={[userMessage]}
         metrics={metrics}
-        rowTops={{ "session-1:user:1710000000000": 180 }}
+        postSendFocusRequest={postSendRequest(userMessage.id)}
+        rowTops={{ [userMessage.id]: 120 }}
+      />,
+    );
+    flushRaf();
+
+    expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 120, behavior: "smooth" });
+  });
+
+  it("does not focus the same post-send token more than once", () => {
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 300 });
+    const userMessage = message("pending:user:1710000000000", "user");
+    const request = postSendRequest(userMessage.id);
+    const { rerender } = render(<ScrollHarness messages={[]} metrics={metrics} />);
+
+    rerender(
+      <ScrollHarness
+        messages={[userMessage]}
+        metrics={metrics}
+        postSendFocusRequest={request}
+        rowTops={{ [userMessage.id]: 120 }}
+      />,
+    );
+    flushRaf();
+    vi.mocked(feedElement().scrollTo).mockClear();
+
+    rerender(
+      <ScrollHarness
+        messages={[userMessage]}
+        metrics={metrics}
+        postSendFocusRequest={request}
+        rowTops={{ [userMessage.id]: 120 }}
+      />,
+    );
+    flushRaf();
+
+    expect(feedElement().scrollTo).not.toHaveBeenCalled();
+  });
+
+  it("calculates enough spacer to keep the user message at the viewport top", () => {
+    const metrics = feedMetrics({ clientHeight: 640, scrollHeight: 460 });
+    const userMessage = message("session-1:user:1710000000000", "user");
+    const { rerender } = render(<ScrollHarness messages={[]} metrics={metrics} />);
+
+    rerender(
+      <ScrollHarness
+        messages={[userMessage]}
+        metrics={metrics}
+        postSendFocusRequest={postSendRequest(userMessage.id)}
+        rowTops={{ [userMessage.id]: 180 }}
       />,
     );
     flushRaf();
@@ -107,6 +164,7 @@ describe("useChatFeedScroll", () => {
       <ScrollHarness
         messages={[localMessage]}
         metrics={metrics}
+        postSendFocusRequest={postSendRequest(localMessage.id)}
         rowTops={{ [localMessage.id]: 120 }}
       />,
     );
@@ -138,6 +196,7 @@ describe("useChatFeedScroll", () => {
       <ScrollHarness
         messages={[localMessage]}
         metrics={metrics}
+        postSendFocusRequest={postSendRequest(localMessage.id)}
         rowTops={{ [localMessage.id]: 120 }}
       />,
     );
@@ -166,12 +225,14 @@ describe("useChatFeedScroll", () => {
 function ScrollHarness(props: {
   messages: MobileConversationMessage[];
   metrics: FeedMetrics;
+  postSendFocusRequest?: PostSendFocusRequest | null;
   reply?: AgentPayload;
   rowTops?: Record<string, number>;
   statusTone?: StatusMessage["tone"];
 }) {
   const scroll = useChatFeedScroll({
     messages: props.messages,
+    postSendFocusRequest: props.postSendFocusRequest,
     reply: props.reply,
     statusTone: props.statusTone ?? "idle",
   });
@@ -277,6 +338,10 @@ function reply(text: string): AgentPayload {
     session_ended: false,
     session_id: "session-1",
   };
+}
+
+function postSendRequest(messageId: string, token = 1): PostSendFocusRequest {
+  return { messageId, token };
 }
 
 function feedElement(): HTMLElement & { scrollTo: ReturnType<typeof vi.fn> } {
