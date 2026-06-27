@@ -163,6 +163,54 @@ describe('lib/chat-store/reducer', () => {
     expect(view.streamingTools).toEqual([]);
   });
 
+  it('keeps assistant text and tool cards in streamed order when finalizing', () => {
+    let state = createInitialState();
+    state = chatStateReducer(state, {
+      type: 'apply_runtime_actions',
+      actions: [
+        { type: 'append_streaming_assistant_text', text: '先开始绘图。' },
+        {
+          type: 'upsert_streaming_tool',
+          tool: {
+            id: 'tool-draw',
+            content: 'Generated 1 image(s).',
+            toolCallId: 'call-draw',
+            toolName: 'screen_action',
+            toolStatus: 'success',
+          },
+        },
+        { type: 'append_streaming_assistant_text', text: '图片已经生成。' },
+        {
+          type: 'finalize_streaming_turn',
+          assistantMessageId: 'stream-assistant:trace-draw',
+          assistantText: '先开始绘图。图片已经生成。',
+        },
+      ],
+    });
+
+    expect(state.committedMessages).toEqual([
+      {
+        id: 'stream-segment:assistant:1',
+        kind: 'assistant',
+        content: '先开始绘图。',
+      },
+      {
+        id: 'tool-draw',
+        kind: 'tool',
+        content: 'Generated 1 image(s).',
+        toolCallId: 'call-draw',
+        toolName: 'screen_action',
+        toolStatus: 'success',
+        traceId: undefined,
+      },
+      {
+        id: 'stream-segment:assistant:2',
+        kind: 'assistant',
+        content: '图片已经生成。',
+      },
+    ]);
+  });
+
   it('preserves bash_exec tool input when a later update replaces the visible output', () => {
     let state = createInitialState();
     state = chatStateReducer(state, {
