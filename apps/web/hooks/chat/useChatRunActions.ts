@@ -3,7 +3,7 @@ import { stopAgent } from '@/lib/api/agent/api';
 import { createClientTraceId } from '@/lib/api/trace';
 import { draftImagesToChatImages, draftImagesToSessionImages } from '@/lib/chatImageDrafts';
 import { buildUserMessage } from '@/lib/chatMessages';
-import { isAbortError, toErrorMessage } from '@/lib/errors';
+import { isAbortError, isAgentRunCancellationMessage, toErrorMessage } from '@/lib/errors';
 import { buildAgentMessageWithSelectedSkill } from '@/lib/selectedSkillMessage';
 import type { ChatSendInput } from '@/lib/types';
 import type {
@@ -246,8 +246,7 @@ function shouldSuppressRunError(error: unknown, stopPending: boolean, streamAbor
     return false;
   }
 
-  return message === 'agent stream closed before terminal event'
-    || message === 'agent run cancelled';
+  return isAgentRunCancellationMessage(message);
 }
 
 function shouldMarkBackgroundCompleted(input: {

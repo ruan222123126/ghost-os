@@ -285,6 +285,18 @@ export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+export function isAgentRunCancellationMessage(message: string): boolean {
+  const normalized = message.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  return normalized === "agent run cancelled"
+    || normalized === "agent stream closed before terminal event"
+    || normalized.endsWith(": agent run cancelled")
+    || normalized === "context canceled"
+    || normalized.endsWith(": context canceled");
+}
+
 function createHistoryItem(
   id: string,
   input: {

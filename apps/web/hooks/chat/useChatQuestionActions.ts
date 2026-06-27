@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { createClientTraceId } from '@/lib/api/trace';
 import { buildUserMessage } from '@/lib/chatMessages';
-import { isAbortError, toErrorMessage } from '@/lib/errors';
+import { isAbortError, isAgentRunCancellationMessage, toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { PendingQuestionMessage } from '@/lib/types';
 import type { ChatStateControls, ChatStreamRunResult } from './types';
@@ -241,8 +241,7 @@ function shouldSuppressQuestionStreamError(error: unknown, stopPending: boolean,
     return false;
   }
 
-  return message === 'agent stream closed before terminal event'
-    || message === 'agent run cancelled';
+  return isAgentRunCancellationMessage(message);
 }
 
 function findPendingQuestion(

@@ -18,6 +18,7 @@ import {
   emptyStoredConversation,
   errorMessage,
   findStoredTitle,
+  isAgentRunCancellationMessage,
   mergeHistoryItems,
   normalizeConversationSessionIds,
   reconcileStoredConversationsWithBridge,
@@ -807,10 +808,7 @@ function isCancellationStatus(status: StatusMessage): boolean {
   if (status.tone !== "error") {
     return false;
   }
-  const normalized = status.text.trim().toLowerCase();
-  return normalized === "agent run cancelled"
-    || normalized === "context canceled"
-    || normalized.includes("cancelled");
+  return isAgentRunCancellationMessage(status.text);
 }
 
 function isStoredConversationCurrent(conversation: StoredMobileConversation, session: SessionMetadata): boolean {

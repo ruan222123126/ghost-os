@@ -233,7 +233,10 @@ describe("useMobileSessions", () => {
       options.onStatus({ tone: "loading", text: "运行中" });
       return new Promise<SendResult>((resolve) => {
         finishRun = () => {
-          options.onStatus({ tone: "error", text: "agent run cancelled" });
+          options.onStatus({
+            tone: "error",
+            text: "trace_id=agent-run-f35b5652-da4f-4f78-833c-a77154adba62 turn=7 complete_once: stream interrupted: context canceled",
+          });
           resolve({ ok: false });
         };
       });
