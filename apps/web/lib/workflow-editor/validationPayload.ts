@@ -15,6 +15,7 @@ const SUPPORTED_INPUT_TYPES = ['string', 'number', 'boolean', 'object', 'array']
 const NODE_PAYLOAD_FIELDS = ['start', 'tool', 'llm', 'agent', 'if', 'loop'] as const;
 
 type WorkflowPayloadField = (typeof NODE_PAYLOAD_FIELDS)[number];
+type SupportedInputType = (typeof SUPPORTED_INPUT_TYPES)[number];
 type WorkflowNodePayloadValidator = (node: WorkflowCanvasNodeDraft, errors: string[]) => void;
 type WorkflowStartInput = NonNullable<NonNullable<WorkflowCanvasNodeDraft['start']>['inputs']>[number];
 type WorkflowIfOperator = NonNullable<WorkflowCanvasNodeDraft['if']>['operator'];
@@ -37,6 +38,14 @@ const WORKFLOW_NODE_PAYLOAD_VALIDATORS: Partial<
   if: validateIfNodePayload,
   loop: validateLoopNodePayload,
   end: validateEndNodePayload,
+};
+
+const INPUT_DEFAULT_MATCHERS: Record<SupportedInputType, (value: unknown) => boolean> = {
+  string: (value) => typeof value === 'string',
+  number: (value) => typeof value === 'number' && Number.isFinite(value),
+  boolean: (value) => typeof value === 'boolean',
+  object: (value) => typeof value === 'object' && value !== null && !Array.isArray(value),
+  array: Array.isArray,
 };
 
 export function validateNodePayloads(
@@ -254,8 +263,8 @@ function validateStartInputType(
 
 function isSupportedInputType(
   inputType: string,
-): inputType is (typeof SUPPORTED_INPUT_TYPES)[number] {
-  return SUPPORTED_INPUT_TYPES.includes(inputType as (typeof SUPPORTED_INPUT_TYPES)[number]);
+): inputType is SupportedInputType {
+  return SUPPORTED_INPUT_TYPES.includes(inputType as SupportedInputType);
 }
 
 function hasDefaultValue(
@@ -265,18 +274,5 @@ function hasDefaultValue(
 }
 
 function inputDefaultMatchesType(inputType: string, value: unknown): boolean {
-  switch (inputType) {
-    case 'string':
-      return typeof value === 'string';
-    case 'number':
-      return typeof value === 'number' && Number.isFinite(value);
-    case 'boolean':
-      return typeof value === 'boolean';
-    case 'object':
-      return typeof value === 'object' && value !== null && !Array.isArray(value);
-    case 'array':
-      return Array.isArray(value);
-    default:
-      return false;
-  }
+  return isSupportedInputType(inputType) && INPUT_DEFAULT_MATCHERS[inputType](value);
 }
