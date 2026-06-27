@@ -2,8 +2,10 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useMobileSessions, mergeHistoryItems, reconcileStoredConversationsWithBridge } from "./useMobileSessions";
+import { buildAgentMessageWithSelectedSkill } from "../lib/selectedSkillMessage";
 import type {
   AgentPayload,
+  ChatSelectedSkill,
   MobileConversationMessage,
   MobileSessionView,
   SessionDetail,
@@ -41,6 +43,34 @@ describe("useMobileSessions", () => {
     });
     expect(result.current.historyItems[0]).toMatchObject({ id: "session-1", title: "first task" });
     expect(loadStored()[0]?.title).toBe("first task");
+  });
+
+  it("sends selected skill metadata and keeps the selected skill on the local user message", async () => {
+    const selectedSkill = { id: "skill_release", name: "release_flow" } satisfies ChatSelectedSkill;
+    const sendAgentMessage = vi.fn(async (options: SendOptions) => {
+      expect(options.message).toBe("");
+      expect(options.selectedSkill).toEqual(selectedSkill);
+      options.onSessionId("session-1");
+      options.onReply(agentReply("session-1", "reply"));
+      return { ok: true, reply: agentReply("session-1", "reply"), sessionId: "session-1" };
+    });
+    const { result } = renderMobileSessions({ sendAgentMessage });
+
+    await act(async () => {
+      await result.current.sendMessage("", selectedSkill);
+    });
+
+    expect(sendAgentMessage).toHaveBeenCalledTimes(1);
+    expect(result.current.activeMessages[0]).toMatchObject({
+      role: "user",
+      selectedSkill,
+      text: "",
+    });
+    expect(loadStored()[0]?.messages[0]).toMatchObject({
+      role: "user",
+      selectedSkill,
+      text: "",
+    });
   });
 
   it("selects a cached session and sends follow-up messages with its session_id", async () => {
@@ -96,6 +126,28 @@ describe("useMobileSessions", () => {
       id: "session-1",
       messages: [expect.objectContaining({ role: "user", sessionId: "session-1", text: "loaded" })],
       title: "Bridge title",
+    });
+  });
+
+  it("restores selected skill metadata from wrapped Bridge user messages", async () => {
+    const getSession = vi.fn(async (sessionId: string) => selectedSkillSessionDetail(sessionId));
+    const { result } = renderMobileSessions({
+      getSession,
+      sessions: [session("session-1", "Bridge title")],
+      sessionsLoaded: true,
+    });
+
+    await act(async () => {
+      await result.current.selectSession("session-1");
+    });
+
+    expect(result.current.activeMessages[0]).toMatchObject({
+      role: "user",
+      selectedSkill: {
+        id: "skill_release",
+        name: "release_flow",
+      },
+      text: "发布版本",
     });
   });
 
@@ -467,6 +519,7 @@ interface SendOptions {
   onSessionId: (sessionId: string) => void;
   onStatus: (status: { tone: "idle" | "loading" | "success" | "error"; text: string }) => void;
   requestId?: string;
+  selectedSkill?: ChatSelectedSkill;
   sessionId?: string;
   traceId?: string;
 }
@@ -595,6 +648,29 @@ function toolSessionDetail(id: string): SessionDetail {
           tool: "bash_exec",
           trace_id: "trace-1",
         },
+      },
+    ],
+    page: {
+      has_more_before: false,
+      limit: 100,
+    },
+  };
+}
+
+function selectedSkillSessionDetail(id: string): SessionDetail {
+  return {
+    ...session(id, `Bridge ${id}`),
+    messages: [
+      {
+        index: 0,
+        role: "user",
+        text: buildAgentMessageWithSelectedSkill({
+          message: "发布版本",
+          selectedSkill: {
+            id: "skill_release",
+            name: "release_flow",
+          },
+        }),
       },
     ],
     page: {

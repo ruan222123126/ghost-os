@@ -167,11 +167,25 @@ function normalizeMessage(value: unknown, sessionId: string): MobileConversation
   return {
     id,
     role,
+    selectedSkill: normalizeSelectedSkill(record.selectedSkill),
     sessionId,
     text,
     thinking: asString(record.thinking),
     tools: normalizeTools(record.tools),
   };
+}
+
+function normalizeSelectedSkill(value: unknown): MobileConversationMessage["selectedSkill"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  const id = asTrimmedString(record.id);
+  const name = asTrimmedString(record.name);
+  if (!id || !name) {
+    return undefined;
+  }
+  return { id, name };
 }
 
 function normalizeTools(value: unknown): MobileToolCard[] | undefined {

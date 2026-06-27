@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { CSSProperties, FormEvent, RefObject } from "react";
+import type { CSSProperties, FormEvent, KeyboardEvent, RefObject } from "react";
+import type { ChatSelectedSkill, SkillPayload } from "../../mobileTypes";
 import { COMPOSER_MENU_OPTIONS } from "./data";
 import { UiIcon } from "./icons";
 import "./ChatComposer.css";
@@ -9,12 +10,17 @@ interface ChatComposerProps {
   canStop?: boolean;
   disabled: boolean;
   loading: boolean;
+  selectedSkill?: ChatSelectedSkill | null;
+  skills?: SkillPayload[];
+  onClearSelectedSkill?: () => void;
+  onRefreshSkills?: () => Promise<boolean> | Promise<void> | boolean | void;
+  onSelectSkill?: (skill: SkillPayload) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   onStop?: () => Promise<void>;
   onChange: (value: string) => void;
-  onOpenSettings: () => void;
 }
 
+const COMPOSER_SKILL_EMPTY_LABEL = "暂无";
 const COMPOSER_TEXTAREA_COLLAPSED_HEIGHT_PX = 52;
 const COMPOSER_TEXTAREA_MAX_HEIGHT_PX = 200;
 const TEXTAREA_SCROLL_HEIGHT_EPSILON_PX = 1;
@@ -23,27 +29,33 @@ type ComposerDockStyle = CSSProperties & {
   "--composer-keyboard-inset": string;
 };
 
+type ComposerMenuView = "attachment" | "skills" | null;
+
 export function ChatComposer(props: ChatComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lineMeasureRef = useRef<HTMLTextAreaElement>(null);
   const composerRef = useRef<HTMLFormElement>(null);
   const [focused, setFocused] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuView, setMenuView] = useState<ComposerMenuView>(null);
+  const hasSelectedSkill = Boolean(props.selectedSkill);
   const hasValue = props.value.trim().length > 0;
   const showStop = props.loading && props.onStop !== undefined;
-  const showAction = hasValue || showStop;
+  const showAction = hasValue || showStop || hasSelectedSkill;
   const wrapsPastSingleLine = useSingleLineOverflow(lineMeasureRef, props.value);
   const isMultiLine = props.value.includes("\n") || wrapsPastSingleLine;
   const keyboardInset = useKeyboardInset(focused);
+  const attachmentMenuOpen = menuView === "attachment";
+  const skillMenuOpen = menuView === "skills";
+  const enabledSkills = sortEnabledSkills(props.skills ?? []);
   const dockStyle: ComposerDockStyle = {
     "--composer-keyboard-inset": `${keyboardInset}px`,
   };
 
   useAutosizeTextarea(textareaRef, props.value, isMultiLine);
-  useCloseComposerMenu(composerRef, menuOpen, setMenuOpen);
+  useCloseComposerMenu(composerRef, menuView !== null, () => setMenuView(null));
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
-    setMenuOpen(false);
+    setMenuView(null);
     await props.onSubmit(event);
   }
 
@@ -52,8 +64,17 @@ export function ChatComposer(props: ChatComposerProps) {
       return;
     }
 
-    setMenuOpen(false);
+    setMenuView(null);
     void props.onStop();
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
+    if (event.key !== "Backspace" || props.value !== "" || !props.selectedSkill || !props.onClearSelectedSkill) {
+      return;
+    }
+
+    event.preventDefault();
+    props.onClearSelectedSkill();
   }
 
   function handleMenuOption(label: string, unavailable: boolean): void {
@@ -61,15 +82,25 @@ export function ChatComposer(props: ChatComposerProps) {
       return;
     }
 
-    setMenuOpen(false);
-    if (label === "技能") {
-      props.onOpenSettings();
+    if (label !== "技能") {
+      setMenuView(null);
+      return;
     }
+
+    setMenuView("skills");
+    void props.onRefreshSkills?.();
+    textareaRef.current?.focus();
+  }
+
+  function handleSelectSkill(skill: SkillPayload): void {
+    props.onSelectSkill?.(skill);
+    setMenuView(null);
+    textareaRef.current?.focus();
   }
 
   return (
     <form ref={composerRef} className="composer-dock" style={dockStyle} onSubmit={(event) => void handleSubmit(event)}>
-      {menuOpen ? (
+      {attachmentMenuOpen ? (
         <div className="composer-attachment-menu" role="menu" aria-label="添加内容">
           {COMPOSER_MENU_OPTIONS.map((option) => (
             <button
@@ -90,28 +121,79 @@ export function ChatComposer(props: ChatComposerProps) {
         </div>
       ) : null}
 
-      <div className={`composer-shell ${focused ? "is-focused" : ""} ${isMultiLine ? "is-multiline" : ""}`}>
+      {skillMenuOpen ? (
+        <div className="composer-skill-menu" role="menu" aria-label="技能">
+          <div className="composer-skill-menu-head">
+            <span>技能</span>
+            {props.onRefreshSkills ? (
+              <button type="button" className="composer-skill-refresh" onClick={() => void props.onRefreshSkills?.()}>
+                刷新
+              </button>
+            ) : null}
+          </div>
+
+          {enabledSkills.length === 0 ? (
+            <div className="composer-skill-status" role="status">{COMPOSER_SKILL_EMPTY_LABEL}</div>
+          ) : (
+            <div className="composer-skill-list">
+              {enabledSkills.map((skill) => (
+                <button
+                  key={skill.id}
+                  type="button"
+                  className="composer-skill-item"
+                  role="menuitem"
+                  onClick={() => handleSelectSkill(skill)}
+                >
+                  <span className="composer-skill-item-name">{skill.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      <div
+        className={[
+          "composer-shell",
+          focused ? "is-focused" : "",
+          isMultiLine ? "is-multiline" : "",
+          hasSelectedSkill ? "has-selected-skill" : "",
+        ].filter(Boolean).join(" ")}
+      >
         <div className="composer-textarea-wrap">
           <button
-            className={`icon-button icon-button-composer composer-menu-trigger ${menuOpen ? "is-open" : ""}`}
+            className={`icon-button icon-button-composer composer-menu-trigger ${menuView !== null ? "is-open" : ""}`}
             type="button"
             aria-label="添加内容"
-            aria-expanded={menuOpen}
+            aria-expanded={menuView !== null}
             aria-haspopup="menu"
-            onClick={() => setMenuOpen((current) => !current)}
+            onClick={() => setMenuView((current) => (current === "attachment" ? null : "attachment"))}
           >
             <UiIcon name="plus" />
           </button>
+          {props.selectedSkill ? (
+            <div className="composer-selected-skill-row">
+              <button
+                type="button"
+                className="composer-selected-skill"
+                aria-label={`取消已选技能 ${props.selectedSkill.name}`}
+                onClick={props.onClearSelectedSkill}
+              >
+                {props.selectedSkill.name}
+              </button>
+            </div>
+          ) : null}
           <textarea
             ref={textareaRef}
             value={props.value}
             rows={1}
-            placeholder="问问 Ghost-OS"
+            placeholder={props.selectedSkill ? "" : "问问 Ghost-OS"}
             className="composer-input"
             onChange={(event) => props.onChange(event.currentTarget.value)}
             onBlur={() => setFocused(false)}
             onFocus={() => setFocused(true)}
             onInput={() => syncTextareaHeight(textareaRef.current, isMultiLine)}
+            onKeyDown={handleKeyDown}
           />
           <textarea
             ref={lineMeasureRef}
@@ -193,11 +275,11 @@ function useKeyboardInset(active: boolean) {
 
 function useCloseComposerMenu(
   composerRef: RefObject<HTMLFormElement | null>,
-  menuOpen: boolean,
-  setMenuOpen: (open: boolean) => void,
+  enabled: boolean,
+  onClose: () => void,
 ) {
   useEffect(() => {
-    if (!menuOpen) {
+    if (!enabled) {
       return;
     }
 
@@ -206,12 +288,12 @@ function useCloseComposerMenu(
         return;
       }
 
-      setMenuOpen(false);
+      onClose();
     }
 
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [composerRef, menuOpen, setMenuOpen]);
+  }, [composerRef, enabled, onClose]);
 }
 
 function useSingleLineOverflow(textareaRef: RefObject<HTMLTextAreaElement | null>, value: string) {
@@ -262,12 +344,23 @@ function syncTextareaHeight(textarea: HTMLTextAreaElement | null, isMultiLine: b
     return;
   }
 
-  textarea.style.transition = "none";
   textarea.style.height = "auto";
-  const scrollHeight = textarea.scrollHeight;
-  void textarea.offsetHeight;
-  textarea.style.transition = "";
-  textarea.style.height = isMultiLine
-    ? `${Math.min(scrollHeight, COMPOSER_TEXTAREA_MAX_HEIGHT_PX)}px`
-    : `${COMPOSER_TEXTAREA_COLLAPSED_HEIGHT_PX}px`;
+  if (!isMultiLine) {
+    textarea.style.height = `${COMPOSER_TEXTAREA_COLLAPSED_HEIGHT_PX}px`;
+    return;
+  }
+
+  const nextHeight = Math.min(textarea.scrollHeight, COMPOSER_TEXTAREA_MAX_HEIGHT_PX);
+  textarea.style.height = `${Math.max(COMPOSER_TEXTAREA_COLLAPSED_HEIGHT_PX, nextHeight)}px`;
+}
+
+function sortEnabledSkills(skills: SkillPayload[]): SkillPayload[] {
+  return skills
+    .filter((skill) => skill.enabled)
+    .sort((left, right) => {
+      if (left.name !== right.name) {
+        return left.name.localeCompare(right.name, "zh-Hans");
+      }
+      return left.source.localeCompare(right.source, "zh-Hans");
+    });
 }

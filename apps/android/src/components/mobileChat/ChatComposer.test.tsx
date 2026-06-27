@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
+import { useState } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ChatSelectedSkill, SkillPayload } from "../../mobileTypes";
 import { ChatComposer } from "./ChatComposer";
 
 let measuredScrollHeight = 52;
@@ -24,7 +26,7 @@ describe("ChatComposer", () => {
     mockTextareaScrollHeight();
     measuredScrollHeight = 76;
 
-    renderComposer("这是十一位中文输入");
+    renderComposerHarness({ initialValue: "这是十一位中文输入" });
 
     expect(composerShell().classList.contains("is-multiline")).toBe(true);
   });
@@ -33,7 +35,7 @@ describe("ChatComposer", () => {
     mockTextareaScrollHeight();
     measuredScrollHeight = 52;
 
-    renderComposer("abcdefghijklmnopqrstuvwxyzabcdefghi");
+    renderComposerHarness({ initialValue: "abcdefghijklmnopqrstuvwxyzabcdefghi" });
 
     expect(composerShell().classList.contains("is-multiline")).toBe(false);
   });
@@ -41,7 +43,7 @@ describe("ChatComposer", () => {
   it("shows a stop button while loading without input text", () => {
     const onStop = vi.fn(async () => undefined);
 
-    renderComposer("", { canStop: true, disabled: true, loading: true, onStop });
+    renderComposerHarness({ canStop: true, disabled: true, loading: true, onStop });
 
     fireEvent.click(screen.getByRole("button", { name: "停止生成" }));
 
@@ -49,7 +51,7 @@ describe("ChatComposer", () => {
   });
 
   it("keeps the stop button visible but disabled while stopping", () => {
-    renderComposer("", { canStop: false, disabled: true, loading: true, onStop: vi.fn(async () => undefined) });
+    renderComposerHarness({ canStop: false, disabled: true, loading: true, onStop: vi.fn(async () => undefined) });
 
     expect(screen.getByRole<HTMLButtonElement>("button", { name: "停止中" }).disabled).toBe(true);
   });
@@ -59,9 +61,9 @@ describe("ChatComposer", () => {
     mockAnimationFrame();
     Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 });
 
-    renderComposer("");
+    renderComposerHarness();
 
-    fireEvent.focus(screen.getByPlaceholderText("问问 Ghost-OS"));
+    fireEvent.focus(screen.getByRole("textbox"));
 
     await waitFor(() => {
       expect(composerDock().style.getPropertyValue("--composer-keyboard-inset")).toBe("300px");
@@ -74,6 +76,51 @@ describe("ChatComposer", () => {
       expect(composerDock().style.getPropertyValue("--composer-keyboard-inset")).toBe("180px");
     });
   });
+
+  it("opens the skill menu from the plus menu and selects a skill", () => {
+    const onRefreshSkills = vi.fn(async () => undefined);
+
+    renderComposerHarness({
+      onRefreshSkills,
+      onSelectSkill: true,
+      skills: [buildSkill({ id: "skill_release", name: "release_flow" })],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "添加内容" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "技能" }));
+
+    expect(onRefreshSkills).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("menuitem", { name: "release_flow" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "release_flow" }));
+
+    expect(screen.getByRole("button", { name: "取消已选技能 release_flow" })).toBeTruthy();
+    expect(screen.getByRole<HTMLTextAreaElement>("textbox").getAttribute("placeholder")).toBe("");
+  });
+
+  it("shows 暂无 when there is no skill list", () => {
+    renderComposerHarness();
+
+    fireEvent.click(screen.getByRole("button", { name: "添加内容" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "技能" }));
+
+    expect(screen.getByText("暂无")).toBeTruthy();
+  });
+
+  it("clears the selected skill when backspace is pressed on an empty draft", () => {
+    renderComposerHarness({
+      initialSelectedSkill: {
+        id: "skill_release",
+        name: "release_flow",
+      },
+      onSelectSkill: true,
+    });
+
+    const textarea = screen.getByRole("textbox");
+    fireEvent.keyDown(textarea, { key: "Backspace" });
+
+    expect(screen.queryByRole("button", { name: "取消已选技能 release_flow" })).toBeNull();
+  });
 });
 
 function mockTextareaScrollHeight(): void {
@@ -84,23 +131,58 @@ function mockTextareaScrollHeight(): void {
   });
 }
 
-function renderComposer(value: string, overrides: Partial<Parameters<typeof ChatComposer>[0]> = {}) {
-  return render(
-    <ChatComposer
-      disabled={false}
-      loading={false}
-      value={value}
-      onChange={vi.fn()}
-      onOpenSettings={vi.fn()}
-      onSubmit={vi.fn(async () => undefined)}
-      {...overrides}
-    />,
-  );
+function renderComposerHarness(options: {
+  canStop?: boolean;
+  disabled?: boolean;
+  initialSelectedSkill?: ChatSelectedSkill | null;
+  initialValue?: string;
+  loading?: boolean;
+  onRefreshSkills?: () => Promise<void> | void;
+  onSelectSkill?: boolean;
+  onStop?: () => Promise<void>;
+  skills?: SkillPayload[];
+} = {}) {
+  const {
+    canStop = false,
+    disabled = false,
+    initialSelectedSkill = null,
+    initialValue = "",
+    loading = false,
+    onRefreshSkills,
+    onSelectSkill = false,
+    onStop,
+    skills,
+  } = options;
+
+  function Harness() {
+    const [value, setValue] = useState(initialValue);
+    const [selectedSkill, setSelectedSkill] = useState<ChatSelectedSkill | null>(initialSelectedSkill);
+
+    return (
+      <ChatComposer
+        canStop={canStop}
+        disabled={disabled}
+        loading={loading}
+        selectedSkill={selectedSkill}
+        skills={skills}
+        onChange={setValue}
+        onClearSelectedSkill={() => setSelectedSkill(null)}
+        onRefreshSkills={onRefreshSkills}
+        onSelectSkill={onSelectSkill ? (skill) => setSelectedSkill({ id: skill.id, name: skill.name }) : undefined}
+        onStop={onStop}
+        onSubmit={vi.fn(async (event) => {
+          event.preventDefault();
+        })}
+        value={value}
+      />
+    );
+  }
+
+  return render(<Harness />);
 }
 
 function composerShell(): HTMLElement {
-  const input = screen.getByPlaceholderText("问问 Ghost-OS");
-  const shell = input.closest(".composer-shell");
+  const shell = screen.getByRole("textbox").closest(".composer-shell");
   if (!(shell instanceof HTMLElement)) {
     throw new Error("composer shell not found");
   }
@@ -108,8 +190,7 @@ function composerShell(): HTMLElement {
 }
 
 function composerDock(): HTMLElement {
-  const input = screen.getByPlaceholderText("问问 Ghost-OS");
-  const dock = input.closest(".composer-dock");
+  const dock = screen.getByRole("textbox").closest(".composer-dock");
   if (!(dock instanceof HTMLElement)) {
     throw new Error("composer dock not found");
   }
@@ -141,4 +222,16 @@ function restoreWindowViewportProperties(): void {
   } else {
     Reflect.deleteProperty(window, "visualViewport");
   }
+}
+
+function buildSkill(overrides: Partial<SkillPayload> = {}): SkillPayload {
+  return {
+    description: "Default skill",
+    enabled: true,
+    id: "skill_default",
+    name: "default_skill",
+    path: "/tmp/skill",
+    source: "repo",
+    ...overrides,
+  };
 }

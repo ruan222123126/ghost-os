@@ -311,9 +311,15 @@ export interface SessionDetail extends SessionMetadata {
   page: SessionMessagePage;
 }
 
+export interface ChatSelectedSkill {
+  id: string;
+  name: string;
+}
+
 export interface MobileConversationMessage {
   id: string;
   role: "user" | "assistant";
+  selectedSkill?: ChatSelectedSkill;
   text: string;
   thinking?: string;
   sessionId?: string;

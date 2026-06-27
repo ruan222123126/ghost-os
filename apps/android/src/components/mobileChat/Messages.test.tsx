@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AssistantReply } from "./Messages";
+import { AssistantReply, ChatBubble } from "./Messages";
 import type { AgentPayload, StatusMessage } from "../../mobileTypes";
 
 const successStatus: StatusMessage = { tone: "success", text: "回复已返回" };
@@ -138,6 +138,19 @@ describe("AssistantReply", () => {
       final: false,
       showCopyButton: false,
     }));
+  });
+});
+
+describe("ChatBubble", () => {
+  it("renders selected skill without replacing user text", () => {
+    render(
+      <ChatBubble selectedSkill={{ id: "skill_release", name: "release_flow" }}>
+        发布版本
+      </ChatBubble>,
+    );
+
+    expect(screen.getByText("release_flow")).toBeTruthy();
+    expect(screen.getByText("发布版本")).toBeTruthy();
   });
 });
 

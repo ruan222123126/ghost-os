@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useRef, useState, type ReactNode } from "react";
 import type {
   AgentPayload,
+  ChatSelectedSkill,
   ExternalAgentApprovalDecision,
   MobileToolCard,
   StatusMessage,
@@ -255,13 +256,21 @@ function ApprovalActions(props: {
 }
 
 interface ChatBubbleProps {
-  children: ReactNode;
+  children?: ReactNode;
+  selectedSkill?: ChatSelectedSkill;
 }
 
 export const ChatBubble = forwardRef<HTMLDivElement, ChatBubbleProps>(function ChatBubble(props, ref) {
+  const hasText = typeof props.children === "string"
+    ? props.children.trim().length > 0
+    : props.children !== null && props.children !== undefined;
+
   return (
     <div ref={ref} className="message-row user-row">
-      <div className="user-bubble">{props.children}</div>
+      <div className="user-bubble">
+        {props.selectedSkill ? <div className="user-bubble-selected-skill">{props.selectedSkill.name}</div> : null}
+        {hasText ? props.children : null}
+      </div>
     </div>
   );
 });

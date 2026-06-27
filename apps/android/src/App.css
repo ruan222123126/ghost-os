@@ -326,6 +326,20 @@ code {
   overflow-wrap: anywhere;
 }
 
+.user-bubble-selected-skill {
+  width: fit-content;
+  max-width: 100%;
+  margin-bottom: 8px;
+  border: 1px solid #dbe4ff;
+  border-radius: 999px;
+  padding: 4px 10px;
+  color: #2046a8;
+  background: #ffffff;
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
 .assistant-panel {
   width: 100%;
   min-width: 0;
@@ -454,6 +468,12 @@ code {
   .user-bubble {
     color: #f1f3f4;
     background: #1e1f20;
+  }
+
+  .user-bubble-selected-skill {
+    border-color: #3556a8;
+    color: #dbe4ff;
+    background: #202739;
   }
 
   .suggestion-button {

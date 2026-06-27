@@ -25,6 +25,7 @@ import { loadSettings, normalizeBridgeUrl, saveSettings } from "../lib/settingsS
 import type {
   AgentRuntimeType,
   AgentPayload,
+  ChatSelectedSkill,
   ConfigPayload,
   ExternalAgentApprovalDecision,
   ExternalCodexPermissionMode,
@@ -43,6 +44,7 @@ import type {
   TaskPayload,
   UnknownTaskPayload,
 } from "../mobileTypes";
+import { buildAgentMessageWithSelectedSkill } from "../lib/selectedSkillMessage";
 
 const SESSION_DETAIL_PAGE_LIMIT = 100;
 const SESSION_FULL_PAGE_LIMIT = 200;
@@ -59,6 +61,7 @@ interface SendAgentMessageOptions {
   onSessionId: (sessionId: string) => void;
   onStatus: (status: StatusMessage) => void;
   requestId?: string;
+  selectedSkill?: ChatSelectedSkill;
   sessionId?: string;
   traceId?: string;
 }
@@ -1124,7 +1127,15 @@ export function useMobileBridge() {
       const traceId = options.traceId?.trim() || createTraceId("android-agent-stream");
       const requestId = options.requestId?.trim() || createTraceId("android-agent-stream-request");
       const initialSessionId = options.sessionId?.trim() || "";
+      const agentMessage = buildAgentMessageWithSelectedSkill({
+        message: options.message,
+        selectedSkill: options.selectedSkill,
+      });
       if (agentRuntime === "ghost" && !settings.remoteExecutionEnabled) {
+        if (options.selectedSkill) {
+          options.onStatus({ tone: "error", text: "本地运行不支持技能" });
+          return { ok: false };
+        }
         const localProvider = resolveProviderForSettings(mergedProviderList, settings);
         const model = settings.localModel?.trim() || localProvider?.models?.[0]?.trim() || "";
         if (!localProvider || !model) {
@@ -1139,10 +1150,10 @@ export function useMobileBridge() {
           }));
           const response = await sendLocalLLMMessage({
             history,
+            traceId,
             model,
             provider: localProvider,
             sessionId: initialSessionId || `mobile-${requestId}`,
-            traceId,
           });
           const sessionId = initialSessionId || `mobile-${requestId}`;
           options.onSessionId(sessionId);
@@ -1174,14 +1185,14 @@ export function useMobileBridge() {
       const runtime = createMobileAgentStreamRuntime(initialSessionId);
       const params: Record<string, unknown> = agentRuntime === "codex"
         ? {
-          message: options.message,
+          message: agentMessage,
           permission_mode: codexPermissionMode(config),
           project_root: config?.project_root?.trim() || undefined,
           provider: "codex",
           ...(initialSessionId ? { session_id: initialSessionId } : {}),
         }
         : {
-          message: options.message,
+          message: agentMessage,
           ...(initialSessionId ? { session_id: initialSessionId } : {}),
           ...((config?.provider && config?.model)
             ? {
@@ -1221,7 +1232,7 @@ export function useMobileBridge() {
             apiToken: apiToken.trim() || undefined,
             baseUrl: bridgeUrl,
             body: params,
-            message: options.message,
+            message: agentMessage,
             onEvent: applyEvent,
             path: agentRuntime === "codex" ? EXTERNAL_AGENT_STREAM_PATH : undefined,
             requestId,

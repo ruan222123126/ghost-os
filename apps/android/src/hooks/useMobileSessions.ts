@@ -31,6 +31,7 @@ import {
 } from "../lib/mobileSessionProjection";
 import type {
   AgentPayload,
+  ChatSelectedSkill,
   MobileConversationMessage,
   MobileSessionRunState,
   MobileSessionView,
@@ -49,6 +50,7 @@ interface SendAgentMessageOptions {
   onSessionId: (sessionId: string) => void;
   onStatus: (status: StatusMessage) => void;
   requestId?: string;
+  selectedSkill?: ChatSelectedSkill;
   sessionId?: string;
   traceId?: string;
 }
@@ -259,9 +261,10 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     ],
   );
 
-  async function sendMessage(text: string): Promise<boolean> {
+  async function sendMessage(text: string, selectedSkill?: ChatSelectedSkill | null): Promise<boolean> {
     const trimmed = text.trim();
-    if (!trimmed || !sendAvailable || activeRun.status === "running") {
+    const resolvedSelectedSkill = selectedSkill ?? undefined;
+    if ((!trimmed && !resolvedSelectedSkill) || !sendAvailable || activeRun.status === "running") {
       return false;
     }
 
@@ -269,7 +272,8 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     let targetSessionId = initialSessionId;
     const requestId = createClientRunId("request");
     const traceId = createClientRunId("trace");
-    const userMessage = createUserConversationMessage(trimmed, initialSessionId);
+    const displayTitle = trimmed || resolvedSelectedSkill?.name || sessionFallbackTitle(initialSessionId);
+    const userMessage = createUserConversationMessage(trimmed, initialSessionId, resolvedSelectedSkill);
     const optimisticMessages = [...activeMessages, userMessage];
     postSendFocusTokenRef.current += 1;
     setPostSendFocusRequest({
@@ -283,7 +287,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
           messages: optimisticMessages,
           reply: undefined,
           run: createRunningRunState(requestId, traceId, "发送中"),
-          title: current[initialSessionId]?.title || findStoredTitle(storedConversations, initialSessionId) || trimmed,
+          title: current[initialSessionId]?.title || findStoredTitle(storedConversations, initialSessionId) || displayTitle,
           unread: false,
           bridgeOwned: true,
         }),
@@ -308,12 +312,13 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
             return;
           }
           targetSessionId = resolvedSessionId;
-          activateCreatedSession(resolvedSessionId, trimmed, optimisticMessages);
+          activateCreatedSession(resolvedSessionId, displayTitle, optimisticMessages);
         },
         onStatus: (status) => {
           applyRunStatus(targetSessionId, normalizeRunStatus(status, targetSessionId, requestId, traceId), requestId, traceId);
         },
         requestId,
+        selectedSkill: resolvedSelectedSkill,
         sessionId: initialSessionId || undefined,
         traceId,
       });
@@ -335,16 +340,16 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
 
     if (!targetSessionId) {
       targetSessionId = resolvedSessionId;
-      activateCreatedSession(resolvedSessionId, trimmed, optimisticMessages);
+      activateCreatedSession(resolvedSessionId, displayTitle, optimisticMessages);
     }
     const finalMessages = resolveFinalConversationMessages(
       resolvedSessionId,
       optimisticMessages,
       result.reply,
     );
-    commitFinalReply(resolvedSessionId, result.reply, trimmed, finalMessages);
+    commitFinalReply(resolvedSessionId, result.reply, displayTitle, finalMessages);
     if (result.mode === "local" && options.bridgeConnected && options.appendSessionMessages) {
-      await syncLocalTurnToBridge(resolvedSessionId, trimmed, finalMessages);
+      await syncLocalTurnToBridge(resolvedSessionId, displayTitle, finalMessages);
     }
     return true;
   }

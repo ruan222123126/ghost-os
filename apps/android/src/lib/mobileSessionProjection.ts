@@ -1,6 +1,7 @@
 import type { SidebarHistoryItem } from "../components/MobileChatHome";
 import type {
   AgentPayload,
+  ChatSelectedSkill,
   MobileToolCard,
   MobileConversationMessage,
   MobileSessionRunState,
@@ -15,6 +16,7 @@ import type {
   StoredMobileConversation,
 } from "../mobileTypes";
 import { parseToolTagText } from "./mobileToolTags";
+import { parseAgentMessageWithSelectedSkill } from "./selectedSkillMessage";
 
 export function mergeHistoryItems(input: {
   bridgeConnected: boolean;
@@ -183,11 +185,16 @@ export function runStateToStatus(run: MobileSessionRunState, idleStatus: StatusM
   };
 }
 
-export function createUserConversationMessage(text: string, sessionId: string): MobileConversationMessage {
+export function createUserConversationMessage(
+  text: string,
+  sessionId: string,
+  selectedSkill?: ChatSelectedSkill,
+): MobileConversationMessage {
   const now = Date.now();
   return {
     id: `${sessionId || "pending"}:user:${now}`,
     role: "user",
+    selectedSkill,
     sessionId: sessionId || undefined,
     text,
   };
@@ -344,15 +351,19 @@ function sessionMessageToConversationMessage(
   sessionId: string,
 ): MobileConversationMessage | null {
   const rawText = sessionMessageText(message);
+  const parsedSelectedSkill = message.role === "user"
+    ? parseAgentMessageWithSelectedSkill(rawText)
+    : { message: rawText };
   const parsedToolTags = message.role === "assistant" ? parseToolTagText(rawText) : undefined;
   const tools = message.role === "assistant" ? buildAssistantToolCards(message, sessionId, parsedToolTags?.calls ?? []) : [];
-  const text = parsedToolTags?.visibleText ?? rawText;
-  if (!text.trim() && !message.thinking?.trim() && tools.length === 0) {
+  const text = parsedToolTags?.visibleText ?? parsedSelectedSkill.message;
+  if (!text.trim() && !message.thinking?.trim() && tools.length === 0 && !parsedSelectedSkill.selectedSkill) {
     return null;
   }
   return {
     id: `${sessionId}:${message.index}:${message.role}`,
     role: message.role === "assistant" ? "assistant" : "user",
+    selectedSkill: parsedSelectedSkill.selectedSkill,
     sessionId,
     text,
     thinking: message.thinking,

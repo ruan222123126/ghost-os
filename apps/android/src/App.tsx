@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import {
   AssistantIntro,
@@ -20,6 +20,7 @@ import { useMobileSessions } from "./hooks/useMobileSessions";
 import type {
   AgentPayload,
   AgentRuntimeType,
+  ChatSelectedSkill,
   ConfigPayload,
   MobileConversationMessage,
   ProviderListPayload,
@@ -115,6 +116,7 @@ function App() {
     updateProvider,
   } = useMobileBridge();
   const [message, setMessage] = useState("");
+  const [selectedSkill, setSelectedSkill] = useState<ChatSelectedSkill | null>(null);
   const [agentRuntime, setAgentRuntime] = useState<AgentRuntimeType>("ghost");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -153,7 +155,8 @@ function App() {
     stopAgentRun: stopAgentRunForRuntime,
   });
   const displayStatus = mobileSessions.activeStatus.tone === "idle" ? status : mobileSessions.activeStatus;
-  const canSend = isNonEmptyMessage(message) && mobileSessions.canSend;
+  const supportsComposerSkills = Boolean(config) && (agentRuntime === "codex" || settings.remoteExecutionEnabled);
+  const canSend = (isNonEmptyMessage(message) || selectedSkill !== null) && mobileSessions.canSend;
   const runtimeLabel = useMemo(
     () => displayRuntime(agentRuntime, agentRuntime === "codex" ? config : chatConfig),
     [agentRuntime, chatConfig, config],
@@ -181,19 +184,33 @@ function App() {
 
   useBodyScrollLock(isModalOpen);
 
+  useEffect(() => {
+    if (!supportsComposerSkills && selectedSkill !== null) {
+      setSelectedSkill(null);
+    }
+  }, [selectedSkill, supportsComposerSkills]);
+
   async function sendMessage(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const trimmed = message.trim();
-    if (!trimmed) {
+    if (!trimmed && !selectedSkill) {
       return;
     }
 
+    const previousMessage = message;
+    const previousSkill = selectedSkill;
     setMessage("");
-    await mobileSessions.sendMessage(trimmed);
+    setSelectedSkill(null);
+    const sent = await mobileSessions.sendMessage(trimmed, selectedSkill);
+    if (!sent) {
+      setMessage(previousMessage);
+      setSelectedSkill(previousSkill);
+    }
   }
 
   async function selectHistory(sessionId: string): Promise<void> {
     setMessage("");
+    setSelectedSkill(null);
     setIsSidebarOpen(false);
     await mobileSessions.selectSession(sessionId);
   }
@@ -236,6 +253,7 @@ function App() {
 
   function startNewSession(): void {
     setMessage("");
+    setSelectedSkill(null);
     mobileSessions.startNewSession();
     setIsConnectionOpen(false);
     setIsRuntimeMenuOpen(false);
@@ -245,6 +263,7 @@ function App() {
   }
 
   function clearLocalConversation(): void {
+    setSelectedSkill(null);
     mobileSessions.clearCurrentConversation();
     setIsMoreMenuOpen(false);
     resetScrollDown();
@@ -327,7 +346,13 @@ function App() {
 
           {mobileSessions.activeMessages.map((item) =>
             item.role === "user" ? (
-              <ChatBubble key={item.id} ref={registerUserMessageRow(item.id)}>{item.text}</ChatBubble>
+              <ChatBubble
+                key={item.id}
+                ref={registerUserMessageRow(item.id)}
+                selectedSkill={item.selectedSkill}
+              >
+                {item.text}
+              </ChatBubble>
             ) : (
               <AssistantReply
                 key={item.id}
@@ -352,12 +377,16 @@ function App() {
           disabled={!canSend}
           canStop={(settings.remoteExecutionEnabled || agentRuntime === "codex") && mobileSessions.canStop}
           loading={mobileSessions.activeStatus.tone === "loading"}
+          selectedSkill={selectedSkill}
+          skills={supportsComposerSkills ? skillList : undefined}
+          onClearSelectedSkill={() => setSelectedSkill(null)}
+          onRefreshSkills={supportsComposerSkills ? refreshSkills : undefined}
+          onSelectSkill={supportsComposerSkills ? (skill) => setSelectedSkill({ id: skill.id, name: skill.name }) : undefined}
           onSubmit={sendMessage}
           onStop={(settings.remoteExecutionEnabled || agentRuntime === "codex") ? async () => {
             await mobileSessions.stopCurrentRun();
           } : undefined}
           onChange={setMessage}
-          onOpenSettings={openSettings}
         />
       </div>
 
