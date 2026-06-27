@@ -97,22 +97,20 @@ func (m *Manager) recordToolStart(ctx context.Context, active *activeTurn, tool 
 
 func (m *Manager) recordToolEnd(ctx context.Context, active *activeTurn, tool string, event CodexEvent) {
 	callID := firstString(event.Payload["call_id"], event.Payload["callId"])
-	output := firstString(event.Payload["output"], event.Payload["stdout"], event.Payload["stderr"], event.Payload["status"])
+	output, errorText := resolveToolEndResult(event.Payload)
 	status := "success"
-	if failedStatus(event.Payload["status"]) || firstString(event.Payload["error"], event.Payload["stderr"]) != "" {
+	var toolErr error
+	if errorText != "" {
 		status = "error"
+		toolErr = fmt.Errorf("%s", errorText)
 	}
-	_ = m.appendSessionMessage(active.sessionID, llm.Message{
-		Role:       llm.RoleTool,
-		ToolCallID: callID,
-		Text:       output,
-	})
+	_ = m.appendToolResultMessage(active.sessionID, callID, tool, active.traceID, output, toolErr)
 	_ = emit(ctx, active.sink, active.traceID, active.sessionID, active.turn, toolStep(active.turn, callID), streaming.EventToolCallFinished, map[string]any{
 		"tool":         tool,
 		"tool_call_id": callID,
 		"status":       status,
 		"output":       output,
-		"error":        firstString(event.Payload["error"], event.Payload["stderr"]),
+		"error":        errorText,
 	})
 }
 
@@ -158,4 +156,17 @@ func (m *Manager) finishAbortedTurn(ctx context.Context, runtime *runtimeSession
 func failedStatus(value any) bool {
 	status := strings.ToLower(stringValue(value))
 	return status == "failed" || status == "error" || status == "declined"
+}
+
+func resolveToolEndResult(payload map[string]any) (string, string) {
+	statusText := firstString(payload["status"])
+	errorText := firstString(payload["error"], payload["stderr"])
+	if errorText == "" && failedStatus(payload["status"]) {
+		errorText = statusText
+	}
+	output := firstString(payload["output"], payload["stdout"])
+	if output == "" && errorText == "" {
+		output = statusText
+	}
+	return output, errorText
 }

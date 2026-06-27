@@ -10,6 +10,7 @@ import (
 	"ghost-os/bridge/session"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestConfigResponseFromSnapshotIncludesRuntimeFlags(t *testing.T) {
@@ -126,6 +127,105 @@ func TestBuildSessionMessagePayloadProjectsToolResult(t *testing.T) {
 	}
 	if payload.HumanInteraction != nil {
 		t.Fatal("unexpected human_interaction for regular tool result")
+	}
+}
+
+func TestBuildSessionDetailPayloadProjectsLegacyCodexToolResult(t *testing.T) {
+	payload := sessionturn.BuildSessionDetailPayload(sessionturn.SessionDetailInput{
+		ID:           "session-legacy-codex",
+		Title:        "legacy codex",
+		CreatedAt:    time.Unix(0, 0).UTC(),
+		UpdatedAt:    time.Unix(0, 0).UTC(),
+		MessageCount: 2,
+		Page: sessionturn.SessionMessagePageInput{
+			Limit: 100,
+		},
+		Messages: []sessionturn.IndexedSessionMessageInput{
+			{
+				Index: 0,
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					ToolCalls: []llm.ToolCall{{
+						ID:        "call-legacy",
+						Name:      "codex_exec",
+						Arguments: json.RawMessage(`{"command":"pwd"}`),
+					}},
+				},
+			},
+			{
+				Index: 1,
+				Message: llm.Message{
+					Role:       llm.RoleTool,
+					ToolCallID: "call-legacy",
+					Text:       "/media/ruan/Files/ghost-os",
+				},
+			},
+		},
+	}, false)
+
+	if len(payload.Messages) != 2 {
+		t.Fatalf("unexpected message count: got %d want %d", len(payload.Messages), 2)
+	}
+	toolMessage := payload.Messages[1]
+	if toolMessage.ToolResult == nil {
+		t.Fatal("expected legacy codex tool message to project tool_result")
+	}
+	if toolMessage.ToolResult.Tool != "codex_exec" {
+		t.Fatalf("unexpected tool name: got %q want %q", toolMessage.ToolResult.Tool, "codex_exec")
+	}
+	if toolMessage.ToolResult.Status != "success" {
+		t.Fatalf("unexpected tool status: got %q want %q", toolMessage.ToolResult.Status, "success")
+	}
+	if toolMessage.ToolResult.Output != "/media/ruan/Files/ghost-os" {
+		t.Fatalf("unexpected tool output: got %q", toolMessage.ToolResult.Output)
+	}
+	if toolMessage.Text != "/media/ruan/Files/ghost-os" {
+		t.Fatalf("unexpected projected tool text: got %q", toolMessage.Text)
+	}
+}
+
+func TestBuildSessionDetailPayloadLeavesLegacyNonCodexToolTextUnprojected(t *testing.T) {
+	payload := sessionturn.BuildSessionDetailPayload(sessionturn.SessionDetailInput{
+		ID:           "session-legacy-bash",
+		Title:        "legacy bash",
+		CreatedAt:    time.Unix(0, 0).UTC(),
+		UpdatedAt:    time.Unix(0, 0).UTC(),
+		MessageCount: 2,
+		Page: sessionturn.SessionMessagePageInput{
+			Limit: 100,
+		},
+		Messages: []sessionturn.IndexedSessionMessageInput{
+			{
+				Index: 0,
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					ToolCalls: []llm.ToolCall{{
+						ID:        "call-legacy",
+						Name:      "bash_exec",
+						Arguments: json.RawMessage(`{"command":"pwd"}`),
+					}},
+				},
+			},
+			{
+				Index: 1,
+				Message: llm.Message{
+					Role:       llm.RoleTool,
+					ToolCallID: "call-legacy",
+					Text:       "/media/ruan/Files/ghost-os",
+				},
+			},
+		},
+	}, false)
+
+	if len(payload.Messages) != 2 {
+		t.Fatalf("unexpected message count: got %d want %d", len(payload.Messages), 2)
+	}
+	toolMessage := payload.Messages[1]
+	if toolMessage.ToolResult != nil {
+		t.Fatalf("unexpected legacy tool_result projection for non-codex tool: %+v", toolMessage.ToolResult)
+	}
+	if toolMessage.Text != "/media/ruan/Files/ghost-os" {
+		t.Fatalf("unexpected projected tool text: got %q", toolMessage.Text)
 	}
 }
 

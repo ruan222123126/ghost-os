@@ -582,7 +582,14 @@ func hasToolCall(messages []llm.Message, name string, id string) bool {
 
 func hasToolResult(messages []llm.Message, callID string, text string) bool {
 	for _, msg := range messages {
-		if msg.Role == llm.RoleTool && msg.ToolCallID == callID && msg.Text == text {
+		if msg.Role != llm.RoleTool || msg.ToolCallID != callID {
+			continue
+		}
+		result, ok := llm.ParseToolResultEnvelope(msg.Text)
+		if !ok {
+			continue
+		}
+		if result.Output == text || result.Error == text {
 			return true
 		}
 	}

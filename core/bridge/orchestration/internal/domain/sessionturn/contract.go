@@ -24,9 +24,10 @@ func BuildSessionDetailPayload(
 	includeDraft bool,
 ) sessionDetail {
 	turnDraft := BuildSessionTurnDraftPayload(detail.TurnDraft, includeDraft)
+	toolCallNames := buildSessionToolCallNameLookup(detail.Messages)
 	messages := make([]sessionMessage, 0, len(detail.Messages))
 	for _, item := range detail.Messages {
-		messages = append(messages, BuildSessionMessagePayload(item.Index, item.Message))
+		messages = append(messages, buildSessionMessagePayloadWithLookup(item.Index, item.Message, toolCallNames))
 	}
 	if includeDraft && turnDraft == nil {
 		if draft, ok := BuildAssistantDraftSessionMessage(detail.AssistantDraft, detail.MessageCount); ok {
@@ -59,12 +60,20 @@ func BuildSessionMessagePagePayload(page SessionMessagePageInput) sessionMessage
 }
 
 func BuildSessionMessagePayload(index int, message llm.Message) sessionMessage {
+	return buildSessionMessagePayloadWithLookup(index, message, nil)
+}
+
+func buildSessionMessagePayloadWithLookup(
+	index int,
+	message llm.Message,
+	toolCallNames map[string]string,
+) sessionMessage {
 	payload := sessionMessage{
 		Index: index,
 		Role:  string(message.Role),
 	}
 	if message.Role == llm.RoleTool {
-		projectToolSessionMessage(&payload, message.Text)
+		projectToolSessionMessage(&payload, message, toolCallNames)
 	} else if strings.TrimSpace(message.Text) != "" {
 		payload.Text = message.Text
 	}
@@ -101,15 +110,22 @@ type answeredHumanInteractionPayload struct {
 	Answer        string           `json:"answer"`
 }
 
-func projectToolSessionMessage(payload *sessionMessage, rawText string) {
-	trimmed := strings.TrimSpace(rawText)
+func projectToolSessionMessage(
+	payload *sessionMessage,
+	message llm.Message,
+	toolCallNames map[string]string,
+) {
+	trimmed := strings.TrimSpace(message.Text)
 	if payload == nil || trimmed == "" {
 		return
 	}
 
 	result, ok := llm.ParseToolResultEnvelope(trimmed)
 	if !ok {
-		payload.Text = rawText
+		if projectLegacyCodexToolResult(payload, message, toolCallNames) {
+			return
+		}
+		payload.Text = message.Text
 		return
 	}
 
@@ -117,6 +133,59 @@ func projectToolSessionMessage(payload *sessionMessage, rawText string) {
 	payload.ToolResult = buildSessionToolResultPayload(result, humanInteraction)
 	payload.HumanInteraction = humanInteraction
 	payload.Text = formatSessionToolText(result, humanInteraction)
+}
+
+func buildSessionToolCallNameLookup(messages []IndexedSessionMessageInput) map[string]string {
+	if len(messages) == 0 {
+		return nil
+	}
+
+	lookup := make(map[string]string, len(messages))
+	for _, item := range messages {
+		for _, call := range item.Message.ToolCalls {
+			callID := strings.TrimSpace(call.ID)
+			toolName := strings.TrimSpace(call.Name)
+			if callID == "" || toolName == "" {
+				continue
+			}
+			lookup[callID] = toolName
+		}
+	}
+	if len(lookup) == 0 {
+		return nil
+	}
+	return lookup
+}
+
+// Legacy external Codex sessions stored terminal tool results as plain text.
+// They are still terminal tool messages, so project them back into tool_result
+// to avoid replaying historical cards as perpetual "running" tools.
+func projectLegacyCodexToolResult(
+	payload *sessionMessage,
+	message llm.Message,
+	toolCallNames map[string]string,
+) bool {
+	if payload == nil || len(toolCallNames) == 0 {
+		return false
+	}
+
+	toolCallID := strings.TrimSpace(message.ToolCallID)
+	if toolCallID == "" {
+		return false
+	}
+	toolName := strings.TrimSpace(toolCallNames[toolCallID])
+	if !strings.HasPrefix(toolName, "codex_") {
+		return false
+	}
+
+	result := llm.ToolResultEnvelope{
+		Status: "success",
+		Tool:   toolName,
+		Output: message.Text,
+	}
+	payload.ToolResult = buildSessionToolResultPayload(result, nil)
+	payload.Text = formatSessionToolText(result, nil)
+	return true
 }
 
 func buildSessionToolResultPayload(result llm.ToolResultEnvelope, humanInteraction *sessionHumanInteraction) *sessionToolResult {

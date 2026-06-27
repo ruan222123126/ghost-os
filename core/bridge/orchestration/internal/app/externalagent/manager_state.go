@@ -66,11 +66,14 @@ func (m *Manager) handleApproval(ctx context.Context, runtime *runtimeSession, a
 		return DecisionDenied, ctx.Err()
 	case decision := <-ch:
 		_ = m.removePendingApproval(active.sessionID, approval.ID)
-		_ = m.appendSessionMessage(active.sessionID, llm.Message{
-			Role:       llm.RoleTool,
-			ToolCallID: "approval:" + approval.ID,
-			Text:       decision,
-		})
+		_ = m.appendToolResultMessage(
+			active.sessionID,
+			"approval:"+approval.ID,
+			"codex_approval",
+			active.traceID,
+			decision,
+			nil,
+		)
 		return decision, nil
 	}
 }
@@ -115,6 +118,21 @@ func (m *Manager) appendSessionMessage(sessionID string, msg llm.Message) error 
 	}
 	sess.AddMessage(msg)
 	return m.SessionStore.Save(sess)
+}
+
+func (m *Manager) appendToolResultMessage(
+	sessionID string,
+	toolCallID string,
+	toolName string,
+	traceID string,
+	output string,
+	toolErr error,
+) error {
+	return m.appendSessionMessage(sessionID, llm.Message{
+		Role:       llm.RoleTool,
+		ToolCallID: toolCallID,
+		Text:       llm.FormatToolResult(toolName, traceID, output, toolErr),
+	})
 }
 
 func (m *Manager) updateRuntimeState(sessionID string, mutate func(*session.ExternalRuntime)) error {
