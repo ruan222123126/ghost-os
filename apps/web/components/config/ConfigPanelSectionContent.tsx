@@ -73,7 +73,7 @@ function TopLoadingBar({ isVisible = false }: { isVisible?: boolean }) {
 
       <div
         data-testid="config-section-top-loading-bar"
-        className={`fixed top-0 left-0 z-[9999] h-[3px] w-full pointer-events-none transition-opacity duration-500 ease-in-out ${
+        className={`pointer-events-none absolute left-0 top-0 z-20 h-[3px] w-full overflow-hidden transition-opacity duration-500 ease-in-out ${
           isVisible ? 'opacity-100' : 'opacity-0'
         }`}
       >
