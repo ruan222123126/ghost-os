@@ -247,7 +247,11 @@ function App() {
         onSearchSessions={searchSessions}
       />
 
-      <div className="mobile-chat-content" aria-hidden={isModalOpen} inert={isModalOpen ? true : undefined}>
+      <div
+        className={`mobile-chat-content ${isSidebarOpen ? "is-sidebar-open" : ""}`}
+        aria-hidden={isModalOpen}
+        inert={isModalOpen ? true : undefined}
+      >
         <ChatHeader
           runtimeLabel={runtimeLabel}
           config={chatConfig}

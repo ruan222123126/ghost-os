@@ -2,6 +2,7 @@
 
 :root {
   --mobile-home-content-width: 672px;
+  --mobile-sidebar-width: min(82vw, 340px);
 
   color: #202124;
   background: #ffffff;
@@ -81,6 +82,13 @@ code {
   display: flex;
   flex: 1;
   flex-direction: column;
+  transform: translateX(0);
+  transition: transform 300ms ease-in-out;
+  will-change: transform;
+}
+
+.mobile-chat-content.is-sidebar-open {
+  transform: translateX(var(--mobile-sidebar-width));
 }
 
 .chat-header {
