@@ -2,6 +2,15 @@ import type { ProviderConfig, TaskRuntimeOverrides, ToolPayload } from '@/lib/ty
 import type { WorkflowCanvasDraft, WorkflowCanvasNodeDraft } from '@/lib/workflow-editor/types';
 
 const TOOL_ALLOWLIST_ONLY = true;
+const TASK_RUNTIME_OVERRIDE_FIELDS = [
+  'provider_name',
+  'model',
+  'system_prompt',
+  'preset_id',
+  'tool_allowlist',
+  'tool_allowlist_only',
+  'max_turns',
+] as const satisfies readonly (keyof TaskRuntimeOverrides)[];
 
 export interface WorkflowAgentRuntimeCatalog {
   providers: ProviderConfig[];
@@ -26,6 +35,11 @@ interface WorkflowAgentProviderModelValidation {
   providerName: string;
   model: string;
   context: WorkflowAgentRuntimeValidationContext;
+}
+
+interface ProviderModelSelection {
+  providerName: string;
+  model: string;
 }
 
 export function enabledWorkflowAgentToolNames(tools: ToolPayload[]): string[] {
@@ -128,15 +142,7 @@ function cloneTaskRuntimeOverrides(
 function normalizeEmptyTaskRuntimeOverrides(
   overrides: TaskRuntimeOverrides,
 ): TaskRuntimeOverrides | undefined {
-  if (
-    overrides.provider_name === undefined
-    && overrides.model === undefined
-    && overrides.system_prompt === undefined
-    && overrides.preset_id === undefined
-    && overrides.tool_allowlist === undefined
-    && overrides.tool_allowlist_only === undefined
-    && overrides.max_turns === undefined
-  ) {
+  if (TASK_RUNTIME_OVERRIDE_FIELDS.every((field) => overrides[field] === undefined)) {
     return undefined;
   }
   return overrides;
@@ -183,23 +189,37 @@ function validateWorkflowAgentRuntime(input: WorkflowAgentRuntimeNodeValidation)
 
 function validateWorkflowAgentProviderModelPair(input: WorkflowAgentRuntimeNodeValidation): void {
   const { context, nodeID, overrides } = input;
-  const providerName = overrides.provider_name?.trim() ?? '';
-  const model = overrides.model?.trim() ?? '';
-  if (hasPartialProviderModelSelection(providerName, model)) {
+  const selection = resolveProviderModelSelection(overrides);
+  if (hasPartialProviderModelSelection(selection)) {
     context.errors.push(`workflow agent node "${nodeID}" provider_name and model must be set together`);
   }
-  if (hasProviderModelSelection(providerName)) {
+  if (hasCompleteProviderModelSelection(selection)) {
     validateWorkflowAgentProviderModel({
       nodeID,
-      providerName,
-      model,
+      providerName: selection.providerName,
+      model: selection.model,
       context,
     });
   }
 }
 
-function hasPartialProviderModelSelection(providerName: string, model: string): boolean {
-  return hasProviderModelSelection(providerName) !== hasProviderModelSelection(model);
+function resolveProviderModelSelection(overrides: TaskRuntimeOverrides): ProviderModelSelection {
+  return {
+    providerName: normalizeProviderModelValue(overrides.provider_name),
+    model: normalizeProviderModelValue(overrides.model),
+  };
+}
+
+function normalizeProviderModelValue(value: string | undefined): string {
+  return value?.trim() ?? '';
+}
+
+function hasPartialProviderModelSelection(selection: ProviderModelSelection): boolean {
+  return hasProviderModelSelection(selection.providerName) !== hasProviderModelSelection(selection.model);
+}
+
+function hasCompleteProviderModelSelection(selection: ProviderModelSelection): boolean {
+  return hasProviderModelSelection(selection.providerName) && hasProviderModelSelection(selection.model);
 }
 
 function hasProviderModelSelection(value: string): boolean {
@@ -219,15 +239,29 @@ function isValidWorkflowAgentMaxTurns(maxTurns: number | undefined): boolean {
 
 function validateWorkflowAgentProviderModel(input: WorkflowAgentProviderModelValidation): void {
   const { context, model, nodeID, providerName } = input;
-  const provider = context.providers.find((item) => item.name.trim() === providerName);
+  const provider = findWorkflowAgentProvider(context.providers, providerName);
   if (!provider) {
     context.errors.push(`workflow agent node "${nodeID}" provider_name "${providerName}" is not available`);
     return;
   }
-  const models = new Set((provider.models ?? []).map((item) => item.trim()).filter((item) => item.length > 0));
-  if (!models.has(model)) {
+  if (!providerHasModel(provider, model)) {
     context.errors.push(`workflow agent node "${nodeID}" model "${model}" is not available for provider "${providerName}"`);
   }
+}
+
+function findWorkflowAgentProvider(
+  providers: ProviderConfig[],
+  providerName: string,
+): ProviderConfig | undefined {
+  return providers.find((item) => item.name.trim() === providerName);
+}
+
+function providerHasModel(provider: ProviderConfig, model: string): boolean {
+  return providerModelNames(provider).has(model);
+}
+
+function providerModelNames(provider: ProviderConfig): Set<string> {
+  return new Set((provider.models ?? []).map((item) => item.trim()).filter((item) => item.length > 0));
 }
 
 function validateWorkflowAgentTools(input: WorkflowAgentRuntimeNodeValidation): void {
