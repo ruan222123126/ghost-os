@@ -78,6 +78,82 @@ describe("mobile agent stream runtime", () => {
         traceId: "trace-1",
       },
     ]);
+    expect(createAgentPayloadFromRuntime(runtime).parts).toEqual([
+      {
+        id: "text:1",
+        kind: "text",
+        text: "before ",
+      },
+      {
+        id: "stream-tag-tool:trace-1:1",
+        kind: "tool",
+        tool: {
+          id: "stream-tag-tool:trace-1:1",
+          input: "{\"cmd\":\"pwd\"}",
+          status: "pending",
+          toolName: "tool#1",
+          traceId: "trace-1",
+        },
+      },
+      {
+        id: "text:2",
+        kind: "text",
+        text: " after",
+      },
+    ]);
+  });
+
+  it("keeps streamed text and tools in arrival order", () => {
+    const { runtime } = projectEvents([
+      event("completion_delta", {
+        kind: "text",
+        text: "先开始绘图。",
+      }),
+      event("tool_call_started", {
+        arguments_json: "{\"prompt\":\"draw\"}",
+        tool: "screen_action",
+        tool_call_id: "call-draw",
+      }),
+      event("tool_call_finished", {
+        output: "Generated 1 image(s).",
+        status: "success",
+        tool: "screen_action",
+        tool_call_id: "call-draw",
+      }),
+      event("completion_delta", {
+        kind: "text",
+        text: "图片已经生成。",
+      }),
+      event("message", {
+        text: "先开始绘图。图片已经生成。",
+      }),
+    ]);
+
+    expect(createAgentPayloadFromRuntime(runtime).parts).toEqual([
+      {
+        id: "text:1",
+        kind: "text",
+        text: "先开始绘图。",
+      },
+      {
+        id: "stream-tool:trace-1:call-draw",
+        kind: "tool",
+        tool: {
+          id: "stream-tool:trace-1:call-draw",
+          input: "{\"prompt\":\"draw\"}",
+          output: "Generated 1 image(s).",
+          status: "success",
+          toolCallId: "call-draw",
+          toolName: "screen_action",
+          traceId: "trace-1",
+        },
+      },
+      {
+        id: "text:2",
+        kind: "text",
+        text: "图片已经生成。",
+      },
+    ]);
   });
 
   it("stores finished tool errors explicitly", () => {

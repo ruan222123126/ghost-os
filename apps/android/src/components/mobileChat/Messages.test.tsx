@@ -12,7 +12,10 @@ const markdownMock = vi.hoisted(() => (
 
 vi.mock("./AssistantMarkdownContent", () => ({
   AssistantMarkdownContent: (props: { content: string; final?: boolean; showCopyButton?: boolean }) => (
-    markdownMock(props)
+    <>
+      {markdownMock(props)}
+      <div data-testid="assistant-markdown-content">{props.content}</div>
+    </>
   ),
 }));
 
@@ -125,6 +128,47 @@ describe("AssistantReply", () => {
     expect(screen.getByText("/repo")).toBeTruthy();
   });
 
+  it("renders assistant text and tool cards in reply part order", () => {
+    const { container } = render(
+      <AssistantReply
+        reply={agentReply({
+          message: "先开始绘图。图片已经生成。",
+          parts: [
+            {
+              id: "text-1",
+              kind: "text",
+              text: "先开始绘图。",
+            },
+            {
+              id: "tool-1",
+              kind: "tool",
+              tool: {
+                id: "tool-1",
+                input: JSON.stringify({ prompt: "cat" }),
+                output: "Generated 1 image(s).",
+                status: "success",
+                toolCallId: "call-1",
+                toolName: "screen_action",
+              },
+            },
+            {
+              id: "text-2",
+              kind: "text",
+              text: "图片已经生成。",
+            },
+          ],
+        })}
+        status={successStatus}
+      />,
+    );
+
+    const partContainer = container.querySelector(".assistant-reply-parts");
+    expect(partContainer?.children).toHaveLength(3);
+    expect(partContainer?.children[0]?.textContent).toContain("先开始绘图。");
+    expect(partContainer?.children[1]?.querySelector("button.tool-card-button")).toBeTruthy();
+    expect(partContainer?.children[2]?.textContent).toContain("图片已经生成。");
+  });
+
   it("passes streaming state to markdown renderer", () => {
     render(
       <AssistantReply
@@ -158,6 +202,7 @@ function agentReply(patch: Partial<AgentPayload>): AgentPayload {
   return {
     message: patch.message ?? "",
     mode: patch.mode,
+    parts: patch.parts,
     session_ended: patch.session_ended ?? false,
     session_id: patch.session_id ?? "session-1",
     thinking: patch.thinking,

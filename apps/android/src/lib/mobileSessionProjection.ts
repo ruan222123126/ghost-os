@@ -1,6 +1,7 @@
 import type { SidebarHistoryItem } from "../components/MobileChatHome";
 import type {
   AgentPayload,
+  MobileAssistantPart,
   ChatSelectedSkill,
   MobileToolCard,
   MobileConversationMessage,
@@ -15,7 +16,7 @@ import type {
   StatusMessage,
   StoredMobileConversation,
 } from "../mobileTypes";
-import { parseToolTagText } from "./mobileToolTags";
+import { parseToolTagText, type ParsedToolTagCall } from "./mobileToolTags";
 import { parseAgentMessageWithSelectedSkill } from "./selectedSkillMessage";
 
 export function mergeHistoryItems(input: {
@@ -202,8 +203,10 @@ export function createUserConversationMessage(
 
 export function createAssistantConversationMessage(reply: AgentPayload, sessionId: string): MobileConversationMessage {
   const now = Date.now();
+  const parts = cloneAssistantParts(reply.parts) ?? buildAssistantPartsFromReplyFields(reply, sessionId, now);
   return {
     id: `${sessionId}:assistant:${now}`,
+    ...(parts ? { parts } : {}),
     role: "assistant",
     sessionId,
     text: reply.message,
@@ -355,19 +358,27 @@ function sessionMessageToConversationMessage(
     ? parseAgentMessageWithSelectedSkill(rawText)
     : { message: rawText };
   const parsedToolTags = message.role === "assistant" ? parseToolTagText(rawText) : undefined;
-  const tools = message.role === "assistant" ? buildAssistantToolCards(message, sessionId, parsedToolTags?.calls ?? []) : [];
+  const assistantContent = message.role === "assistant"
+    ? buildAssistantConversationContent(message, sessionId, parsedToolTags)
+    : undefined;
   const text = parsedToolTags?.visibleText ?? parsedSelectedSkill.message;
-  if (!text.trim() && !message.thinking?.trim() && tools.length === 0 && !parsedSelectedSkill.selectedSkill) {
+  if (
+    !text.trim()
+    && !message.thinking?.trim()
+    && (assistantContent?.tools.length ?? 0) === 0
+    && !parsedSelectedSkill.selectedSkill
+  ) {
     return null;
   }
   return {
     id: `${sessionId}:${message.index}:${message.role}`,
+    ...(assistantContent?.parts.length ? { parts: assistantContent.parts } : {}),
     role: message.role === "assistant" ? "assistant" : "user",
     selectedSkill: parsedSelectedSkill.selectedSkill,
     sessionId,
     text,
     thinking: message.thinking,
-    tools: tools.length > 0 ? tools : undefined,
+    tools: assistantContent?.tools.length ? assistantContent.tools : undefined,
   };
 }
 
@@ -385,21 +396,48 @@ function hasOwnProperty<T extends object>(value: T, key: PropertyKey): boolean {
   return Object.prototype.hasOwnProperty.call(value, key);
 }
 
-function buildAssistantToolCards(
+function buildAssistantConversationContent(
   message: SessionMessage,
   sessionId: string,
-  tagCalls: Array<{ toolId: string; argsText: string }>,
-): MobileToolCard[] {
+  parsedToolTags: ReturnType<typeof parseToolTagText> | undefined,
+): { parts: MobileAssistantPart[]; tools: MobileToolCard[] } {
   const structuredTools = (message.tool_calls ?? []).map((toolCall) =>
     buildToolCardFromSessionToolCall(toolCall, sessionId, message.index),
   );
-  const tagTools = tagCalls.map((call, index) => ({
-    id: `${sessionId}:${message.index}:tag-tool:${index}`,
-    input: call.argsText,
-    status: "pending" as const,
-    toolName: `tool#${call.toolId}`,
-  }));
-  return [...structuredTools, ...tagTools];
+  const parts: MobileAssistantPart[] = [];
+
+  if (parsedToolTags?.units.length) {
+    let tagToolIndex = 0;
+    let textPartIndex = 0;
+    for (const unit of parsedToolTags.units) {
+      if (unit.type === "text") {
+        if (!unit.text) {
+          continue;
+        }
+        parts.push(buildAssistantTextPart(sessionId, message.index, textPartIndex, unit.text));
+        textPartIndex += 1;
+        continue;
+      }
+      parts.push(buildAssistantToolPart(
+        buildToolCardFromTagCall(unit, sessionId, message.index, tagToolIndex),
+      ));
+      tagToolIndex += 1;
+    }
+  } else {
+    const text = sessionMessageText(message);
+    if (text) {
+      parts.push(buildAssistantTextPart(sessionId, message.index, 0, text));
+    }
+  }
+
+  for (const tool of structuredTools) {
+    parts.push(buildAssistantToolPart(tool));
+  }
+
+  return {
+    parts,
+    tools: parts.flatMap((part) => part.kind === "tool" ? [part.tool] : []),
+  };
 }
 
 function buildToolCardFromSessionToolCall(
@@ -413,6 +451,20 @@ function buildToolCardFromSessionToolCall(
     status: "pending",
     toolCallId: toolCall.id,
     toolName: toolCall.name,
+  };
+}
+
+function buildToolCardFromTagCall(
+  call: ParsedToolTagCall,
+  sessionId: string,
+  messageIndex: number,
+  toolIndex: number,
+): MobileToolCard {
+  return {
+    id: `${sessionId}:${messageIndex}:tag-tool:${toolIndex}`,
+    input: call.argsText,
+    status: "pending",
+    toolName: `tool#${call.toolId}`,
   };
 }
 
@@ -436,8 +488,9 @@ function mergeToolMessageIntoAssistant(
   const resultCard = buildToolCardFromResult(message, sessionId);
   const tools = [...(assistant.tools ?? [])];
   const index = resolveToolResultMergeIndex(tools, toolCallId, Boolean(target));
+  let mergedTool = resultCard;
   if (index >= 0) {
-    tools[index] = {
+    mergedTool = {
       ...tools[index],
       ...resultCard,
       id: tools[index].id,
@@ -445,11 +498,13 @@ function mergeToolMessageIntoAssistant(
       toolCallId: tools[index].toolCallId ?? resultCard.toolCallId,
       toolName: resultCard.toolName ?? tools[index].toolName,
     };
+    tools[index] = mergedTool;
   } else {
-    tools.push(resultCard);
+    tools.push(mergedTool);
   }
 
   assistant.tools = tools;
+  assistant.parts = mergeToolCardIntoAssistantParts(assistant.parts, mergedTool);
   if (toolCallId) {
     assistantByToolCallId.set(toolCallId, assistant);
   }
@@ -494,4 +549,86 @@ function resolveToolResultMergeIndex(
 
 function formatToolInput(input: Record<string, unknown>): string {
   return JSON.stringify(input, null, 2);
+}
+
+function buildAssistantTextPart(
+  sessionId: string,
+  messageIndex: number,
+  textPartIndex: number,
+  text: string,
+): MobileAssistantPart {
+  return {
+    id: `${sessionId}:${messageIndex}:text:${textPartIndex}`,
+    kind: "text",
+    text,
+  };
+}
+
+function buildAssistantToolPart(tool: MobileToolCard): MobileAssistantPart {
+  return {
+    id: tool.id,
+    kind: "tool",
+    tool,
+  };
+}
+
+function mergeToolCardIntoAssistantParts(
+  parts: MobileAssistantPart[] | undefined,
+  tool: MobileToolCard,
+): MobileAssistantPart[] {
+  const next = parts ? [...parts] : [];
+  const existingIndex = next.findIndex((part) =>
+    part.kind === "tool" && (part.tool.id === tool.id || part.tool.toolCallId === tool.toolCallId));
+
+  if (existingIndex < 0) {
+    next.push(buildAssistantToolPart(tool));
+    return next;
+  }
+
+  const existing = next[existingIndex];
+  if (existing.kind !== "tool") {
+    return next;
+  }
+  next[existingIndex] = {
+    ...existing,
+    tool: {
+      ...existing.tool,
+      ...tool,
+    },
+  };
+  return next;
+}
+
+function cloneAssistantParts(parts: MobileAssistantPart[] | undefined): MobileAssistantPart[] | undefined {
+  if (!parts?.length) {
+    return undefined;
+  }
+  return parts.map((part) => {
+    if (part.kind === "text") {
+      return { ...part };
+    }
+    return {
+      ...part,
+      tool: { ...part.tool },
+    };
+  });
+}
+
+function buildAssistantPartsFromReplyFields(
+  reply: AgentPayload,
+  sessionId: string,
+  now: number,
+): MobileAssistantPart[] | undefined {
+  const parts: MobileAssistantPart[] = [];
+  if (reply.message) {
+    parts.push({
+      id: `${sessionId}:assistant:${now}:text`,
+      kind: "text",
+      text: reply.message,
+    });
+  }
+  for (const tool of reply.tools ?? []) {
+    parts.push(buildAssistantToolPart({ ...tool }));
+  }
+  return parts.length > 0 ? parts : undefined;
 }

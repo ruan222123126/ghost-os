@@ -1,5 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { MobileConversationMessage, MobileToolCard, MobileToolCardStatus, StoredMobileConversation } from "../mobileTypes";
+import type {
+  MobileAssistantPart,
+  MobileConversationMessage,
+  MobileToolCard,
+  MobileToolCardStatus,
+  StoredMobileConversation,
+} from "../mobileTypes";
 import { hasTauriRuntime } from "./bridgeBus";
 
 export const MOBILE_CONVERSATIONS_STORAGE_KEY = "ghost-os-mobile.conversations.v1";
@@ -166,6 +172,7 @@ function normalizeMessage(value: unknown, sessionId: string): MobileConversation
 
   return {
     id,
+    parts: role === "assistant" ? normalizeAssistantParts(record.parts) : undefined,
     role,
     selectedSkill: normalizeSelectedSkill(record.selectedSkill),
     sessionId,
@@ -186,6 +193,53 @@ function normalizeSelectedSkill(value: unknown): MobileConversationMessage["sele
     return undefined;
   }
   return { id, name };
+}
+
+function normalizeAssistantParts(value: unknown): MobileAssistantPart[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const parts = value.map(normalizeAssistantPart).filter(isMobileAssistantPart);
+  return parts.length > 0 ? parts : undefined;
+}
+
+function normalizeAssistantPart(value: unknown): MobileAssistantPart | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const id = asTrimmedString(record.id);
+  if (!id) {
+    return null;
+  }
+
+  if (record.kind === "text") {
+    const text = asString(record.text);
+    if (text === undefined) {
+      return null;
+    }
+    return {
+      id,
+      kind: "text",
+      text,
+    };
+  }
+
+  if (record.kind === "tool") {
+    const tool = normalizeTool(record.tool);
+    if (!tool) {
+      return null;
+    }
+    return {
+      id,
+      kind: "tool",
+      tool,
+    };
+  }
+
+  return null;
 }
 
 function normalizeTools(value: unknown): MobileToolCard[] | undefined {
@@ -240,6 +294,10 @@ function isStoredConversation(value: StoredMobileConversation | null): value is 
 }
 
 function isMobileConversationMessage(value: MobileConversationMessage | null): value is MobileConversationMessage {
+  return value !== null;
+}
+
+function isMobileAssistantPart(value: MobileAssistantPart | null): value is MobileAssistantPart {
   return value !== null;
 }
 

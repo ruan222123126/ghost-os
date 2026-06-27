@@ -157,6 +157,20 @@ export interface AgentMessageTaskPayload {
   last_error?: string;
 }
 
+export interface MobileAssistantTextPart {
+  id: string;
+  kind: "text";
+  text: string;
+}
+
+export interface MobileAssistantToolPart {
+  id: string;
+  kind: "tool";
+  tool: MobileToolCard;
+}
+
+export type MobileAssistantPart = MobileAssistantTextPart | MobileAssistantToolPart;
+
 export interface WorkflowNode {
   id: string;
   type: string;
@@ -250,6 +264,7 @@ export interface AgentPayload {
   session_ended: boolean;
   thinking?: string;
   mode?: string;
+  parts?: MobileAssistantPart[];
   tools?: MobileToolCard[];
 }
 
@@ -319,6 +334,7 @@ export interface ChatSelectedSkill {
 export interface MobileConversationMessage {
   id: string;
   role: "user" | "assistant";
+  parts?: MobileAssistantPart[];
   selectedSkill?: ChatSelectedSkill;
   text: string;
   thinking?: string;

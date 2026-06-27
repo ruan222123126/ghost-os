@@ -368,14 +368,43 @@ function clearStructuredPreviewLookups(runtime: MobileAgentStreamRuntime): void 
 
 function upsertToolCard(runtime: MobileAgentStreamRuntime, patch: MobileToolCard): void {
   const existingIndex = runtime.tools.findIndex((tool) => tool.id === patch.id);
+  const nextTool = existingIndex < 0
+    ? patch
+    : {
+      ...runtime.tools[existingIndex],
+      ...patch,
+    };
+
   if (existingIndex < 0) {
-    runtime.tools.push(patch);
+    runtime.tools.push(nextTool);
+  } else {
+    runtime.tools[existingIndex] = nextTool;
+  }
+
+  upsertToolPart(runtime, nextTool);
+}
+
+function upsertToolPart(runtime: MobileAgentStreamRuntime, tool: MobileToolCard): void {
+  const existingPartIndex = runtime.parts.findIndex((part) => part.kind === "tool" && part.tool.id === tool.id);
+  if (existingPartIndex < 0) {
+    runtime.parts.push({
+      id: tool.id,
+      kind: "tool",
+      tool: { ...tool },
+    });
     return;
   }
 
-  runtime.tools[existingIndex] = {
-    ...runtime.tools[existingIndex],
-    ...patch,
+  const existingPart = runtime.parts[existingPartIndex];
+  if (existingPart.kind !== "tool") {
+    return;
+  }
+  runtime.parts[existingPartIndex] = {
+    ...existingPart,
+    tool: {
+      ...existingPart.tool,
+      ...tool,
+    },
   };
 }
 

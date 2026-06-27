@@ -452,6 +452,7 @@ function App() {
 function conversationMessageToAgentPayload(message: MobileConversationMessage): AgentPayload {
   return {
     message: message.text,
+    parts: message.parts,
     session_ended: false,
     session_id: message.sessionId ?? "",
     thinking: message.thinking,

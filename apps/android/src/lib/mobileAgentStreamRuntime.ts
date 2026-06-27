@@ -1,4 +1,4 @@
-import type { AgentPayload, MobileToolCard, StatusMessage } from "../mobileTypes";
+import type { AgentPayload, MobileAssistantPart, MobileToolCard, StatusMessage } from "../mobileTypes";
 import {
   assertAgentStreamTerminal,
   createAgentStreamSummary,
@@ -27,10 +27,12 @@ import {
   createToolTagStreamState,
   stripToolTagCalls,
 } from "./mobileToolTags";
-import type { ToolTagStreamState } from "./mobileToolTags";
+import type { ToolTagStreamState, ToolTagStreamUnit } from "./mobileToolTags";
 
 export interface MobileAgentStreamRuntime {
   message: string;
+  nextTextPartSeq: number;
+  parts: MobileAssistantPart[];
   sessionEnded: boolean;
   sessionId: string;
   thinking: string;
@@ -57,8 +59,10 @@ export interface MobileAgentStreamProjector {
 export function createMobileAgentStreamRuntime(sessionId: string): MobileAgentStreamRuntime {
   return {
     message: "",
+    nextTextPartSeq: 1,
     nextStructuredToolPreviewSeq: 1,
     pendingPreviewQueue: [],
+    parts: [],
     previewStructuredToolCallIdsByIndex: new Map(),
     previewStructuredToolCardIdsByIndex: new Map(),
     previewToolArgs: new Map(),
@@ -78,6 +82,7 @@ export function createMobileAgentStreamRuntime(sessionId: string): MobileAgentSt
 export function createAgentPayloadFromRuntime(runtime: MobileAgentStreamRuntime): AgentPayload {
   return {
     message: runtime.message,
+    parts: runtime.parts.length > 0 ? runtime.parts.map(cloneAssistantPart) : undefined,
     session_ended: runtime.sessionEnded,
     session_id: runtime.sessionId,
     thinking: runtime.thinking,
@@ -231,7 +236,7 @@ function projectAwaitingHuman(
   if (payload.approval?.id || payload.tool === "codex_approval") {
     projectAwaitingHumanApproval(runtime, event, payload);
   } else {
-    runtime.message = payload.prompt;
+    setRuntimeMessage(runtime, payload.prompt);
   }
   runtime.terminal = true;
   projector.setStatus({ tone: "success", text: "等待用户输入" });
@@ -245,17 +250,15 @@ function projectFinalMessage(
 ): void {
   const payload = parseAgentStreamMessagePayload(event.payload);
   const finalized = consumeToolTagStreamChunk(runtime.toolTags, "", true);
-  appendVisibleText(runtime, finalized.visibleText);
-  projectToolTagEvents(runtime, event.trace_id, finalized.events);
+  applyToolTagUnits(runtime, event.trace_id, finalized.units);
   const finalText = stripToolTagCalls(payload.text);
-  runtime.message = finalText.trim() ? finalText : runtime.message;
+  syncFinalMessageText(runtime, finalText);
   projector.commitReply(runtime);
 }
 
 function projectTextDelta(runtime: MobileAgentStreamRuntime, traceId: string, text: string): void {
   const consumed = consumeToolTagStreamChunk(runtime.toolTags, text);
-  appendVisibleText(runtime, consumed.visibleText);
-  projectToolTagEvents(runtime, traceId, consumed.events);
+  applyToolTagUnits(runtime, traceId, consumed.units);
 }
 
 function projectDone(
@@ -286,6 +289,17 @@ function appendVisibleText(runtime: MobileAgentStreamRuntime, text: string): voi
     return;
   }
   runtime.message = `${runtime.message}${text}`;
+  const lastPart = runtime.parts[runtime.parts.length - 1];
+  if (lastPart?.kind === "text") {
+    lastPart.text = `${lastPart.text}${text}`;
+    return;
+  }
+  runtime.parts.push({
+    id: `text:${runtime.nextTextPartSeq}`,
+    kind: "text",
+    text,
+  });
+  runtime.nextTextPartSeq += 1;
 }
 
 function appendThinkingText(runtime: MobileAgentStreamRuntime, text: string): void {
@@ -303,4 +317,59 @@ function toolStatusText(prefix: string, toolName?: string, toolCallId?: string):
 function parseStreamEndSessionId(payload: Record<string, unknown>): string | undefined {
   const sessionId = payload.session_id;
   return typeof sessionId === "string" && sessionId.trim() ? sessionId.trim() : undefined;
+}
+
+function applyToolTagUnits(
+  runtime: MobileAgentStreamRuntime,
+  traceId: string,
+  units: ToolTagStreamUnit[],
+): void {
+  for (const unit of units) {
+    if (unit.type === "text") {
+      appendVisibleText(runtime, unit.text);
+      continue;
+    }
+    projectToolTagEvents(runtime, traceId, [unit]);
+  }
+}
+
+function cloneAssistantPart(part: MobileAssistantPart): MobileAssistantPart {
+  if (part.kind === "text") {
+    return { ...part };
+  }
+  return {
+    ...part,
+    tool: cloneToolCard(part.tool),
+  };
+}
+
+function setRuntimeMessage(runtime: MobileAgentStreamRuntime, text: string): void {
+  runtime.message = text;
+  runtime.parts = text
+    ? [{
+      id: `text:${runtime.nextTextPartSeq}`,
+      kind: "text",
+      text,
+    }]
+    : [];
+  runtime.nextTextPartSeq += 1;
+}
+
+function syncFinalMessageText(runtime: MobileAgentStreamRuntime, finalText: string): void {
+  if (!finalText.trim() || finalText === runtime.message) {
+    return;
+  }
+
+  const hasToolParts = runtime.parts.some((part) => part.kind === "tool");
+  if (!hasToolParts) {
+    setRuntimeMessage(runtime, finalText);
+    return;
+  }
+
+  if (finalText.startsWith(runtime.message)) {
+    appendVisibleText(runtime, finalText.slice(runtime.message.length));
+    return;
+  }
+
+  runtime.message = finalText;
 }

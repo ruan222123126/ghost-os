@@ -3,6 +3,7 @@ import type {
   AgentPayload,
   ChatSelectedSkill,
   ExternalAgentApprovalDecision,
+  MobileAssistantPart,
   MobileToolCard,
   StatusMessage,
 } from "../../mobileTypes";
@@ -68,13 +69,15 @@ interface ExternalApprovalActionInput {
 }
 
 export function AssistantReply(props: AssistantReplyProps) {
-  const replyMessage = props.reply?.message.trim() ?? "";
+  const replyMessage = props.reply?.message ?? "";
+  const replyMessageTrimmed = replyMessage.trim();
+  const replyParts = resolveAssistantParts(props.reply);
   const thinkingText = props.reply?.thinking ?? "";
   const hasThinkingText = thinkingText.trim().length > 0;
   const thinkingActive = props.status.tone === "loading" && hasThinkingText;
   const replyFinal = props.status.tone !== "loading";
   const thinkingStartedAtMs = useThinkingStartedAtMs(thinkingActive);
-  const [thinkingPanelOpen, toggleThinkingPanel] = useThinkingPanelOpen(thinkingText, replyMessage, thinkingActive);
+  const [thinkingPanelOpen, toggleThinkingPanel] = useThinkingPanelOpen(thinkingText, replyMessageTrimmed, thinkingActive);
 
   if (!props.reply && props.status.tone !== "error") {
     return null;
@@ -92,18 +95,16 @@ export function AssistantReply(props: AssistantReplyProps) {
             onToggleExpanded={toggleThinkingPanel}
           />
         ) : null}
-        {props.reply?.tools?.length ? (
-          <ToolCardList
-            sessionId={props.reply.session_id}
-            tools={props.reply.tools}
-            onApproveExternalAgent={props.onApproveExternalAgent}
-          />
-        ) : null}
         {props.status.tone === "error" ? (
           <>
-            {replyMessage ? <AssistantMarkdownContent content={replyMessage} /> : null}
+            <AssistantReplyParts
+              final={replyFinal}
+              parts={replyParts}
+              sessionId={props.reply?.session_id}
+              onApproveExternalAgent={props.onApproveExternalAgent}
+            />
             <p className="error-text">{props.status.text}</p>
-            {replyMessage ? (
+            {replyMessageTrimmed ? (
               <div className="assistant-reply-actions">
                 <MessageCopyButton text={replyMessage} />
               </div>
@@ -111,16 +112,17 @@ export function AssistantReply(props: AssistantReplyProps) {
           </>
         ) : (
           <>
-            {replyMessage ? (
-              <AssistantMarkdownContent
-                content={replyMessage}
+            {replyParts.length ? (
+              <AssistantReplyParts
                 final={replyFinal}
-                showCopyButton={replyFinal}
+                parts={replyParts}
+                sessionId={props.reply?.session_id}
+                onApproveExternalAgent={props.onApproveExternalAgent}
               />
             ) : hasThinkingText ? null : (
               <p>{props.status.text}</p>
             )}
-            {replyMessage ? (
+            {replyMessageTrimmed ? (
               <div className="assistant-reply-actions">
                 <MessageCopyButton text={replyMessage} />
               </div>
@@ -132,18 +134,30 @@ export function AssistantReply(props: AssistantReplyProps) {
   );
 }
 
-function ToolCardList(props: {
+function AssistantReplyParts(props: {
+  final: boolean;
   onApproveExternalAgent?: (input: ExternalApprovalActionInput) => Promise<boolean>;
+  parts: MobileAssistantPart[];
   sessionId?: string;
-  tools: MobileToolCard[];
 }) {
+  if (props.parts.length === 0) {
+    return null;
+  }
+
   return (
-    <div className="tool-card-list">
-      {props.tools.map((tool) => (
+    <div className="assistant-reply-parts">
+      {props.parts.map((part) => part.kind === "text" ? (
+        <AssistantMarkdownContent
+          key={part.id}
+          content={part.text}
+          final={props.final}
+          showCopyButton={false}
+        />
+      ) : (
         <ToolCard
-          key={tool.id}
+          key={part.id}
           sessionId={props.sessionId}
-          tool={tool}
+          tool={part.tool}
           onApproveExternalAgent={props.onApproveExternalAgent}
         />
       ))}
@@ -447,4 +461,30 @@ function useThinkingElapsedSeconds(startedAtMs: number | null): number {
   }
 
   return Math.max(0, Math.floor((nowMs - startedAtMs) / THINKING_ELAPSED_UPDATE_MS));
+}
+
+function resolveAssistantParts(reply: AgentPayload | undefined): MobileAssistantPart[] {
+  if (!reply) {
+    return [];
+  }
+  if (reply.parts?.length) {
+    return reply.parts;
+  }
+
+  const parts: MobileAssistantPart[] = [];
+  if (reply.message) {
+    parts.push({
+      id: `${reply.session_id}:reply:text`,
+      kind: "text",
+      text: reply.message,
+    });
+  }
+  for (const tool of reply.tools ?? []) {
+    parts.push({
+      id: tool.id,
+      kind: "tool",
+      tool,
+    });
+  }
+  return parts;
 }

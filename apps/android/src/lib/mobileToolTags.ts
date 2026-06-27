@@ -25,7 +25,21 @@ export interface ParsedToolTagCall {
 export interface ToolTagParseResult {
   visibleText: string;
   calls: ParsedToolTagCall[];
+  units: ParsedToolTagParseUnit[];
 }
+
+export interface ParsedToolTagTextUnit {
+  type: "text";
+  text: string;
+}
+
+export interface ParsedToolTagCallUnit {
+  type: "tool_call";
+  toolId: string;
+  argsText: string;
+}
+
+export type ParsedToolTagParseUnit = ParsedToolTagTextUnit | ParsedToolTagCallUnit;
 
 export interface ToolTagStreamEventOpen {
   type: "tool_open";
@@ -48,9 +62,17 @@ export interface ToolTagStreamEventClose {
 
 export type ToolTagStreamEvent = ToolTagStreamEventOpen | ToolTagStreamEventArgs | ToolTagStreamEventClose;
 
+export interface ToolTagStreamUnitText {
+  type: "text";
+  text: string;
+}
+
+export type ToolTagStreamUnit = ToolTagStreamEvent | ToolTagStreamUnitText;
+
 export interface ToolTagStreamConsumeResult {
   visibleText: string;
   events: ToolTagStreamEvent[];
+  units: ToolTagStreamUnit[];
 }
 
 interface ToolTagParseState {
@@ -83,28 +105,29 @@ export function consumeToolTagStreamChunk(
   finalize = false,
 ): ToolTagStreamConsumeResult {
   if (!chunk && !finalize) {
-    return { events: [], visibleText: "" };
+    return { events: [], units: [], visibleText: "" };
   }
 
   const textParts: string[] = [];
   const events: ToolTagStreamEvent[] = [];
+  const units: ToolTagStreamUnit[] = [];
   for (const char of chunk) {
     if (state.mode === "normal") {
-      consumeNormalChar(state, char, textParts);
+      consumeNormalChar(state, char, textParts, units);
       continue;
     }
     if (state.mode === "capture_id") {
-      consumeCaptureIdChar(state, char, textParts, events);
+      consumeCaptureIdChar(state, char, textParts, events, units);
       continue;
     }
-    consumeCaptureArgsChar(state, char, events);
+    consumeCaptureArgsChar(state, char, events, units);
   }
 
   if (finalize) {
-    finalizeToolTagStreamState(state, textParts, events);
+    finalizeToolTagStreamState(state, textParts, events, units);
   }
 
-  return { events, visibleText: textParts.join("") };
+  return { events, units, visibleText: textParts.join("") };
 }
 
 export function parseToolTagText(text: string): ToolTagParseResult {
@@ -119,15 +142,16 @@ export function parseToolTagText(text: string): ToolTagParseResult {
 
   const visibleParts: string[] = [];
   const calls: ParsedToolTagCall[] = [];
+  const units: ParsedToolTagParseUnit[] = [];
   let cursor = 0;
   while (cursor < text.length) {
     if (state.mode === "normal") {
       const openIndex = text.indexOf(OPEN_TOKEN, cursor);
       if (openIndex < 0) {
-        visibleParts.push(text.slice(cursor));
+        pushParsedTextUnit(visibleParts, units, text.slice(cursor));
         break;
       }
-      visibleParts.push(text.slice(cursor, openIndex));
+      pushParsedTextUnit(visibleParts, units, text.slice(cursor, openIndex));
       state.mode = "capture_id";
       state.rawTagStart = openIndex;
       state.toolIdBuffer = "";
@@ -143,7 +167,7 @@ export function parseToolTagText(text: string): ToolTagParseResult {
       }
       const rawId = text.slice(cursor, idEnd).trim();
       if (!isValidToolTagId(rawId)) {
-        visibleParts.push(text.slice(state.rawTagStart, idEnd + 1));
+        pushParsedTextUnit(visibleParts, units, text.slice(state.rawTagStart, idEnd + 1));
         state.mode = "normal";
         cursor = idEnd + 1;
         continue;
@@ -160,28 +184,37 @@ export function parseToolTagText(text: string): ToolTagParseResult {
 
     const closeIndex = findToolTagCloseIndex(text, cursor, state);
     if (closeIndex < 0) {
-      calls.push({
+      const call = {
         argsText: text.slice(state.argsStart),
         toolId: state.toolIdBuffer,
-      });
+      } satisfies ParsedToolTagCall;
+      calls.push(call);
+      units.push({ ...call, type: "tool_call" });
       break;
     }
-    calls.push({
+    const call = {
       argsText: text.slice(state.argsStart, closeIndex),
       toolId: state.toolIdBuffer,
-    });
+    } satisfies ParsedToolTagCall;
+    calls.push(call);
+    units.push({ ...call, type: "tool_call" });
     state.mode = "normal";
     cursor = closeIndex + CLOSE_TOKEN.length;
   }
 
-  return { calls, visibleText: visibleParts.join("") };
+  return { calls, units, visibleText: visibleParts.join("") };
 }
 
 export function stripToolTagCalls(text: string): string {
   return parseToolTagText(text).visibleText;
 }
 
-function consumeNormalChar(state: ToolTagStreamState, char: string, textParts: string[]): void {
+function consumeNormalChar(
+  state: ToolTagStreamState,
+  char: string,
+  textParts: string[],
+  units: ToolTagStreamUnit[],
+): void {
   state.normalCandidate += char;
   while (state.normalCandidate.length > 0) {
     if (OPEN_TOKEN.startsWith(state.normalCandidate)) {
@@ -193,7 +226,7 @@ function consumeNormalChar(state: ToolTagStreamState, char: string, textParts: s
       }
       return;
     }
-    textParts.push(state.normalCandidate.slice(0, 1));
+    pushVisibleText(textParts, units, state.normalCandidate.slice(0, 1));
     state.normalCandidate = state.normalCandidate.slice(1);
   }
 }
@@ -203,6 +236,7 @@ function consumeCaptureIdChar(
   char: string,
   textParts: string[],
   events: ToolTagStreamEvent[],
+  units: ToolTagStreamUnit[],
 ): void {
   state.rawTagPrefix += char;
   if (char !== ">") {
@@ -212,7 +246,7 @@ function consumeCaptureIdChar(
 
   const toolId = state.currentToolId.trim();
   if (!isValidToolTagId(toolId)) {
-    textParts.push(state.rawTagPrefix);
+    pushVisibleText(textParts, units, state.rawTagPrefix);
     resetToNormal(state);
     return;
   }
@@ -226,19 +260,20 @@ function consumeCaptureIdChar(
   state.currentCallSeq = state.nextCallSeq;
   state.nextCallSeq += 1;
   state.rawTagPrefix = "";
-  events.push({ callSeq: state.currentCallSeq, toolId, type: "tool_open" });
+  recordToolTagEvent(events, units, { callSeq: state.currentCallSeq, toolId, type: "tool_open" });
 }
 
 function consumeCaptureArgsChar(
   state: ToolTagStreamState,
   char: string,
   events: ToolTagStreamEvent[],
+  units: ToolTagStreamUnit[],
 ): void {
   if (!state.inString) {
     state.closeCandidate += char;
     if (CLOSE_TOKEN.startsWith(state.closeCandidate)) {
       if (state.closeCandidate === CLOSE_TOKEN) {
-        events.push({
+        recordToolTagEvent(events, units, {
           argsText: state.argsBuffer,
           callSeq: state.currentCallSeq,
           toolId: state.currentToolId,
@@ -248,20 +283,21 @@ function consumeCaptureArgsChar(
       }
       return;
     }
-    flushCloseCandidateAsArgs(state, events);
+    flushCloseCandidateAsArgs(state, events, units);
     return;
   }
-  appendArgsChar(state, char, events);
+  appendArgsChar(state, char, events, units);
 }
 
 function flushCloseCandidateAsArgs(
   state: ToolTagStreamState,
   events: ToolTagStreamEvent[],
+  units: ToolTagStreamUnit[],
 ): void {
   while (state.closeCandidate.length > 0 && !CLOSE_TOKEN.startsWith(state.closeCandidate)) {
     const nextChar = state.closeCandidate.slice(0, 1);
     state.closeCandidate = state.closeCandidate.slice(1);
-    appendArgsChar(state, nextChar, events);
+    appendArgsChar(state, nextChar, events, units);
   }
 }
 
@@ -269,9 +305,10 @@ function appendArgsChar(
   state: ToolTagStreamState,
   char: string,
   events: ToolTagStreamEvent[],
+  units: ToolTagStreamUnit[],
 ): void {
   state.argsBuffer += char;
-  events.push({ argsDelta: char, callSeq: state.currentCallSeq, type: "tool_args" });
+  recordToolTagEvent(events, units, { argsDelta: char, callSeq: state.currentCallSeq, type: "tool_args" });
 
   if (state.inString) {
     if (state.escaped) {
@@ -297,34 +334,78 @@ function finalizeToolTagStreamState(
   state: ToolTagStreamState,
   textParts: string[],
   events: ToolTagStreamEvent[],
+  units: ToolTagStreamUnit[],
 ): void {
   if (state.mode === "normal") {
     if (state.normalCandidate) {
-      textParts.push(state.normalCandidate);
+      pushVisibleText(textParts, units, state.normalCandidate);
       state.normalCandidate = "";
     }
     return;
   }
 
   if (state.mode === "capture_id") {
-    textParts.push(state.rawTagPrefix);
+    pushVisibleText(textParts, units, state.rawTagPrefix);
     resetToNormal(state);
     return;
   }
 
   if (state.closeCandidate) {
     for (const char of state.closeCandidate) {
-      appendArgsChar(state, char, events);
+      appendArgsChar(state, char, events, units);
     }
     state.closeCandidate = "";
   }
-  events.push({
+  recordToolTagEvent(events, units, {
     argsText: state.argsBuffer,
     callSeq: state.currentCallSeq,
     toolId: state.currentToolId,
     type: "tool_close",
   });
   resetToNormal(state);
+}
+
+function pushVisibleText(
+  textParts: string[],
+  units: ToolTagStreamUnit[],
+  text: string,
+): void {
+  if (!text) {
+    return;
+  }
+  textParts.push(text);
+  const lastUnit = units[units.length - 1];
+  if (lastUnit?.type === "text") {
+    lastUnit.text = `${lastUnit.text}${text}`;
+    return;
+  }
+  units.push({ text, type: "text" });
+}
+
+function recordToolTagEvent(
+  events: ToolTagStreamEvent[],
+  units: ToolTagStreamUnit[],
+  event: ToolTagStreamEvent,
+): void {
+  events.push(event);
+  units.push(event);
+}
+
+function pushParsedTextUnit(
+  visibleParts: string[],
+  units: ParsedToolTagParseUnit[],
+  text: string,
+): void {
+  if (!text) {
+    return;
+  }
+  visibleParts.push(text);
+  const lastUnit = units[units.length - 1];
+  if (lastUnit?.type === "text") {
+    lastUnit.text = `${lastUnit.text}${text}`;
+    return;
+  }
+  units.push({ text, type: "text" });
 }
 
 function findToolTagCloseIndex(text: string, cursor: number, state: ToolTagParseState): number {

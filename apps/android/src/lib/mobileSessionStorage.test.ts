@@ -46,6 +46,12 @@ describe("mobileSessionStorage", () => {
 
     expect(loadStoredMobileConversations()).toEqual([storedConversationWithApprovalTool()]);
   });
+
+  it("preserves ordered assistant parts when loading stored conversations", () => {
+    window.localStorage.setItem(MOBILE_CONVERSATIONS_STORAGE_KEY, JSON.stringify([storedConversationWithOrderedParts()]));
+
+    expect(loadStoredMobileConversations()).toEqual([storedConversationWithOrderedParts()]);
+  });
 });
 
 function storedConversation() {
@@ -84,6 +90,46 @@ function storedConversationWithApprovalTool() {
       },
     ],
     title: "Session 1",
+    updated_at: "2026-01-02T00:00:00.000Z",
+  };
+}
+
+function storedConversationWithOrderedParts() {
+  return {
+    created_at: "2026-01-01T00:00:00.000Z",
+    id: "session-2",
+    messages: [
+      {
+        id: "session-2:assistant:1",
+        parts: [
+          {
+            id: "text-1",
+            kind: "text",
+            text: "先开始绘图。",
+          },
+          {
+            id: "tool-1",
+            kind: "tool",
+            tool: {
+              id: "tool-1",
+              output: "Generated 1 image(s).",
+              status: "success",
+              toolCallId: "call-draw",
+              toolName: "screen_action",
+            },
+          },
+          {
+            id: "text-2",
+            kind: "text",
+            text: "图片已经生成。",
+          },
+        ],
+        role: "assistant",
+        sessionId: "session-2",
+        text: "先开始绘图。图片已经生成。",
+      },
+    ],
+    title: "Session 2",
     updated_at: "2026-01-02T00:00:00.000Z",
   };
 }
