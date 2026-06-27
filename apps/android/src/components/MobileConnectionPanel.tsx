@@ -4,7 +4,7 @@ import { ArrowLeft, Database, Key, Link2, Server, Trash2, Wifi } from "lucide-re
 import { deleteMobileCredential, saveMobileCredential } from "../lib/mobileCredentials";
 import { hasTurnServer, parsePairingUri } from "../lib/mobileWebRTC";
 import type { StatusMessage, StoredSettings } from "../mobileTypes";
-import { SettingsSection, SettingsStaticRow, SettingsSwitchRow } from "./MobileSettingsControls";
+import { SettingsButton, SettingsSection, SettingsStaticRow, SettingsSwitchRow } from "./MobileSettingsControls";
 import "./MobileSettingsPanel.css";
 
 interface MobileConnectionPanelProps {
@@ -18,6 +18,7 @@ interface MobileConnectionPanelProps {
 }
 
 export function MobileConnectionPanel(props: MobileConnectionPanelProps) {
+  const [view, setView] = useState<"root" | "detail">("root");
   const [pairingUri, setPairingUri] = useState("");
   const [bridgeUrlDraft, setBridgeUrlDraft] = useState(props.settings.bridgeUrl);
   const [apiTokenDraft, setAPITokenDraft] = useState(props.settings.apiToken ?? "");
@@ -31,6 +32,7 @@ export function MobileConnectionPanel(props: MobileConnectionPanelProps) {
 
     setBridgeUrlDraft(props.settings.bridgeUrl);
     setAPITokenDraft(props.settings.apiToken ?? "");
+    setView("root");
     setPairingUri("");
     setPairingError("");
     setPairingWarning("");
@@ -103,6 +105,15 @@ export function MobileConnectionPanel(props: MobileConnectionPanelProps) {
     props.onSettingsChange((current) => ({ ...current, apiToken: value }));
   }
 
+  function handleBack(): void {
+    if (view === "detail") {
+      setView("root");
+      return;
+    }
+
+    props.onClose();
+  }
+
   return (
     <section
       className={`mobile-settings-panel ${props.open ? "is-open" : ""}`}
@@ -114,59 +125,74 @@ export function MobileConnectionPanel(props: MobileConnectionPanelProps) {
     >
       <div className="mobile-settings-frame">
         <header className="mobile-settings-header">
-          <button className="mobile-settings-back" type="button" aria-label="返回" onClick={props.onClose}>
+          <button className="mobile-settings-back" type="button" aria-label="返回" onClick={handleBack}>
             <ArrowLeft className="mobile-settings-icon" aria-hidden="true" strokeWidth={2} />
           </button>
-          <h1 id="mobile-connection-title">连接</h1>
+          <h1 id="mobile-connection-title">{view === "detail" ? "连接" : "连接设置"}</h1>
           <span className="mobile-settings-header-spacer" aria-hidden="true" />
         </header>
 
         <div className="mobile-settings-body">
-          <SettingsSection title="连接偏好">
-            <div className="mobile-settings-card">
-              <SettingsSwitchRow
-                checked={props.settings.autoConnectEnabled}
-                icon={Wifi}
-                label="是否自动连接"
-                onChange={setAutoConnectEnabled}
-              />
-              <SettingsSwitchRow
-                checked={props.settings.persistComputerSessionsEnabled}
-                icon={Database}
-                label="是否持久化电脑会话内容"
-                sublabel={props.computerSessionPersistStatus.text}
-                onChange={setPersistComputerSessionsEnabled}
-              />
-              <SettingsSwitchRow
-                checked={props.settings.remoteExecutionEnabled}
-                disabled={props.connectionStatus.tone !== "success"}
-                icon={Server}
-                label="跟随电脑模型"
-                sublabel={remoteExecutionSublabel(
-                  props.settings.remoteExecutionEnabled,
-                  props.connectionStatus.tone !== "success",
-                )}
-                onChange={setRemoteExecutionEnabled}
-              />
-            </div>
-          </SettingsSection>
+          {view === "detail" ? (
+            <ConnectionSettings
+              apiTokenDraft={apiTokenDraft}
+              bridgeUrlDraft={bridgeUrlDraft}
+              pairingError={pairingError}
+              pairingUri={pairingUri}
+              pairingWarning={pairingWarning}
+              connectionStatus={props.connectionStatus}
+              settings={props.settings}
+              onConnect={props.onConnect}
+              onImportPairing={importPairing}
+              onPairingUriChange={setPairingUri}
+              onRemovePairing={removePairing}
+              onSaveAPIToken={saveAPIToken}
+              onSaveBridgeURL={saveBridgeURL}
+              onSetConnectionMode={setConnectionMode}
+            />
+          ) : (
+            <>
+              <SettingsSection title="连接偏好">
+                <div className="mobile-settings-card">
+                  <SettingsSwitchRow
+                    checked={props.settings.autoConnectEnabled}
+                    icon={Wifi}
+                    label="是否自动连接"
+                    onChange={setAutoConnectEnabled}
+                  />
+                  <SettingsSwitchRow
+                    checked={props.settings.persistComputerSessionsEnabled}
+                    icon={Database}
+                    label="是否持久化电脑会话内容"
+                    sublabel={props.computerSessionPersistStatus.text}
+                    onChange={setPersistComputerSessionsEnabled}
+                  />
+                  <SettingsSwitchRow
+                    checked={props.settings.remoteExecutionEnabled}
+                    disabled={props.connectionStatus.tone !== "success"}
+                    icon={Server}
+                    label="跟随电脑模型"
+                    sublabel={remoteExecutionSublabel(
+                      props.settings.remoteExecutionEnabled,
+                      props.connectionStatus.tone !== "success",
+                    )}
+                    onChange={setRemoteExecutionEnabled}
+                  />
+                </div>
+              </SettingsSection>
 
-          <ConnectionSettings
-            apiTokenDraft={apiTokenDraft}
-            bridgeUrlDraft={bridgeUrlDraft}
-            pairingError={pairingError}
-            pairingUri={pairingUri}
-            pairingWarning={pairingWarning}
-            connectionStatus={props.connectionStatus}
-            settings={props.settings}
-            onConnect={props.onConnect}
-            onImportPairing={importPairing}
-            onPairingUriChange={setPairingUri}
-            onRemovePairing={removePairing}
-            onSaveAPIToken={saveAPIToken}
-            onSaveBridgeURL={saveBridgeURL}
-            onSetConnectionMode={setConnectionMode}
-          />
+              <SettingsSection title="连接">
+                <div className="mobile-settings-card">
+                  <SettingsButton
+                    icon={Link2}
+                    label="连接"
+                    sublabel={connectionSublabel(props.settings, props.connectionStatus)}
+                    onClick={() => setView("detail")}
+                  />
+                </div>
+              </SettingsSection>
+            </>
+          )}
         </div>
       </div>
     </section>
@@ -341,4 +367,16 @@ function remoteExecutionSublabel(enabled: boolean, locked: boolean): string {
     return "连接电脑后可开启";
   }
   return enabled ? "使用电脑端当前激活模型" : "可在手机端自行选择模型";
+}
+
+function connectionSublabel(settings: StoredSettings, connectionStatus: StatusMessage): string {
+  if (connectionStatus.tone === "success") {
+    return connectionStatus.text;
+  }
+
+  if (settings.connectionMode === "webrtc") {
+    return settings.pairing ? `WebRTC / ${settings.pairing.pcId}` : "WebRTC / 未配对";
+  }
+
+  return settings.bridgeUrl.trim() || "HTTP / 未配置";
 }

@@ -36,11 +36,24 @@ describe("MobileConnectionPanel", () => {
     expect(screen.getByRole("switch", { name: /跟随电脑模型/ }).textContent).toContain("使用电脑端当前激活模型");
   });
 
+  it("opens connection detail from the connection button", () => {
+    renderConnectionPanel();
+
+    expect(screen.queryByLabelText("API Token")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /连接/ }));
+
+    expect(screen.getByLabelText("API Token")).toBeTruthy();
+    expect(screen.getByRole("group", { name: "连接模式" })).toBeTruthy();
+  });
+
   it("saves HTTP bridge URL and token drafts through settings updates", () => {
     const settings = baseSettings();
     const onSettingsChange = vi.fn();
 
     renderConnectionPanel({ settings, onSettingsChange });
+
+    fireEvent.click(screen.getByRole("button", { name: /连接/ }));
 
     fireEvent.change(screen.getByDisplayValue(settings.bridgeUrl), {
       target: { value: "http://192.168.1.10:8080" },
