@@ -1,4 +1,4 @@
-import type { Dispatch, FormEvent, SetStateAction } from "react";
+import type { Dispatch, FormEvent, KeyboardEvent, SetStateAction } from "react";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Database, Key, Link2, Server, Trash2, Wifi } from "lucide-react";
 import { deleteMobileCredential, saveMobileCredential } from "../lib/mobileCredentials";
@@ -266,6 +266,7 @@ function ConnectionSettings(props: ConnectionSettingsProps) {
                     aria-label="WebRTC 配对 URI"
                     placeholder="ghost-os://mobile-pair?..."
                     onChange={(event) => props.onPairingUriChange(event.target.value)}
+                    onKeyDown={(event) => handleEditableBackspace(event, props.pairingUri, props.onPairingUriChange)}
                   />
                   <span className="mobile-settings-resize-mark" aria-hidden={true}>
                     <span />
@@ -295,7 +296,11 @@ function ConnectionSettings(props: ConnectionSettingsProps) {
               <SettingsStaticRow icon={Server} label="HTTP" sublabel={props.bridgeUrlDraft || "未配置"} />
               <label className="mobile-settings-url-field">
                 <span>Bridge URL</span>
-                <input value={props.bridgeUrlDraft} onChange={(event) => props.onSaveBridgeURL(event.target.value)} />
+                <input
+                  value={props.bridgeUrlDraft}
+                  onChange={(event) => props.onSaveBridgeURL(event.target.value)}
+                  onKeyDown={(event) => handleEditableBackspace(event, props.bridgeUrlDraft, props.onSaveBridgeURL)}
+                />
               </label>
               <label className="mobile-settings-url-field mobile-settings-api-token-field">
                 <span>API Token</span>
@@ -306,6 +311,7 @@ function ConnectionSettings(props: ConnectionSettingsProps) {
                   autoComplete="off"
                   spellCheck={false}
                   onChange={(event) => props.onSaveAPIToken(event.target.value)}
+                  onKeyDown={(event) => handleEditableBackspace(event, props.apiTokenDraft, props.onSaveAPIToken)}
                 />
               </label>
             </div>
@@ -379,4 +385,59 @@ function connectionSublabel(settings: StoredSettings, connectionStatus: StatusMe
   }
 
   return settings.bridgeUrl.trim() || "HTTP / 未配置";
+}
+
+type EditableFieldElement = HTMLInputElement | HTMLTextAreaElement;
+
+function handleEditableBackspace(
+  event: KeyboardEvent<EditableFieldElement>,
+  value: string,
+  onChange: (value: string) => void,
+): void {
+  if (event.key !== "Backspace" || event.nativeEvent.isComposing) {
+    return;
+  }
+
+  const field = event.currentTarget;
+  if (field.disabled || field.readOnly) {
+    return;
+  }
+
+  // Android WebView may interpret Backspace as page-back in this sheet unless the edit stays local.
+  event.preventDefault();
+  event.stopPropagation();
+
+  const nextState = deleteBackward(value, field.selectionStart, field.selectionEnd);
+  onChange(nextState.value);
+
+  window.requestAnimationFrame(() => {
+    if (document.activeElement !== field) {
+      return;
+    }
+    field.setSelectionRange(nextState.caret, nextState.caret);
+  });
+}
+
+function deleteBackward(value: string, selectionStart: number | null, selectionEnd: number | null) {
+  const start = selectionStart ?? value.length;
+  const end = selectionEnd ?? value.length;
+  if (start !== end) {
+    return {
+      caret: start,
+      value: `${value.slice(0, start)}${value.slice(end)}`,
+    };
+  }
+
+  if (start === 0) {
+    return {
+      caret: 0,
+      value,
+    };
+  }
+
+  const caret = start - 1;
+  return {
+    caret,
+    value: `${value.slice(0, caret)}${value.slice(start)}`,
+  };
 }

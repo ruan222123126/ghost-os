@@ -67,6 +67,79 @@ describe("MobileConnectionPanel", () => {
     expect(saveUrl(settings)).toMatchObject({ bridgeUrl: "http://192.168.1.10:8080" });
     expect(saveToken(settings)).toMatchObject({ apiToken: "token-1" });
   });
+
+  it("keeps backspace inside the bridge url field instead of bubbling to the surrounding page", () => {
+    const onSettingsChange = vi.fn();
+    const surroundingBackHandler = vi.fn();
+
+    render(
+      <div
+        onKeyDown={(event) => {
+          if (event.key === "Backspace") {
+            surroundingBackHandler();
+          }
+        }}
+      >
+        <MobileConnectionPanel
+          open
+          settings={baseSettings()}
+          computerSessionPersistStatus={{ tone: "idle", text: "未开启" }}
+          connectionStatus={{ tone: "idle", text: "未连接" }}
+          onClose={vi.fn()}
+          onConnect={vi.fn()}
+          onSettingsChange={onSettingsChange}
+        />
+      </div>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /连接/ }));
+
+    const bridgeUrlInput = screen.getByDisplayValue("http://127.0.0.1:8080") as HTMLInputElement;
+    bridgeUrlInput.focus();
+    bridgeUrlInput.setSelectionRange(bridgeUrlInput.value.length, bridgeUrlInput.value.length);
+
+    fireEvent.keyDown(bridgeUrlInput, { key: "Backspace" });
+
+    expect(surroundingBackHandler).not.toHaveBeenCalled();
+    expect(screen.getByDisplayValue("http://127.0.0.1:808")).toBeTruthy();
+  });
+
+  it("keeps backspace inside the pairing textarea instead of bubbling to the surrounding page", () => {
+    const onSettingsChange = vi.fn();
+    const surroundingBackHandler = vi.fn();
+
+    render(
+      <div
+        onKeyDown={(event) => {
+          if (event.key === "Backspace") {
+            surroundingBackHandler();
+          }
+        }}
+      >
+        <MobileConnectionPanel
+          open
+          settings={{ ...baseSettings(), connectionMode: "webrtc" }}
+          computerSessionPersistStatus={{ tone: "idle", text: "未开启" }}
+          connectionStatus={{ tone: "idle", text: "未连接" }}
+          onClose={vi.fn()}
+          onConnect={vi.fn()}
+          onSettingsChange={onSettingsChange}
+        />
+      </div>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /连接/ }));
+
+    const pairingUriInput = screen.getByLabelText("WebRTC 配对 URI") as HTMLTextAreaElement;
+    fireEvent.change(pairingUriInput, { target: { value: "ghost-os://mobile-pair?abc=123" } });
+    pairingUriInput.focus();
+    pairingUriInput.setSelectionRange(pairingUriInput.value.length, pairingUriInput.value.length);
+
+    fireEvent.keyDown(pairingUriInput, { key: "Backspace" });
+
+    expect(surroundingBackHandler).not.toHaveBeenCalled();
+    expect(screen.getByDisplayValue("ghost-os://mobile-pair?abc=12")).toBeTruthy();
+  });
 });
 
 function renderConnectionPanel(
