@@ -8,6 +8,8 @@ import {
 } from '@/lib/workflow-editor/constants';
 import type { SessionImportResult, WorkflowCanvasNodeDraft } from '@/lib/workflow-editor/types';
 
+type AgentMessageTaskPayload = Extract<TaskPayload, { task_kind: 'agent_message' }>;
+
 interface SessionMessageSource {
   createdAt: string;
   message: string;
@@ -33,14 +35,37 @@ function buildSortedSessionMessages(tasks: TaskPayload[], sessionID: string): Se
   const normalizedSessionID = sessionID.trim();
 
   return tasks
-    .filter((task) => task.task_kind === 'agent_message')
-    .filter((task) => (task.session_id ?? '').trim() === normalizedSessionID)
-    .map((task) => ({
-      createdAt: task.created_at,
-      message: task.message.trim(),
-    }))
-    .filter((item) => item.message.length > 0)
-    .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+    .map((task) => sessionMessageSource(task, normalizedSessionID))
+    .filter((message): message is SessionMessageSource => message !== undefined)
+    .sort(compareSessionMessages);
+}
+
+function sessionMessageSource(
+  task: TaskPayload,
+  sessionID: string,
+): SessionMessageSource | undefined {
+  if (!isMatchingSessionMessageTask(task, sessionID)) {
+    return undefined;
+  }
+  const message = task.message.trim();
+  if (message.length === 0) {
+    return undefined;
+  }
+  return {
+    createdAt: task.created_at,
+    message,
+  };
+}
+
+function isMatchingSessionMessageTask(
+  task: TaskPayload,
+  sessionID: string,
+): task is AgentMessageTaskPayload {
+  return task.task_kind === 'agent_message' && (task.session_id ?? '').trim() === sessionID;
+}
+
+function compareSessionMessages(left: SessionMessageSource, right: SessionMessageSource): number {
+  return left.createdAt.localeCompare(right.createdAt);
 }
 
 function buildNodes(messages: SessionMessageSource[]): WorkflowCanvasNodeDraft[] {
