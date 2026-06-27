@@ -14,6 +14,7 @@ const LOAD_OLDER_TRIGGER_ROWS = 5;
 
 interface PrependAnchor {
   firstVisibleCommittedMessageId: string | null;
+  loadingOffsetPx: number;
   scrollHeight: number;
   scrollTop: number;
   visibleCommittedMessageCount: number;
@@ -314,6 +315,7 @@ function capturePrependAnchor(options: {
 
   prependAnchorRef.current = {
     firstVisibleCommittedMessageId,
+    loadingOffsetPx: 0,
     scrollHeight: container.scrollHeight,
     scrollTop: container.scrollTop,
     visibleCommittedMessageCount,
@@ -339,17 +341,39 @@ function restorePrependAnchor(options: {
     return;
   }
   if (loadingOlderHistory) {
+    applyPrependAnchorOffset(container, anchor);
     return;
   }
   const hasPrependedVisibleMessages = visibleCommittedMessageCount > anchor.visibleCommittedMessageCount
     && firstVisibleCommittedMessageId !== anchor.firstVisibleCommittedMessageId;
   if (!hasPrependedVisibleMessages) {
+    restorePrependAnchorAfterSkippedLoad(container, anchor);
     prependAnchorRef.current = null;
     return;
   }
 
-  container.scrollTop = anchor.scrollTop + (container.scrollHeight - anchor.scrollHeight);
+  applyPrependAnchorOffset(container, anchor);
   prependAnchorRef.current = null;
+}
+
+function applyPrependAnchorOffset(container: HTMLDivElement, anchor: PrependAnchor) {
+  const offsetPx = container.scrollHeight - anchor.scrollHeight;
+  if (offsetPx === 0) {
+    return;
+  }
+
+  container.scrollTop = anchor.scrollTop + offsetPx;
+  anchor.scrollHeight = container.scrollHeight;
+  anchor.scrollTop = container.scrollTop;
+  anchor.loadingOffsetPx += offsetPx;
+}
+
+function restorePrependAnchorAfterSkippedLoad(container: HTMLDivElement, anchor: PrependAnchor) {
+  if (anchor.loadingOffsetPx === 0) {
+    return;
+  }
+
+  container.scrollTop = anchor.scrollTop - anchor.loadingOffsetPx;
 }
 
 function scheduleScrollToBottom(options: {
