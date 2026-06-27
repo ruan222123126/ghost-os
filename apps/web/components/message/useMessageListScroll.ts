@@ -39,6 +39,7 @@ export function useMessageListScroll(options: UseMessageListScrollOptions) {
   const autoFollowRef = useRef(true);
   const olderLoadPendingRef = useRef(false);
   const prependAnchorRef = useRef<PrependAnchor | null>(null);
+  const skipOlderHistoryLoadOnceRef = useRef(false);
   const scrollFrameRef = useRef<number | null>(null);
   const postSendFollowTrackingRef = useRef<PostSendFollowTrackingState>({
     mode: 'idle',
@@ -66,7 +67,21 @@ export function useMessageListScroll(options: UseMessageListScrollOptions) {
     postSendFollowTrackingRef,
     setPostSendFollowTracking,
   );
-  useOlderHistoryLoading({ ...options, olderLoadPendingRef, prependAnchorRef, scrollElementRef });
+  useInitialBottomScroll({
+    autoFollowRef,
+    loadingOlderHistory: options.loadingOlderHistory,
+    prependAnchorRef,
+    scrollElementRef,
+    skipOlderHistoryLoadOnceRef,
+    visibleCommittedMessageCount: options.visibleCommittedMessageCount,
+  });
+  useOlderHistoryLoading({
+    ...options,
+    olderLoadPendingRef,
+    prependAnchorRef,
+    scrollElementRef,
+    skipOlderHistoryLoadOnceRef,
+  });
   usePrependAnchorRestore({ ...options, prependAnchorRef, scrollElementRef });
   const { trailingSpacerPx } = useMessageListPostSendFocus({
     autoFollowRef,
@@ -85,6 +100,43 @@ export function useMessageListScroll(options: UseMessageListScrollOptions) {
   useScrollFrameCleanup(scrollFrameRef);
 
   return { scrollElementRef, trailingSpacerPx };
+}
+
+function useInitialBottomScroll(options: {
+  autoFollowRef: MutableRefObject<boolean>;
+  loadingOlderHistory: boolean;
+  prependAnchorRef: MutableRefObject<PrependAnchor | null>;
+  scrollElementRef: MutableRefObject<HTMLDivElement | null>;
+  skipOlderHistoryLoadOnceRef: MutableRefObject<boolean>;
+  visibleCommittedMessageCount: number;
+}) {
+  const completedRef = useRef(false);
+
+  useLayoutEffect(() => {
+    if (completedRef.current || options.loadingOlderHistory) {
+      return;
+    }
+    if (options.visibleCommittedMessageCount === 0 || options.prependAnchorRef.current) {
+      return;
+    }
+
+    const container = options.scrollElementRef.current;
+    if (!container) {
+      return;
+    }
+
+    container.scrollTop = container.scrollHeight;
+    options.autoFollowRef.current = true;
+    options.skipOlderHistoryLoadOnceRef.current = true;
+    completedRef.current = true;
+  }, [
+    options.autoFollowRef,
+    options.loadingOlderHistory,
+    options.prependAnchorRef,
+    options.scrollElementRef,
+    options.skipOlderHistoryLoadOnceRef,
+    options.visibleCommittedMessageCount,
+  ]);
 }
 
 function useVirtualizerSizeAdjustment(
@@ -180,6 +232,7 @@ function useOlderHistoryLoading(options: UseOlderHistoryLoadingOptions) {
     olderLoadPendingRef,
     prependAnchorRef,
     scrollElementRef,
+    skipOlderHistoryLoadOnceRef,
     visibleCommittedMessageCount,
   } = options;
   const handleLoadOlderHistory = useCallback(async () => {
@@ -214,12 +267,22 @@ function useOlderHistoryLoading(options: UseOlderHistoryLoadingOptions) {
   ]);
 
   useEffect(() => {
+    if (skipOlderHistoryLoadOnceRef.current) {
+      skipOlderHistoryLoadOnceRef.current = false;
+      return;
+    }
     if (!shouldLoadOlderHistory({ firstVirtualItemIndex, hasOlderHistory, loadingOlderHistory })) {
       return;
     }
 
     void handleLoadOlderHistory();
-  }, [firstVirtualItemIndex, handleLoadOlderHistory, hasOlderHistory, loadingOlderHistory]);
+  }, [
+    firstVirtualItemIndex,
+    handleLoadOlderHistory,
+    hasOlderHistory,
+    loadingOlderHistory,
+    skipOlderHistoryLoadOnceRef,
+  ]);
 }
 
 function usePrependAnchorRestore(options: PrependAnchorRestoreOptions) {
@@ -278,6 +341,7 @@ interface UseOlderHistoryLoadingOptions extends UseMessageListScrollOptions {
   olderLoadPendingRef: MutableRefObject<boolean>;
   prependAnchorRef: MutableRefObject<PrependAnchor | null>;
   scrollElementRef: MutableRefObject<HTMLDivElement | null>;
+  skipOlderHistoryLoadOnceRef: MutableRefObject<boolean>;
 }
 
 interface PrependAnchorRestoreOptions extends UseMessageListScrollOptions {
