@@ -78,6 +78,34 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     }
   }, [options.messages, options.reply, options.statusTone]);
 
+  useLayoutEffect(() => {
+    const element = scrollRef.current;
+    if (!element || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const resizeObserver = new ResizeObserver(() => {
+      if (postSendLockRef.current) {
+        syncPostSendLock();
+        return;
+      }
+
+      if (autoFollowRef.current && (options.messages.length > 0 || options.reply)) {
+        scrollToBottom("auto");
+        return;
+      }
+
+      const shouldShow = shouldShowScrollDown(element);
+      autoFollowRef.current = !shouldShow;
+      setShowScrollDown(shouldShow);
+    });
+
+    resizeObserver.observe(element);
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [options.messages.length, options.reply, options.statusTone]);
+
   useEffect(() => {
     return () => {
       cancelScheduledScroll();

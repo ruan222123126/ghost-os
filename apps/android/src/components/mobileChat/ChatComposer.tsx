@@ -8,9 +8,10 @@ import "./ChatComposer.css";
 interface ChatComposerProps {
   agentRuntime: AgentRuntimeType;
   canEnableCodexMode?: boolean;
+  canSubmit?: boolean;
   value: string;
   canStop?: boolean;
-  disabled: boolean;
+  disabled?: boolean;
   loading: boolean;
   selectedSkill?: ChatSelectedSkill | null;
   skills?: SkillPayload[];
@@ -43,8 +44,10 @@ export function ChatComposer(props: ChatComposerProps) {
   const [menuView, setMenuView] = useState<ComposerMenuView>(null);
   const hasSelectedSkill = Boolean(props.selectedSkill);
   const hasValue = props.value.trim().length > 0;
+  const hasPendingSubmission = hasValue || hasSelectedSkill;
+  const canSubmit = props.canSubmit ?? hasPendingSubmission;
   const showStop = props.loading && props.onStop !== undefined;
-  const showAction = hasValue || showStop || hasSelectedSkill;
+  const showAction = hasPendingSubmission || showStop;
   const wrapsPastSingleLine = useSingleLineOverflow(lineMeasureRef, props.value);
   const isMultiLine = props.value.includes("\n") || wrapsPastSingleLine;
   const keyboardInset = useKeyboardInset(focused);
@@ -68,7 +71,9 @@ export function ChatComposer(props: ChatComposerProps) {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     setMenuView(null);
-    await props.onSubmit(event);
+    const submitPromise = props.onSubmit(event);
+    focusComposerInput(textareaRef.current);
+    await submitPromise;
   }
 
   function handleStop(): void {
@@ -270,7 +275,7 @@ export function ChatComposer(props: ChatComposerProps) {
               <button
                 className={`send-button ${showStop ? "is-stop" : ""}`}
                 type={showStop ? "button" : "submit"}
-                disabled={showStop ? !props.canStop : props.disabled}
+                disabled={showStop ? !props.canStop : props.disabled || !canSubmit}
                 onClick={showStop ? handleStop : undefined}
                 aria-busy={props.loading}
                 aria-label={showStop ? (props.canStop ? "停止生成" : "停止中") : "发送任务"}
@@ -424,4 +429,8 @@ function sortEnabledSkills(skills: SkillPayload[]): SkillPayload[] {
       }
       return left.source.localeCompare(right.source, "zh-Hans");
     });
+}
+
+function focusComposerInput(textarea: HTMLTextAreaElement | null): void {
+  textarea?.focus({ preventScroll: true });
 }

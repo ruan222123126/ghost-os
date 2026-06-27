@@ -20,18 +20,23 @@ interface PostSendFocusRequest {
   token: number;
 }
 
+type ResizeObserverCallback = ConstructorParameters<typeof ResizeObserver>[0];
+
 const hookSnapshots: HookSnapshot[] = [];
 let rafCallbacks: FrameRequestCallback[] = [];
+let resizeObservers: MockResizeObserver[] = [];
 
 describe("useChatFeedScroll", () => {
   beforeEach(() => {
     hookSnapshots.length = 0;
     rafCallbacks = [];
+    resizeObservers = [];
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
       rafCallbacks.push(callback);
       return rafCallbacks.length;
     });
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    vi.stubGlobal("ResizeObserver", MockResizeObserver);
   });
 
   afterEach(() => {
@@ -220,7 +225,56 @@ describe("useChatFeedScroll", () => {
     expect(latestSnapshot().trailingSpacerPx).toBe(0);
     expect(feed.scrollTo).not.toHaveBeenCalled();
   });
+
+  it("recomputes the locked spacer when the feed viewport height changes", () => {
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 300 });
+    const localMessage = message("pending:user:1710000000000", "user");
+    const { rerender } = render(<ScrollHarness messages={[]} metrics={metrics} />);
+
+    rerender(
+      <ScrollHarness
+        messages={[localMessage]}
+        metrics={metrics}
+        postSendFocusRequest={postSendRequest(localMessage.id)}
+        rowTops={{ [localMessage.id]: 120 }}
+      />,
+    );
+    flushRaf();
+
+    expect(latestSnapshot().trailingSpacerPx).toBe(320);
+
+    metrics.scrollHeight = 620;
+    metrics.clientHeight = 640;
+    notifyResize(feedElement());
+
+    expect(latestSnapshot().trailingSpacerPx).toBe(460);
+  });
 });
+
+class MockResizeObserver {
+  readonly disconnect = vi.fn(() => {
+    this.elements.clear();
+  });
+  readonly observe = vi.fn((element: Element) => {
+    this.elements.add(element);
+  });
+  readonly unobserve = vi.fn((element: Element) => {
+    this.elements.delete(element);
+  });
+  private readonly elements = new Set<Element>();
+
+  constructor(private readonly callback: ResizeObserverCallback) {
+    resizeObservers.push(this);
+  }
+
+  notify(element: Element): void {
+    if (!this.elements.has(element)) {
+      return;
+    }
+
+    this.callback([{ target: element } as ResizeObserverEntry], this as unknown as ResizeObserver);
+  }
+}
 
 function ScrollHarness(props: {
   messages: MobileConversationMessage[];
@@ -354,6 +408,14 @@ function latestSnapshot(): HookSnapshot {
     throw new Error("No hook snapshot recorded");
   }
   return snapshot;
+}
+
+function notifyResize(element: Element): void {
+  act(() => {
+    for (const observer of resizeObservers) {
+      observer.notify(element);
+    }
+  });
 }
 
 function flushRaf(): void {

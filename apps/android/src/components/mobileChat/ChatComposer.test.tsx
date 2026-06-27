@@ -149,6 +149,38 @@ describe("ChatComposer", () => {
 
     expect(screen.queryByRole("button", { name: "取消已选技能 release_flow" })).toBeNull();
   });
+
+  it("keeps the textarea focus after submit clears the draft", async () => {
+    function Harness() {
+      const [value, setValue] = useState("请总结这段日志");
+
+      return (
+        <ChatComposer
+          agentRuntime="ghost"
+          canSubmit={value.trim().length > 0}
+          loading={false}
+          onChange={setValue}
+          onSubmit={async (event) => {
+            event.preventDefault();
+            setValue("");
+          }}
+          value={value}
+        />
+      );
+    }
+
+    render(<Harness />);
+
+    const textarea = screen.getByRole<HTMLTextAreaElement>("textbox");
+    fireEvent.focus(textarea);
+    fireEvent.click(screen.getByRole("button", { name: "发送任务" }));
+
+    await waitFor(() => {
+      const input = screen.getByRole<HTMLTextAreaElement>("textbox");
+      expect(document.activeElement).toBe(input);
+      expect(input.disabled).toBe(false);
+    });
+  });
 });
 
 function mockTextareaScrollHeight(): void {

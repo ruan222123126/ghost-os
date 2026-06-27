@@ -156,7 +156,7 @@ function App() {
   });
   const displayStatus = mobileSessions.activeStatus.tone === "idle" ? status : mobileSessions.activeStatus;
   const supportsComposerSkills = Boolean(config) && (agentRuntime === "codex" || settings.remoteExecutionEnabled);
-  const canSend = (isNonEmptyMessage(message) || selectedSkill !== null) && mobileSessions.canSend;
+  const canSubmit = isNonEmptyMessage(message) || selectedSkill !== null;
   const runtimeLabel = useMemo(
     () => displayRuntime(agentRuntime, agentRuntime === "codex" ? config : chatConfig),
     [agentRuntime, chatConfig, config],
@@ -375,8 +375,9 @@ function App() {
         <ChatComposer
           agentRuntime={agentRuntime}
           canEnableCodexMode={Boolean(config)}
+          canSubmit={canSubmit}
+          disabled={!mobileSessions.canSend}
           value={message}
-          disabled={!canSend}
           canStop={(settings.remoteExecutionEnabled || agentRuntime === "codex") && mobileSessions.canStop}
           loading={mobileSessions.activeStatus.tone === "loading"}
           selectedSkill={selectedSkill}
