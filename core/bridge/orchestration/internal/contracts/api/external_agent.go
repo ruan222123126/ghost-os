@@ -5,6 +5,7 @@ type ExternalAgentRequest struct {
 	Message        string `json:"message,omitempty"`
 	SessionID      string `json:"session_id,omitempty"`
 	PermissionMode string `json:"permission_mode,omitempty"`
+	Mode           string `json:"mode,omitempty"`
 	Model          string `json:"model,omitempty"`
 	Effort         string `json:"effort,omitempty"`
 	ProjectRoot    string `json:"project_root,omitempty"`

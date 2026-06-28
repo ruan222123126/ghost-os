@@ -229,6 +229,43 @@ func TestManagerExecuteStreamMapsCodexAgentMessageContentDelta(t *testing.T) {
 	})
 }
 
+func TestManagerExecuteStreamSetsCodexPlanModeBeforeTurn(t *testing.T) {
+	manager, sessionStore, fake := newExternalAgentTestManager(t)
+	fake.threadModel = "gpt-5.5"
+	var turnStartedAfterMode bool
+	fake.startTurn = func(ctx context.Context, client *fakeCodexClient, opts TurnOptions) (string, error) {
+		turnStartedAfterMode = client.collaborationMode().Mode == CodexModePlan
+		client.emit(CodexEvent{Type: "agent_message", Payload: map[string]any{"message": "planned"}})
+		client.emit(CodexEvent{Type: "task_complete", Payload: map[string]any{"turn_id": "turn-plan"}})
+		return "turn-plan", nil
+	}
+
+	message, sessionID, err := manager.ExecuteStream(context.Background(), api.ExternalAgentRequest{
+		Message: "make a plan",
+		Mode:    CodexModePlan,
+	}, "trace-plan", newCollectingSink(), true)
+	if err != nil {
+		t.Fatalf("ExecuteStream: %v", err)
+	}
+	if message != "planned" {
+		t.Fatalf("unexpected message: got %q", message)
+	}
+	if !turnStartedAfterMode {
+		t.Fatalf("expected plan mode to be set before turn/start; got %+v", fake.collaborationMode())
+	}
+	mode := fake.collaborationMode()
+	if mode.ThreadID != "thread-1" || mode.Mode != CodexModePlan || mode.Model != "gpt-5.5" || mode.Effort != "" {
+		t.Fatalf("unexpected collaboration mode: %+v", mode)
+	}
+	loaded, err := sessionStore.Load(sessionID)
+	if err != nil {
+		t.Fatalf("load session: %v", err)
+	}
+	if loaded.ExternalRuntime == nil || loaded.ExternalRuntime.Mode != CodexModePlan {
+		t.Fatalf("expected persisted plan mode: %+v", loaded.ExternalRuntime)
+	}
+}
+
 func TestManagerExecuteStreamPersistsRunningTurnDraft(t *testing.T) {
 	manager, sessionStore, fake := newExternalAgentTestManager(t)
 	fake.turnStarted = make(chan struct{})
@@ -685,14 +722,16 @@ type fakeCodexClient struct {
 	approvalHandler func(context.Context, ApprovalRequest) (string, error)
 	startTurn       func(context.Context, *fakeCodexClient, TurnOptions) (string, error)
 
-	startThreadOpts  ThreadOptions
-	resumeThreadOpts ThreadOptions
-	turnOpts         TurnOptions
-	decision         string
+	startThreadOpts       ThreadOptions
+	resumeThreadOpts      ThreadOptions
+	collaborationModeOpts CollaborationModeOptions
+	turnOpts              TurnOptions
+	decision              string
 
 	turnStarted chan struct{}
 	interrupted chan struct{}
 	threadID    string
+	threadModel string
 	turnID      string
 }
 
@@ -709,16 +748,25 @@ func (f *fakeCodexClient) StartThread(_ context.Context, opts ThreadOptions) (Th
 	f.mu.Lock()
 	f.startThreadOpts = opts
 	threadID := f.threadID
+	model := defaultString(f.threadModel, opts.Model)
 	f.mu.Unlock()
-	return ThreadResult{ThreadID: threadID, Model: opts.Model}, nil
+	return ThreadResult{ThreadID: threadID, Model: model}, nil
 }
 
 func (f *fakeCodexClient) ResumeThread(_ context.Context, opts ThreadOptions) (ThreadResult, error) {
 	f.mu.Lock()
 	f.resumeThreadOpts = opts
 	threadID := opts.ThreadID
+	model := defaultString(f.threadModel, opts.Model)
 	f.mu.Unlock()
-	return ThreadResult{ThreadID: threadID, Model: opts.Model}, nil
+	return ThreadResult{ThreadID: threadID, Model: model}, nil
+}
+
+func (f *fakeCodexClient) SetCollaborationMode(_ context.Context, opts CollaborationModeOptions) error {
+	f.mu.Lock()
+	f.collaborationModeOpts = opts
+	f.mu.Unlock()
+	return nil
 }
 
 func (f *fakeCodexClient) StartTurn(ctx context.Context, opts TurnOptions) (string, error) {
@@ -807,6 +855,12 @@ func (f *fakeCodexClient) resumeThreadID() string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.resumeThreadOpts.ThreadID
+}
+
+func (f *fakeCodexClient) collaborationMode() CollaborationModeOptions {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.collaborationModeOpts
 }
 
 type collectingSink struct {

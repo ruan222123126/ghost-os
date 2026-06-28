@@ -1,7 +1,6 @@
 package externalagent
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -43,6 +42,10 @@ func (m *Manager) prepareRun(req api.ExternalAgentRequest, forceStart bool) (pre
 	if err != nil {
 		return preparedRun{}, err
 	}
+	req.Mode, err = normalizeCodexMode(req.Mode)
+	if err != nil {
+		return preparedRun{}, err
+	}
 	cwd := resolveCWD(req.ProjectRoot, cfg.ProjectRoot)
 	sess, err := m.prepareSession(req, forceStart, cfg, policy, cwd)
 	if err != nil {
@@ -81,6 +84,7 @@ func (m *Manager) prepareSession(
 	ext.Provider = ProviderCodex
 	ext.Status = StatusRunning
 	ext.PermissionMode = policy.PermissionMode
+	ext.Mode = strings.TrimSpace(req.Mode)
 	ext.Model = strings.TrimSpace(req.Model)
 	ext.Effort = strings.TrimSpace(req.Effort)
 	ext.CWD = cwd
@@ -101,29 +105,6 @@ func (m *Manager) prepareSession(
 		return nil, err
 	}
 	return sess, nil
-}
-
-func (m *Manager) ensureThread(ctx context.Context, client CodexClient, prepared preparedRun) (string, error) {
-	ext := prepared.session.ExternalRuntime
-	opts := ThreadOptions{
-		Model:          prepared.request.Model,
-		CWD:            prepared.cwd,
-		ApprovalPolicy: prepared.policy.ApprovalPolicy,
-		Sandbox:        prepared.policy.Sandbox,
-	}
-	if ext != nil && strings.TrimSpace(ext.ThreadID) != "" {
-		opts.ThreadID = ext.ThreadID
-		result, err := client.ResumeThread(ctx, opts)
-		if err != nil {
-			return "", err
-		}
-		return result.ThreadID, nil
-	}
-	result, err := client.StartThread(ctx, opts)
-	if err != nil {
-		return "", err
-	}
-	return result.ThreadID, nil
 }
 
 func (m *Manager) runtimeForSession(sessionID string, cfg bridgeconfig.Config, cwd string) (*runtimeSession, error) {

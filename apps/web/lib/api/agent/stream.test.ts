@@ -214,6 +214,7 @@ describe('lib/api/agent/stream', () => {
     await streamExternalMessage({
       message: 'ship release',
       model: ' gpt-5.5 ',
+      mode: 'plan',
       onEvent: async () => undefined,
       permissionMode: 'safe-yolo',
       traceId: 'trace-codex',
@@ -224,6 +225,7 @@ describe('lib/api/agent/stream', () => {
     expect(JSON.parse(String(init.body))).toEqual({
       message: 'ship release',
       model: 'gpt-5.5',
+      mode: 'plan',
       permission_mode: 'safe-yolo',
       provider: 'codex',
     });

@@ -22,6 +22,14 @@
             "yolo"
           ]
         },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "default",
+            "plan"
+          ],
+          "description": "Optional Codex collaboration mode. `plan` enters Codex Plan mode; `default` leaves Plan mode."
+        },
         "model": {
           "type": "string"
         },

@@ -22,6 +22,7 @@ type ExternalRuntime struct {
 	ThreadID         string                    `json:"thread_id,omitempty"`
 	TurnID           string                    `json:"turn_id,omitempty"`
 	PermissionMode   string                    `json:"permission_mode,omitempty"`
+	Mode             string                    `json:"mode,omitempty"`
 	Model            string                    `json:"model,omitempty"`
 	Effort           string                    `json:"effort,omitempty"`
 	CWD              string                    `json:"cwd,omitempty"`
@@ -54,6 +55,7 @@ func cloneExternalRuntime(raw *ExternalRuntime) *ExternalRuntime {
 	cloned.ThreadID = strings.TrimSpace(raw.ThreadID)
 	cloned.TurnID = strings.TrimSpace(raw.TurnID)
 	cloned.PermissionMode = strings.TrimSpace(raw.PermissionMode)
+	cloned.Mode = strings.TrimSpace(raw.Mode)
 	cloned.Model = strings.TrimSpace(raw.Model)
 	cloned.Effort = strings.TrimSpace(raw.Effort)
 	cloned.CWD = strings.TrimSpace(raw.CWD)

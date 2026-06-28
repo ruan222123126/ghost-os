@@ -5,6 +5,7 @@ import type {
   AgentRuntimeType,
   ChatMessage,
   ChatSendInput,
+  ExternalAgentMode,
   ExternalCodexPermissionMode,
   PendingQuestionMessage,
   SessionImageContent,
@@ -54,6 +55,7 @@ export interface UseBridgeChatOptions {
 
 export interface StreamAgentRunInput {
   agentRuntime?: AgentRuntimeType;
+  codexMode?: ExternalAgentMode;
   images?: SessionImageContent[];
   message: string;
   mode?: ChatSendInput['mode'];

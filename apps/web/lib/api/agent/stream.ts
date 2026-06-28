@@ -2,6 +2,7 @@ import type {
   AgentRequest,
   AgentStreamEvent,
   ExternalAgentRequest,
+  ExternalAgentMode,
   ExternalCodexPermissionMode,
   HumanResponseRequest,
 } from '@/lib/types';
@@ -64,6 +65,7 @@ export interface StreamAgentMessageOptions {
 export interface StreamExternalAgentMessageOptions {
   message: string;
   model?: string;
+  mode?: ExternalAgentMode;
   onEvent: (event: AgentStreamEvent) => void | Promise<void>;
   permissionMode: ExternalCodexPermissionMode;
   projectRoot?: string;
@@ -113,6 +115,9 @@ export async function streamExternalMessage(options: StreamExternalAgentMessageO
   };
   if (options.model?.trim()) {
     body.model = options.model.trim();
+  }
+  if (options.mode) {
+    body.mode = options.mode;
   }
   if (options.projectRoot?.trim()) {
     body.project_root = options.projectRoot.trim();

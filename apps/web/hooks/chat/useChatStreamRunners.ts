@@ -131,6 +131,7 @@ function useAgentStreamRunner(options: StreamRunnerOptions) {
         ? await streamExternalMessage({
           message: run.message,
           model: run.model,
+          mode: run.codexMode,
           onEvent: handleEvent,
           permissionMode: run.permissionMode ?? 'default',
           projectRoot: run.projectRoot,

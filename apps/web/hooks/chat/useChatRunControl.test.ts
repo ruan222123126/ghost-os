@@ -135,6 +135,7 @@ describe('hooks/chat/useChatRunControl', () => {
     await act(async () => {
       await latestState!.sendChatMessage({
         agentRuntime: 'codex',
+        codexMode: 'plan',
         images: [],
         message: 'ship release',
         model: 'gpt-5.5',
@@ -144,6 +145,7 @@ describe('hooks/chat/useChatRunControl', () => {
     expect(streamedRuns).toEqual([
       expect.objectContaining({
         agentRuntime: 'codex',
+        codexMode: 'plan',
         message: 'ship release',
         model: 'gpt-5.5',
         permissionMode: 'safe-yolo',

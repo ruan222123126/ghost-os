@@ -50,7 +50,7 @@ export const ChatInput: FC<ChatInputProps> = ({
   const canSubmit = draft.trim().length > 0 || pendingImages.length > 0 || selectedSkill !== null;
 
   const handleSubmit = useCallback(async () => {
-    const input = buildChatSendInput(draft, pendingImages, selectedSkill, agentMode);
+    const input = buildChatSendInput(draft, pendingImages, selectedSkill, agentMode, activeModel);
     if (!canSubmitChatInput(input)) {
       return;
     }
@@ -71,7 +71,7 @@ export const ChatInput: FC<ChatInputProps> = ({
       setSelectedSkill(previousSkill);
       throw error;
     }
-  }, [agentMode, draft, onSend, pendingImages, selectedSkill]);
+  }, [activeModel, agentMode, draft, onSend, pendingImages, selectedSkill]);
 
   const handleSelectFiles = useCallback(async (files: FileList) => {
     try {
@@ -153,13 +153,38 @@ function buildChatSendInput(
   images: ChatImageDraft[],
   selectedSkill: ChatSelectedSkill | null,
   agentMode: AgentModeSelection,
+  activeModel: ProviderModelOption | null,
 ): ChatSendInput {
+  const codexModeEnabled = agentMode !== null;
   const input: ChatSendInput = {
+    agentRuntime: codexModeEnabled ? 'codex' : undefined,
+    codexMode: resolveCodexMode(agentMode),
     message: message.trim(),
-    mode: agentMode === 'plan' ? 'plan' : undefined,
+    model: resolveCodexModel(agentMode, activeModel),
     images,
   };
   return selectedSkill ? { ...input, selectedSkill } : input;
+}
+
+function resolveCodexMode(agentMode: AgentModeSelection): ChatSendInput['codexMode'] {
+  if (agentMode === 'normal') {
+    return 'default';
+  }
+  if (agentMode === 'plan') {
+    return 'plan';
+  }
+  return undefined;
+}
+
+function resolveCodexModel(
+  agentMode: AgentModeSelection,
+  activeModel: ProviderModelOption | null,
+): string | undefined {
+  if (agentMode === null || activeModel?.providerType !== 'codex') {
+    return undefined;
+  }
+
+  return activeModel.model.trim() || undefined;
 }
 
 function canSubmitChatInput(input: ChatSendInput): boolean {

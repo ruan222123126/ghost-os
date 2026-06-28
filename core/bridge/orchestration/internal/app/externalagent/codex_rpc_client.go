@@ -217,6 +217,38 @@ func decodeThreadResult(raw json.RawMessage) (ThreadResult, error) {
 	return ThreadResult{ThreadID: strings.TrimSpace(decoded.Thread.ID), Model: strings.TrimSpace(decoded.Model)}, nil
 }
 
+func (c *appServerClient) SetCollaborationMode(ctx context.Context, opts CollaborationModeOptions) error {
+	mode := strings.TrimSpace(opts.Mode)
+	if mode == "" {
+		return nil
+	}
+
+	params := map[string]any{
+		"threadId": strings.TrimSpace(opts.ThreadID),
+		"collaborationMode": map[string]any{
+			"mode": mode,
+			"settings": map[string]any{
+				"model":                  strings.TrimSpace(opts.Model),
+				"reasoning_effort":       collaborationModeEffort(mode, opts.Effort),
+				"developer_instructions": nil,
+			},
+		},
+	}
+	_, err := c.request(ctx, "thread/settings/update", params)
+	return err
+}
+
+func collaborationModeEffort(mode string, effort string) any {
+	trimmed := strings.TrimSpace(effort)
+	if trimmed != "" {
+		return trimmed
+	}
+	if strings.TrimSpace(mode) == CodexModePlan {
+		return "medium"
+	}
+	return nil
+}
+
 func (c *appServerClient) StartTurn(ctx context.Context, opts TurnOptions) (string, error) {
 	params := map[string]any{
 		"threadId": strings.TrimSpace(opts.ThreadID),

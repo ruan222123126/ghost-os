@@ -74,6 +74,7 @@ export interface ExternalAgentRequest {
   message?: string;
   session_id?: string;
   permission_mode?: 'read-only' | 'default' | 'safe-yolo' | 'yolo';
+  mode?: 'default' | 'plan';
   model?: string;
   effort?: string;
   project_root?: string;

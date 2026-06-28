@@ -111,6 +111,8 @@ pub struct ExternalAgentRequest {
     #[serde(default)]
     pub permission_mode: Option<String>,
     #[serde(default)]
+    pub mode: Option<String>,
+    #[serde(default)]
     pub model: Option<String>,
     #[serde(default)]
     pub effort: Option<String>,

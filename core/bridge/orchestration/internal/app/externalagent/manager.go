@@ -2,6 +2,7 @@ package externalagent
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -95,8 +96,18 @@ func (m *Manager) ExecuteStream(
 		_ = m.finishWithError(ctx, prepared.session.ID, traceID, prepared.session.TurnIndex, runSink, err)
 		return "", sessionID, err
 	}
-	threadID, err := m.ensureThread(ctx, runtime.client, prepared)
+	threadResult, err := m.ensureThread(ctx, runtime.client, prepared)
 	if err != nil {
+		_ = m.finishWithError(ctx, sessionID, traceID, prepared.session.TurnIndex, runSink, err)
+		return "", sessionID, err
+	}
+	threadID := strings.TrimSpace(threadResult.ThreadID)
+	if err := runtime.client.SetCollaborationMode(ctx, CollaborationModeOptions{
+		ThreadID: threadID,
+		Mode:     prepared.request.Mode,
+		Model:    resolveCollaborationModeModel(prepared.request.Model, threadResult.Model),
+		Effort:   prepared.request.Effort,
+	}); err != nil {
 		_ = m.finishWithError(ctx, sessionID, traceID, prepared.session.TurnIndex, runSink, err)
 		return "", sessionID, err
 	}
@@ -155,6 +166,40 @@ func (m *Manager) ExecuteStream(
 		final := runtime.finalText()
 		return final, sessionID, nil
 	}
+}
+
+func (m *Manager) ensureThread(ctx context.Context, client CodexClient, prepared preparedRun) (ThreadResult, error) {
+	ext := prepared.session.ExternalRuntime
+	opts := ThreadOptions{
+		Model:          prepared.request.Model,
+		CWD:            prepared.cwd,
+		ApprovalPolicy: prepared.policy.ApprovalPolicy,
+		Sandbox:        prepared.policy.Sandbox,
+	}
+	if ext != nil && strings.TrimSpace(ext.ThreadID) != "" {
+		opts.ThreadID = ext.ThreadID
+		return client.ResumeThread(ctx, opts)
+	}
+	return client.StartThread(ctx, opts)
+}
+
+func normalizeCodexMode(raw string) (string, error) {
+	mode := strings.ToLower(strings.TrimSpace(raw))
+	switch mode {
+	case "":
+		return "", nil
+	case CodexModeDefault, CodexModePlan:
+		return mode, nil
+	default:
+		return "", fmt.Errorf("unsupported external codex mode: %q", mode)
+	}
+}
+
+func resolveCollaborationModeModel(requestModel string, threadModel string) string {
+	if model := strings.TrimSpace(requestModel); model != "" {
+		return model
+	}
+	return strings.TrimSpace(threadModel)
 }
 
 func (m *Manager) Stop(ctx context.Context, req api.ExternalAgentStopParams) (api.ExternalAgentResponse, error) {

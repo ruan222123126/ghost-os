@@ -99,6 +99,7 @@ export type { TaskRunCard } from '@/lib/taskRunCards';
 export type SessionTurnDraft = SharedSessionTurnDraft;
 export type AgentRuntimeType = 'ghost' | 'codex';
 export type AgentModeSelection = 'normal' | 'plan' | null;
+export type ExternalAgentMode = 'default' | 'plan';
 export type ExternalCodexPermissionMode = 'read-only' | 'default' | 'safe-yolo' | 'yolo';
 
 export interface UserChatMessage {
@@ -204,6 +205,7 @@ export interface ChatImageDraft {
 
 export interface ChatSendInput {
   agentRuntime?: AgentRuntimeType;
+  codexMode?: ExternalAgentMode;
   message: string;
   mode?: SharedAgentRequest['mode'];
   model?: string;
