@@ -21,7 +21,6 @@ export interface RuntimeFormState {
   sessionHumanLogFullEnabled: boolean;
   sessionSystemPromptVisibleEnabled: boolean;
   assistantMarkdownEnabled: boolean;
-  toolCallCompactOutputEnabled: boolean;
   memoryModeEnabled: boolean;
   microcompactEnabled: boolean;
   sessionTitleMode: BridgeConfig['session_title_mode'];
@@ -42,7 +41,6 @@ const DEFAULT_RUNTIME_FORM_STATE: RuntimeFormState = {
   sessionHumanLogFullEnabled: false,
   sessionSystemPromptVisibleEnabled: true,
   assistantMarkdownEnabled: true,
-  toolCallCompactOutputEnabled: false,
   memoryModeEnabled: false,
   microcompactEnabled: false,
   sessionTitleMode: DEFAULT_SESSION_TITLE_MODE,
@@ -68,7 +66,6 @@ export function createRuntimeFormState(config: BridgeConfig | null): RuntimeForm
     sessionHumanLogFullEnabled: config.session_human_log_full_enabled,
     sessionSystemPromptVisibleEnabled: config.session_system_prompt_visible_enabled,
     assistantMarkdownEnabled: config.assistant_markdown_enabled,
-    toolCallCompactOutputEnabled: config.tool_call_compact_output_enabled,
     memoryModeEnabled: config.memory_mode_enabled,
     microcompactEnabled: config.microcompact_enabled,
     sessionTitleMode: config.session_title_mode,
@@ -125,7 +122,6 @@ function buildRuntimeScalarUpdate(
     session_human_log_full_enabled: formState.sessionHumanLogFullEnabled,
     session_system_prompt_visible_enabled: formState.sessionSystemPromptVisibleEnabled,
     assistant_markdown_enabled: formState.assistantMarkdownEnabled,
-    tool_call_compact_output_enabled: formState.toolCallCompactOutputEnabled,
     memory_mode_enabled: formState.memoryModeEnabled,
     microcompact_enabled: formState.microcompactEnabled,
     session_title_mode: formState.sessionTitleMode,

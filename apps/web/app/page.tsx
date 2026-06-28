@@ -280,7 +280,6 @@ const HomePageChatPanel: FC<{
 }) => {
   const showSystemPromptMessages = config?.session_system_prompt_visible_enabled ?? true;
   const assistantMarkdownEnabled = config?.assistant_markdown_enabled ?? true;
-  const toolCallCompactOutputEnabled = config?.tool_call_compact_output_enabled ?? false;
   const modelSelectionHandler = config?.model_selection_enabled
     ? selectActiveModel
     : undefined;
@@ -313,7 +312,6 @@ const HomePageChatPanel: FC<{
       streamingThinkingSegments,
       streamingTools,
       toolCard: {
-        compactOutputEnabled: toolCallCompactOutputEnabled,
         fallbackTitle: copy.chat.toolFallbackName,
         preparingDetails: copy.chat.toolPreparingOutput,
       },
@@ -331,7 +329,6 @@ const HomePageChatPanel: FC<{
     streamingItemOrder,
     streamingThinkingSegments,
     streamingTools,
-    toolCallCompactOutputEnabled,
   ]);
 
   return (
