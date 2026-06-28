@@ -386,6 +386,13 @@
   color: rgb(255 255 255);
 }
 
+.composer-feature-mode-switch button.is-active:hover:not(:disabled),
+.composer-feature-mode-switch button.is-active:focus-visible:not(:disabled) {
+  border-color: rgb(17 24 39);
+  background: rgb(17 24 39);
+  color: rgb(255 255 255);
+}
+
 .composer-feature-mode-switch button:disabled {
   opacity: 0.46;
   cursor: not-allowed;
