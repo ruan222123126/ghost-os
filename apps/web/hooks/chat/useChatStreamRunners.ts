@@ -130,6 +130,7 @@ function useAgentStreamRunner(options: StreamRunnerOptions) {
       const result = run.agentRuntime === 'codex'
         ? await streamExternalMessage({
           message: run.message,
+          model: run.model,
           onEvent: handleEvent,
           permissionMode: run.permissionMode ?? 'default',
           projectRoot: run.projectRoot,

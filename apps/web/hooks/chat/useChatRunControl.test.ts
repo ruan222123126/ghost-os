@@ -137,6 +137,7 @@ describe('hooks/chat/useChatRunControl', () => {
         agentRuntime: 'codex',
         images: [],
         message: 'ship release',
+        model: 'gpt-5.5',
       });
     });
 
@@ -144,6 +145,7 @@ describe('hooks/chat/useChatRunControl', () => {
       expect.objectContaining({
         agentRuntime: 'codex',
         message: 'ship release',
+        model: 'gpt-5.5',
         permissionMode: 'safe-yolo',
         projectRoot: '/workspace/project',
       }),

@@ -2,6 +2,7 @@ import type { SetStateAction } from 'react';
 import type { ActiveAgentRun } from '@/lib/chat-stream/types';
 import type { ChatRuntimeAction } from '@/lib/chatRuntime/actions';
 import type {
+  AgentRuntimeType,
   ChatMessage,
   ChatSendInput,
   ExternalCodexPermissionMode,
@@ -52,9 +53,10 @@ export interface UseBridgeChatOptions {
 }
 
 export interface StreamAgentRunInput {
-  agentRuntime: AgentRuntimeType;
+  agentRuntime?: AgentRuntimeType;
   images?: SessionImageContent[];
   message: string;
+  model?: string;
   permissionMode?: ExternalCodexPermissionMode;
   projectRoot?: string;
   sessionId?: string;

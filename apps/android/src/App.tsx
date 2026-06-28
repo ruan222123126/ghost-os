@@ -17,6 +17,7 @@ import { useBodyScrollLock } from "./hooks/useBodyScrollLock";
 import { useChatFeedScroll } from "./hooks/useChatFeedScroll";
 import { useMobileBridge } from "./hooks/useMobileBridge";
 import { useMobileSessions } from "./hooks/useMobileSessions";
+import { DEFAULT_CODEX_MODEL, normalizeCodexModel } from "./lib/codexModels";
 import type {
   AgentPayload,
   AgentRuntimeType,
@@ -37,9 +38,13 @@ function isNonEmptyMessage(value: string): boolean {
   return value.trim().length > 0;
 }
 
-function displayRuntime(agentRuntime: AgentRuntimeType, config: ReturnType<typeof useMobileBridge>["config"]): string {
+function displayRuntime(
+  agentRuntime: AgentRuntimeType,
+  config: ReturnType<typeof useMobileBridge>["config"],
+  codexModel: string = DEFAULT_CODEX_MODEL,
+): string {
   if (agentRuntime === "codex") {
-    return `Codex / ${config?.external_codex_permission_mode ?? "default"}`;
+    return `Codex / ${normalizeCodexModel(codexModel)}`;
   }
   if (config?.provider && config.model) {
     return `${config.provider} / ${config.model}`;
@@ -118,6 +123,7 @@ function App() {
   const [message, setMessage] = useState("");
   const [selectedSkill, setSelectedSkill] = useState<ChatSelectedSkill | null>(null);
   const [agentRuntime, setAgentRuntime] = useState<AgentRuntimeType>("ghost");
+  const [codexModel, setCodexModel] = useState<string>(DEFAULT_CODEX_MODEL);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isConnectionOpen, setIsConnectionOpen] = useState(false);
@@ -128,9 +134,14 @@ function App() {
   const localRuntimeConfig = useMemo(() => buildLocalRuntimeConfig(providerList, settings), [providerList, settings]);
   const chatConfig = settings.remoteExecutionEnabled ? config : localRuntimeConfig;
   const chatProviderList = providerList;
+  const activeCodexModel = normalizeCodexModel(codexModel);
   const sendAgentMessageForRuntime = useCallback(
-    (options: Parameters<typeof sendAgentMessage>[0]) => sendAgentMessage({ ...options, agentRuntime }),
-    [agentRuntime, sendAgentMessage],
+    (options: Parameters<typeof sendAgentMessage>[0]) => sendAgentMessage({
+      ...options,
+      agentRuntime,
+      codexModel: agentRuntime === "codex" ? activeCodexModel : undefined,
+    }),
+    [activeCodexModel, agentRuntime, sendAgentMessage],
   );
   const stopAgentRunForRuntime = useCallback(
     (input: Parameters<typeof stopAgentRun>[0]) => stopAgentRun({ ...input, agentRuntime }),
@@ -158,8 +169,8 @@ function App() {
   const supportsComposerSkills = Boolean(config) && (agentRuntime === "codex" || settings.remoteExecutionEnabled);
   const canSubmit = isNonEmptyMessage(message) || selectedSkill !== null;
   const runtimeLabel = useMemo(
-    () => displayRuntime(agentRuntime, agentRuntime === "codex" ? config : chatConfig),
-    [agentRuntime, chatConfig, config],
+    () => displayRuntime(agentRuntime, agentRuntime === "codex" ? config : chatConfig, activeCodexModel),
+    [activeCodexModel, agentRuntime, chatConfig, config],
   );
   const isModalOpen = isSidebarOpen || isSearchOpen || isConnectionOpen || isSettingsOpen || isMoreMenuOpen;
   const hasLocalConversation = mobileSessions.hasConversation;
@@ -316,6 +327,7 @@ function App() {
         <ChatHeader
           runtimeLabel={runtimeLabel}
           agentRuntime={agentRuntime}
+          codexModel={activeCodexModel}
           config={agentRuntime === "codex" ? config : chatConfig}
           codexPermissionMode={config?.external_codex_permission_mode}
           providerList={chatProviderList}
@@ -327,6 +339,7 @@ function App() {
           onCloseRuntimeMenu={() => setIsRuntimeMenuOpen(false)}
           onSwitchModel={switchModel}
           onSwitchAgentRuntime={setAgentRuntime}
+          onSwitchCodexModel={setCodexModel}
           onOpenConnection={openConnection}
           onOpenMoreMenu={() => {
             setIsRuntimeMenuOpen(false);

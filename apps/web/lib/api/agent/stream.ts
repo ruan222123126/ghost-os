@@ -62,6 +62,7 @@ export interface StreamAgentMessageOptions {
 
 export interface StreamExternalAgentMessageOptions {
   message: string;
+  model?: string;
   onEvent: (event: AgentStreamEvent) => void | Promise<void>;
   permissionMode: ExternalCodexPermissionMode;
   projectRoot?: string;
@@ -106,6 +107,9 @@ export async function streamExternalMessage(options: StreamExternalAgentMessageO
     permission_mode: options.permissionMode,
     provider: 'codex',
   };
+  if (options.model?.trim()) {
+    body.model = options.model.trim();
+  }
   if (options.projectRoot?.trim()) {
     body.project_root = options.projectRoot.trim();
   }

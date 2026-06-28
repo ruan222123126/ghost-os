@@ -55,6 +55,7 @@ type TaskRunScope = "user" | "orchestration";
 
 interface SendAgentMessageOptions {
   agentRuntime?: AgentRuntimeType;
+  codexModel?: string;
   message: string;
   history: MobileConversationMessage[];
   onReply: (reply: AgentPayload) => void;
@@ -1186,6 +1187,7 @@ export function useMobileBridge() {
       const params: Record<string, unknown> = agentRuntime === "codex"
         ? {
           message: agentMessage,
+          ...(options.codexModel?.trim() ? { model: options.codexModel.trim() } : {}),
           permission_mode: codexPermissionMode(config),
           project_root: config?.project_root?.trim() || undefined,
           provider: "codex",

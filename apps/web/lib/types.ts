@@ -203,6 +203,7 @@ export interface ChatImageDraft {
 export interface ChatSendInput {
   agentRuntime?: AgentRuntimeType;
   message: string;
+  model?: string;
   images: ChatImageDraft[];
   selectedSkill?: ChatSelectedSkill;
 }

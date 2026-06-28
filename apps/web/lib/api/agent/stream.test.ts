@@ -1,5 +1,5 @@
 import { fetchMock, installFetchMock } from '@/lib/api.test.helpers';
-import { streamMessage } from './stream';
+import { streamExternalMessage, streamMessage } from './stream';
 import type { AgentStreamEvent } from '@/lib/types';
 
 describe('lib/api/agent/stream', () => {
@@ -161,6 +161,40 @@ describe('lib/api/agent/stream', () => {
       }],
       message: '',
       trace_id: 'trace-2',
+    });
+  });
+
+  it('includes the selected model in external Codex requests', async () => {
+    fetchMock.mockResolvedValue(new Response(createSSEStream([
+      buildSSEEvent({
+        id: 'trace-codex:000001',
+        step_id: '',
+        trace_id: 'trace-codex',
+        session_id: 'session-codex',
+        turn: 0,
+        type: 'done',
+        payload: { session_id: 'session-codex', session_ended: false },
+      }),
+    ]), {
+      status: 200,
+      headers: { 'Content-Type': 'text/event-stream' },
+    }));
+
+    await streamExternalMessage({
+      message: 'ship release',
+      model: ' gpt-5.5 ',
+      onEvent: async () => undefined,
+      permissionMode: 'safe-yolo',
+      traceId: 'trace-codex',
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(fetchMock).toHaveBeenCalledWith('/api/external-agent/stream', expect.objectContaining({ method: 'POST' }));
+    expect(JSON.parse(String(init.body))).toEqual({
+      message: 'ship release',
+      model: 'gpt-5.5',
+      permission_mode: 'safe-yolo',
+      provider: 'codex',
     });
   });
 });

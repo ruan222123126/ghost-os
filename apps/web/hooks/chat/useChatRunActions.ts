@@ -194,6 +194,7 @@ function buildStreamRunInput(
     return {
       agentRuntime: 'codex',
       message: context.agentMessage,
+      model: input.model?.trim() || undefined,
       permissionMode: options.externalCodexPermissionMode,
       projectRoot: options.externalProjectRoot,
       sessionId: context.sessionId || undefined,
