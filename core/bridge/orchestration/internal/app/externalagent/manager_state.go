@@ -58,6 +58,7 @@ func (m *Manager) handleApproval(ctx context.Context, runtime *runtimeSession, a
 		CreatedAt: time.Now().UTC(),
 	}
 	_ = m.addPendingApproval(active.sessionID, record)
+	_ = m.flushPendingAssistantMessage(runtime, active.sessionID)
 	_ = m.appendApprovalToolCall(active.sessionID, approval.ID, record.Payload)
 	_ = emitApprovalEvent(ctx, active, approval)
 	select {

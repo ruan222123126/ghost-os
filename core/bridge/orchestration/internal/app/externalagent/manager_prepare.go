@@ -222,7 +222,26 @@ func (r *runtimeSession) appendText(text string) {
 	defer r.mu.Unlock()
 	if r.active != nil {
 		r.active.text.WriteString(text)
+		r.active.pendingText.WriteString(text)
 	}
+}
+
+func (r *runtimeSession) pendingText() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.active == nil {
+		return ""
+	}
+	return r.active.pendingText.String()
+}
+
+func (r *runtimeSession) clearPendingText() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.active == nil {
+		return
+	}
+	r.active.pendingText.Reset()
 }
 
 func (r *runtimeSession) finish(done turnDone) {

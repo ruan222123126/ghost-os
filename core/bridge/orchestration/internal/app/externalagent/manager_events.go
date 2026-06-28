@@ -19,16 +19,16 @@ func (m *Manager) handleEvent(ctx context.Context, runtime *runtimeSession, even
 	switch event.Type {
 	case "task_started":
 		m.recordTaskStarted(active, event)
-	case "agent_message":
+	case "agent_message", "agent_message_chunk", "agent_message_delta", "agent_message_content_delta":
 		m.recordAgentMessage(ctx, runtime, active, event)
-	case "agent_reasoning", "agent_reasoning_delta":
+	case "agent_reasoning", "agent_reasoning_delta", "agent_reasoning_content_delta", "reasoning_content_delta", "reasoning_raw_content_delta":
 		m.recordReasoning(ctx, active, event)
 	case "exec_command_begin":
-		m.recordToolStart(ctx, active, "codex_exec", event)
+		m.recordToolStart(ctx, runtime, active, "codex_exec", event)
 	case "patch_apply_begin":
-		m.recordToolStart(ctx, active, "codex_patch", event)
+		m.recordToolStart(ctx, runtime, active, "codex_patch", event)
 	case "mcp_tool_begin":
-		m.recordToolStart(ctx, active, "codex_mcp", event)
+		m.recordToolStart(ctx, runtime, active, "codex_mcp", event)
 	case "exec_command_end":
 		m.recordToolEnd(ctx, active, "codex_exec", event)
 	case "patch_apply_end":
@@ -52,7 +52,7 @@ func (m *Manager) recordTaskStarted(active *activeTurn, event CodexEvent) {
 }
 
 func (m *Manager) recordAgentMessage(ctx context.Context, runtime *runtimeSession, active *activeTurn, event CodexEvent) {
-	text := firstString(event.Payload["message"], event.Payload["text"])
+	text := firstString(event.Payload["message"], event.Payload["text"], event.Payload["delta"], event.Payload["chunk"], event.Payload["content"])
 	if text == "" {
 		return
 	}
@@ -64,7 +64,7 @@ func (m *Manager) recordAgentMessage(ctx context.Context, runtime *runtimeSessio
 }
 
 func (m *Manager) recordReasoning(ctx context.Context, active *activeTurn, event CodexEvent) {
-	text := firstString(event.Payload["text"], event.Payload["delta"])
+	text := firstString(event.Payload["text"], event.Payload["delta"], event.Payload["chunk"], event.Payload["content"])
 	if text == "" {
 		return
 	}
@@ -74,12 +74,13 @@ func (m *Manager) recordReasoning(ctx context.Context, active *activeTurn, event
 	})
 }
 
-func (m *Manager) recordToolStart(ctx context.Context, active *activeTurn, tool string, event CodexEvent) {
+func (m *Manager) recordToolStart(ctx context.Context, runtime *runtimeSession, active *activeTurn, tool string, event CodexEvent) {
 	callID := firstString(event.Payload["call_id"], event.Payload["callId"])
 	if callID == "" {
 		callID = fmt.Sprintf("%s-%d", tool, time.Now().UnixNano())
 	}
 	args := clonePayload(event.Payload)
+	_ = m.flushPendingAssistantMessage(runtime, active.sessionID)
 	_ = m.appendSessionMessage(active.sessionID, llm.Message{
 		Role: llm.RoleAssistant,
 		ToolCalls: []llm.ToolCall{{
@@ -119,15 +120,15 @@ func (m *Manager) finishTurn(ctx context.Context, runtime *runtimeSession, activ
 		m.finishAbortedTurn(ctx, runtime, active)
 		return
 	}
+	m.recordFinalMessageSnapshot(ctx, runtime, active, event)
 	final := strings.TrimSpace(runtime.finalText())
 	if final != "" {
-		_ = m.appendSessionMessage(active.sessionID, llm.Message{Role: llm.RoleAssistant, Text: final})
+		_ = m.flushPendingAssistantMessage(runtime, active.sessionID)
 		_ = emit(ctx, active.sink, active.traceID, active.sessionID, active.turn, assistantStep(active.turn), streaming.EventMessage, map[string]any{
 			"text":       final,
 			"session_id": active.sessionID,
 		})
 	}
-	_ = event
 	_ = m.updateRuntimeState(active.sessionID, func(ext *session.ExternalRuntime) {
 		ext.Status = StatusIdle
 		ext.TurnID = ""
@@ -138,6 +139,21 @@ func (m *Manager) finishTurn(ctx context.Context, runtime *runtimeSession, activ
 		"session_ended": false,
 	})
 	runtime.finish(turnDone{})
+}
+
+func (m *Manager) recordFinalMessageSnapshot(ctx context.Context, runtime *runtimeSession, active *activeTurn, event CodexEvent) {
+	text := firstString(event.Payload["last_agent_message"], event.Payload["lastAgentMessage"])
+	if text == "" {
+		return
+	}
+	current := strings.TrimSpace(runtime.finalText())
+	if current == "" {
+		m.recordAgentMessage(ctx, runtime, active, CodexEvent{Payload: map[string]any{"message": text}})
+		return
+	}
+	if strings.HasPrefix(text, current) && text != current {
+		m.recordAgentMessage(ctx, runtime, active, CodexEvent{Payload: map[string]any{"message": strings.TrimPrefix(text, current)}})
+	}
 }
 
 func (m *Manager) finishAbortedTurn(ctx context.Context, runtime *runtimeSession, active *activeTurn) {
@@ -151,6 +167,19 @@ func (m *Manager) finishAbortedTurn(ctx context.Context, runtime *runtimeSession
 		"session_id": active.sessionID,
 		"aborted":    true,
 	})
+}
+
+func (m *Manager) flushPendingAssistantMessage(runtime *runtimeSession, sessionID string) error {
+	text := runtime.pendingText()
+	if strings.TrimSpace(text) == "" {
+		runtime.clearPendingText()
+		return nil
+	}
+	if err := m.appendSessionMessage(sessionID, llm.Message{Role: llm.RoleAssistant, Text: text}); err != nil {
+		return err
+	}
+	runtime.clearPendingText()
+	return nil
 }
 
 func failedStatus(value any) bool {

@@ -102,6 +102,7 @@ func TestManagerExecuteStreamMapsCodexEventsAndHistory(t *testing.T) {
 			"output":  "mcp ok",
 			"status":  "completed",
 		}})
+		client.emit(CodexEvent{Type: "agent_message", Payload: map[string]any{"message": " done"}})
 		client.emit(CodexEvent{Type: "task_complete", Payload: map[string]any{"turn_id": "turn-1"}})
 		return "turn-1", nil
 	}
@@ -116,8 +117,8 @@ func TestManagerExecuteStreamMapsCodexEventsAndHistory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExecuteStream: %v", err)
 	}
-	if message != "hello" {
-		t.Fatalf("unexpected final message: got %q want %q", message, "hello")
+	if message != "hellodone" {
+		t.Fatalf("unexpected final message: got %q want %q", message, "hellodone")
 	}
 	if sessionID == "" {
 		t.Fatal("expected session id")
@@ -138,6 +139,7 @@ func TestManagerExecuteStreamMapsCodexEventsAndHistory(t *testing.T) {
 		streaming.EventToolCallFinished,
 		streaming.EventToolCallStarted,
 		streaming.EventToolCallFinished,
+		streaming.EventCompletionDelta,
 		streaming.EventMessage,
 		streaming.EventDone,
 	})
@@ -161,9 +163,70 @@ func TestManagerExecuteStreamMapsCodexEventsAndHistory(t *testing.T) {
 		!hasToolResult(loaded.Messages, "mcp-1", "mcp ok") {
 		t.Fatalf("expected codex tool results in history: %+v", loaded.Messages)
 	}
-	if got := loaded.Messages[len(loaded.Messages)-1]; got.Role != llm.RoleAssistant || got.Text != "hello" {
-		t.Fatalf("unexpected final history message: %+v", got)
+	assertCodexHistoryOrder(t, loaded.Messages, []historyMarker{
+		{kind: "assistant_text", value: "hello"},
+		{kind: "tool_call", value: "exec-1"},
+		{kind: "tool_result", value: "exec-1"},
+		{kind: "tool_call", value: "patch-1"},
+		{kind: "tool_result", value: "patch-1"},
+		{kind: "tool_call", value: "mcp-1"},
+		{kind: "tool_result", value: "mcp-1"},
+		{kind: "assistant_text", value: "done"},
+	})
+	if countAssistantText(loaded.Messages, "hello") != 1 || countAssistantText(loaded.Messages, "done") != 1 {
+		t.Fatalf("expected codex assistant text segments to be persisted once: %+v", loaded.Messages)
 	}
+}
+
+func TestManagerExecuteStreamMapsCodexAgentMessageContentDelta(t *testing.T) {
+	manager, sessionStore, fake := newExternalAgentTestManager(t)
+	fake.startTurn = func(ctx context.Context, client *fakeCodexClient, opts TurnOptions) (string, error) {
+		client.emit(CodexEvent{Type: "task_started", Payload: map[string]any{"turn_id": "turn-delta"}})
+		client.emit(CodexEvent{Type: "agent_message_content_delta", Payload: map[string]any{"delta": "hello"}})
+		client.emit(CodexEvent{Type: "exec_command_begin", Payload: map[string]any{
+			"call_id": "exec-delta",
+			"command": "pwd",
+		}})
+		client.emit(CodexEvent{Type: "exec_command_end", Payload: map[string]any{
+			"call_id": "exec-delta",
+			"output":  "/repo",
+			"status":  "completed",
+		}})
+		client.emit(CodexEvent{Type: "agent_message_content_delta", Payload: map[string]any{"delta": " done"}})
+		client.emit(CodexEvent{Type: "task_complete", Payload: map[string]any{"turn_id": "turn-delta"}})
+		return "turn-delta", nil
+	}
+	sink := &collectingSink{}
+
+	message, sessionID, err := manager.ExecuteStream(context.Background(), api.ExternalAgentRequest{
+		Message: "run pwd",
+	}, "trace-delta", sink, true)
+	if err != nil {
+		t.Fatalf("ExecuteStream: %v", err)
+	}
+	if message != "hellodone" {
+		t.Fatalf("unexpected final message: got %q want %q", message, "hellodone")
+	}
+	assertEventTypes(t, sink.events(), []streaming.EventType{
+		streaming.EventRunStarted,
+		streaming.EventCompletionDelta,
+		streaming.EventToolCallStarted,
+		streaming.EventToolCallFinished,
+		streaming.EventCompletionDelta,
+		streaming.EventMessage,
+		streaming.EventDone,
+	})
+
+	loaded, err := sessionStore.Load(sessionID)
+	if err != nil {
+		t.Fatalf("load session: %v", err)
+	}
+	assertCodexHistoryOrder(t, loaded.Messages, []historyMarker{
+		{kind: "assistant_text", value: "hello"},
+		{kind: "tool_call", value: "exec-delta"},
+		{kind: "tool_result", value: "exec-delta"},
+		{kind: "assistant_text", value: "done"},
+	})
 }
 
 func TestManagerExecuteStreamPersistsRunningTurnDraft(t *testing.T) {
@@ -173,14 +236,14 @@ func TestManagerExecuteStreamPersistsRunningTurnDraft(t *testing.T) {
 	finish := make(chan struct{})
 	fake.startTurn = func(ctx context.Context, client *fakeCodexClient, opts TurnOptions) (string, error) {
 		client.emit(CodexEvent{Type: "task_started", Payload: map[string]any{"turn_id": "turn-draft"}})
-		client.emit(CodexEvent{Type: "agent_message", Payload: map[string]any{"message": "partial"}})
+		client.emit(CodexEvent{Type: "agent_message_content_delta", Payload: map[string]any{"delta": "partial"}})
 		close(client.turnStarted)
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
 		case <-emitMore:
 		}
-		client.emit(CodexEvent{Type: "agent_message", Payload: map[string]any{"message": " answer"}})
+		client.emit(CodexEvent{Type: "agent_message_content_delta", Payload: map[string]any{"delta": " answer"}})
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
@@ -255,6 +318,56 @@ func TestManagerExecuteStreamPersistsRunningTurnDraft(t *testing.T) {
 	if loaded.TurnDraft != nil || loaded.AssistantDraft != nil {
 		t.Fatalf("expected drafts to clear after completion: turn=%+v assistant=%+v", loaded.TurnDraft, loaded.AssistantDraft)
 	}
+}
+
+func TestManagerExecuteStreamUsesTaskCompleteLastAgentMessage(t *testing.T) {
+	manager, sessionStore, fake := newExternalAgentTestManager(t)
+	fake.startTurn = func(ctx context.Context, client *fakeCodexClient, opts TurnOptions) (string, error) {
+		client.emit(CodexEvent{Type: "task_started", Payload: map[string]any{"turn_id": "turn-final"}})
+		client.emit(CodexEvent{Type: "exec_command_begin", Payload: map[string]any{
+			"call_id": "exec-final",
+			"command": "pwd",
+		}})
+		client.emit(CodexEvent{Type: "exec_command_end", Payload: map[string]any{
+			"call_id": "exec-final",
+			"output":  "/repo",
+			"status":  "completed",
+		}})
+		client.emit(CodexEvent{Type: "task_complete", Payload: map[string]any{
+			"turn_id":            "turn-final",
+			"last_agent_message": "final answer",
+		}})
+		return "turn-final", nil
+	}
+	sink := &collectingSink{}
+
+	message, sessionID, err := manager.ExecuteStream(context.Background(), api.ExternalAgentRequest{
+		Message: "run pwd",
+	}, "trace-final", sink, true)
+	if err != nil {
+		t.Fatalf("ExecuteStream: %v", err)
+	}
+	if message != "final answer" {
+		t.Fatalf("unexpected final message: got %q want %q", message, "final answer")
+	}
+	assertEventTypes(t, sink.events(), []streaming.EventType{
+		streaming.EventRunStarted,
+		streaming.EventToolCallStarted,
+		streaming.EventToolCallFinished,
+		streaming.EventCompletionDelta,
+		streaming.EventMessage,
+		streaming.EventDone,
+	})
+
+	loaded, err := sessionStore.Load(sessionID)
+	if err != nil {
+		t.Fatalf("load session: %v", err)
+	}
+	assertCodexHistoryOrder(t, loaded.Messages, []historyMarker{
+		{kind: "tool_call", value: "exec-final"},
+		{kind: "tool_result", value: "exec-final"},
+		{kind: "assistant_text", value: "final answer"},
+	})
 }
 
 func TestManagerApprovalBlocksUntilApproved(t *testing.T) {
@@ -788,6 +901,65 @@ func assertEventTypes(t *testing.T, events []streaming.Event, want []streaming.E
 			t.Fatalf("unexpected event[%d]: got=%q want=%q events=%+v", index, events[index].Type, eventType, events)
 		}
 	}
+}
+
+type historyMarker struct {
+	kind  string
+	value string
+}
+
+func assertCodexHistoryOrder(t *testing.T, messages []llm.Message, markers []historyMarker) {
+	t.Helper()
+	previous := -1
+	for _, marker := range markers {
+		index := findHistoryMarker(messages, marker)
+		if index < 0 {
+			t.Fatalf("missing history marker %+v in messages: %+v", marker, messages)
+		}
+		if index <= previous {
+			t.Fatalf("history marker %+v is out of order: previous=%d current=%d messages=%+v", marker, previous, index, messages)
+		}
+		previous = index
+	}
+}
+
+func findHistoryMarker(messages []llm.Message, marker historyMarker) int {
+	for index, message := range messages {
+		switch marker.kind {
+		case "assistant_text":
+			if message.Role == llm.RoleAssistant && message.Text == marker.value {
+				return index
+			}
+		case "tool_call":
+			if hasMessageToolCall(message, marker.value) {
+				return index
+			}
+		case "tool_result":
+			if message.Role == llm.RoleTool && message.ToolCallID == marker.value {
+				return index
+			}
+		}
+	}
+	return -1
+}
+
+func hasMessageToolCall(message llm.Message, id string) bool {
+	for _, call := range message.ToolCalls {
+		if call.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func countAssistantText(messages []llm.Message, text string) int {
+	count := 0
+	for _, message := range messages {
+		if message.Role == llm.RoleAssistant && message.Text == text {
+			count++
+		}
+	}
+	return count
 }
 
 func hasToolCall(messages []llm.Message, name string, id string) bool {

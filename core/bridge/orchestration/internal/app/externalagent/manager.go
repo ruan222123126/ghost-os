@@ -29,14 +29,15 @@ type runtimeSession struct {
 }
 
 type activeTurn struct {
-	sessionID string
-	traceID   string
-	turn      int
-	sink      streaming.Sink
-	done      chan struct{}
-	result    turnDone
-	finished  bool
-	text      strings.Builder
+	sessionID   string
+	traceID     string
+	turn        int
+	sink        streaming.Sink
+	done        chan struct{}
+	result      turnDone
+	finished    bool
+	text        strings.Builder
+	pendingText strings.Builder
 }
 
 type turnDone struct {

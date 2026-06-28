@@ -68,7 +68,7 @@ func eventFromNotification(method string, raw json.RawMessage) (CodexEvent, bool
 			eventType = strings.TrimPrefix(method, "codex/event/")
 			msg["type"] = eventType
 		}
-		return CodexEvent{Type: eventType, Method: method, Payload: msg}, eventType != ""
+		return normalizeCodexEvent(CodexEvent{Type: eventType, Method: method, Payload: msg}), eventType != ""
 	}
 	return rawEventFromNotification(method, params)
 }
@@ -92,8 +92,31 @@ func rawEventFromNotification(method string, params map[string]any) (CodexEvent,
 	case "item/started", "item/completed":
 		item, _ := params["item"].(map[string]any)
 		return rawItemEvent(method, item)
+	case "item/agentMessage/delta":
+		return normalizeCodexEvent(CodexEvent{Type: "agent_message_content_delta", Method: method, Payload: params}), true
 	default:
 		return CodexEvent{}, false
+	}
+}
+
+func normalizeCodexEvent(event CodexEvent) CodexEvent {
+	switch event.Type {
+	case "agent_message_chunk", "agent_message_delta", "agent_message_content_delta":
+		event.Type = "agent_message"
+		setNormalizedText(event.Payload, "message")
+	case "agent_reasoning_content_delta", "agent_reasoning_delta", "reasoning_content_delta", "reasoning_raw_content_delta":
+		event.Type = "agent_reasoning_delta"
+		setNormalizedText(event.Payload, "text")
+	}
+	return event
+}
+
+func setNormalizedText(payload map[string]any, targetKey string) {
+	if len(payload) == 0 || stringValue(payload[targetKey]) != "" {
+		return
+	}
+	if text := firstString(payload["text"], payload["message"], payload["delta"], payload["chunk"], payload["content"]); text != "" {
+		payload[targetKey] = text
 	}
 }
 
