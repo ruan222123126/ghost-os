@@ -3,6 +3,8 @@ package sessionturn
 import (
 	"encoding/json"
 	"strings"
+
+	"ghost-os/bridge/llm"
 )
 
 type AnsweredHumanQuestionInput struct {
@@ -18,8 +20,48 @@ type HumanQuestionOptionInput struct {
 	AllowCustom bool
 }
 
+type answeredHumanInteractionPayload struct {
+	QuestionID    string           `json:"question_id"`
+	Prompt        string           `json:"prompt"`
+	SelectionMode string           `json:"selection_mode,omitempty"`
+	Options       []askHumanOption `json:"options,omitempty"`
+	Answer        string           `json:"answer"`
+}
+
 func BuildResolvedHumanQuestionToolResult(item AnsweredHumanQuestionInput) (string, string, string) {
 	return askHumanResolvedQuestionToolResult(item)
+}
+
+func decodeSessionHumanInteraction(result llm.ToolResultEnvelope) *sessionHumanInteraction {
+	if strings.TrimSpace(result.Tool) != "ask_human" || strings.TrimSpace(result.Output) == "" {
+		return nil
+	}
+
+	var payload answeredHumanInteractionPayload
+	if err := json.Unmarshal([]byte(result.Output), &payload); err != nil {
+		return nil
+	}
+
+	questionID := strings.TrimSpace(payload.QuestionID)
+	prompt := strings.TrimSpace(payload.Prompt)
+	if questionID == "" || prompt == "" {
+		return nil
+	}
+
+	humanInteraction := &sessionHumanInteraction{
+		QuestionID: questionID,
+		Prompt:     prompt,
+	}
+	if selectionMode := strings.TrimSpace(payload.SelectionMode); selectionMode != "" {
+		humanInteraction.SelectionMode = selectionMode
+	}
+	if len(payload.Options) > 0 {
+		humanInteraction.Options = cloneSessionHumanInteractionOptions(payload.Options)
+	}
+	if strings.TrimSpace(payload.Answer) != "" {
+		humanInteraction.Answer = payload.Answer
+	}
+	return humanInteraction
 }
 
 func askHumanResolvedQuestionToolResult(item AnsweredHumanQuestionInput) (string, string, string) {
@@ -64,4 +106,25 @@ func mustEncodeResolvedQuestionPayload(payload map[string]any) string {
 		return `{}`
 	}
 	return string(encoded)
+}
+
+func cloneSessionHumanInteractionOptions(options []askHumanOption) []askHumanOption {
+	if len(options) == 0 {
+		return nil
+	}
+	cloned := make([]askHumanOption, 0, len(options))
+	for _, option := range options {
+		label := strings.TrimSpace(option.Label)
+		if label == "" {
+			continue
+		}
+		cloned = append(cloned, askHumanOption{
+			Label:       label,
+			AllowCustom: option.AllowCustom,
+		})
+	}
+	if len(cloned) == 0 {
+		return nil
+	}
+	return cloned
 }
