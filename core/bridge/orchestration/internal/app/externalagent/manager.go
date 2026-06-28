@@ -7,6 +7,7 @@ import (
 
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/orchestration/internal/contracts/api"
+	internaltrace "ghost-os/bridge/orchestration/internal/trace"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
 )
@@ -74,7 +75,8 @@ func (m *Manager) ExecuteStream(
 	if err != nil {
 		return "", sessionID, err
 	}
-	if err := runtime.beginTurn(sessionID, traceID, prepared.session.TurnIndex, sink); err != nil {
+	runSink := internaltrace.NewSessionDraftStoreCheckpointSink(sink, m.SessionStore, sessionID)
+	if err := runtime.beginTurn(sessionID, traceID, prepared.session.TurnIndex, runSink); err != nil {
 		return "", sessionID, err
 	}
 	defer runtime.clearActive()
@@ -87,12 +89,12 @@ func (m *Manager) ExecuteStream(
 	})
 
 	if err := runtime.client.Connect(ctx); err != nil {
-		_ = m.finishWithError(ctx, prepared.session.ID, traceID, prepared.session.TurnIndex, sink, err)
+		_ = m.finishWithError(ctx, prepared.session.ID, traceID, prepared.session.TurnIndex, runSink, err)
 		return "", sessionID, err
 	}
 	threadID, err := m.ensureThread(ctx, runtime.client, prepared)
 	if err != nil {
-		_ = m.finishWithError(ctx, sessionID, traceID, prepared.session.TurnIndex, sink, err)
+		_ = m.finishWithError(ctx, sessionID, traceID, prepared.session.TurnIndex, runSink, err)
 		return "", sessionID, err
 	}
 	if err := m.updateRuntimeState(sessionID, func(ext *session.ExternalRuntime) {
@@ -101,7 +103,7 @@ func (m *Manager) ExecuteStream(
 	}); err != nil {
 		return "", sessionID, err
 	}
-	if err := emit(ctx, sink, traceID, sessionID, prepared.session.TurnIndex, "", streaming.EventRunStarted, map[string]any{
+	if err := emit(ctx, runSink, traceID, sessionID, prepared.session.TurnIndex, "", streaming.EventRunStarted, map[string]any{
 		"session_id": sessionID,
 		"provider":   ProviderCodex,
 		"thread_id":  threadID,
@@ -118,7 +120,7 @@ func (m *Manager) ExecuteStream(
 		Effort:         prepared.request.Effort,
 	})
 	if err != nil {
-		_ = m.finishWithError(ctx, sessionID, traceID, prepared.session.TurnIndex, sink, err)
+		_ = m.finishWithError(ctx, sessionID, traceID, prepared.session.TurnIndex, runSink, err)
 		return "", sessionID, err
 	}
 	if strings.TrimSpace(turnID) != "" {

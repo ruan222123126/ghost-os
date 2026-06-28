@@ -164,9 +164,6 @@ func (t *transport) handleSessionEvents(w http.ResponseWriter, r *http.Request, 
 	if !ok {
 		return
 	}
-	if err := t.writePendingSessionPushEvent(w, flusher, sessionID); err != nil {
-		return
-	}
 
 	hub := t.usecases.streams.SessionPushHub()
 	if hub == nil {
@@ -175,6 +172,10 @@ func (t *transport) handleSessionEvents(w http.ResponseWriter, r *http.Request, 
 	}
 	ch, unsubscribe := hub.Subscribe(sessionID)
 	defer unsubscribe()
+
+	if err := t.writePendingSessionPushEvent(w, flusher, sessionID); err != nil {
+		return
+	}
 
 	streamSessionPushEvents(r.Context(), w, flusher, ch)
 }

@@ -166,6 +166,97 @@ func TestManagerExecuteStreamMapsCodexEventsAndHistory(t *testing.T) {
 	}
 }
 
+func TestManagerExecuteStreamPersistsRunningTurnDraft(t *testing.T) {
+	manager, sessionStore, fake := newExternalAgentTestManager(t)
+	fake.turnStarted = make(chan struct{})
+	emitMore := make(chan struct{})
+	finish := make(chan struct{})
+	fake.startTurn = func(ctx context.Context, client *fakeCodexClient, opts TurnOptions) (string, error) {
+		client.emit(CodexEvent{Type: "task_started", Payload: map[string]any{"turn_id": "turn-draft"}})
+		client.emit(CodexEvent{Type: "agent_message", Payload: map[string]any{"message": "partial"}})
+		close(client.turnStarted)
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-emitMore:
+		}
+		client.emit(CodexEvent{Type: "agent_message", Payload: map[string]any{"message": " answer"}})
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-finish:
+		}
+		client.emit(CodexEvent{Type: "task_complete", Payload: map[string]any{"turn_id": "turn-draft"}})
+		return "turn-draft", nil
+	}
+
+	sink := newCollectingSink()
+	done := make(chan executeResult, 1)
+	go func() {
+		message, sessionID, err := manager.ExecuteStream(context.Background(), api.ExternalAgentRequest{
+			Message: "run in background",
+		}, "trace-draft", sink, true)
+		done <- executeResult{message: message, sessionID: sessionID, err: err}
+	}()
+
+	started := sink.waitForType(t, streaming.EventRunStarted)
+	<-fake.turnStarted
+	time.Sleep(350 * time.Millisecond)
+	close(emitMore)
+	var lastDraft *session.TurnDraft
+	var lastAssistant string
+	var lastLoadErr error
+	if err := waitUntil(func() bool {
+		loaded, err := sessionStore.Load(started.SessionID)
+		if err != nil {
+			lastLoadErr = err
+			return false
+		}
+		lastLoadErr = nil
+		lastDraft = loaded.TurnDraft
+		if loaded.AssistantDraft != nil {
+			lastAssistant = loaded.AssistantDraft.Text
+		} else {
+			lastAssistant = ""
+		}
+		if loaded.TurnDraft == nil || loaded.AssistantDraft == nil {
+			return false
+		}
+		if loaded.TurnDraft.Status != session.TurnDraftStatusStreaming {
+			return false
+		}
+		if loaded.AssistantDraft.Text != "partialanswer" {
+			return false
+		}
+		return len(loaded.TurnDraft.AssistantSegments) == 1 &&
+			loaded.TurnDraft.AssistantSegments[0].Content == "partialanswer"
+	}); err != nil {
+		t.Fatalf(
+			"running turn draft was not persisted: %v loadErr=%v draft=%+v assistant=%q",
+			err,
+			lastLoadErr,
+			lastDraft,
+			lastAssistant,
+		)
+	}
+
+	close(finish)
+	result := waitExecuteResult(t, done)
+	if result.err != nil {
+		t.Fatalf("ExecuteStream: %v", result.err)
+	}
+	if result.message != "partialanswer" {
+		t.Fatalf("unexpected final message: got %q want %q", result.message, "partialanswer")
+	}
+	loaded, err := sessionStore.Load(result.sessionID)
+	if err != nil {
+		t.Fatalf("load session: %v", err)
+	}
+	if loaded.TurnDraft != nil || loaded.AssistantDraft != nil {
+		t.Fatalf("expected drafts to clear after completion: turn=%+v assistant=%+v", loaded.TurnDraft, loaded.AssistantDraft)
+	}
+}
+
 func TestManagerApprovalBlocksUntilApproved(t *testing.T) {
 	manager, sessionStore, fake := newExternalAgentTestManager(t)
 	fake.startTurn = func(ctx context.Context, client *fakeCodexClient, opts TurnOptions) (string, error) {
