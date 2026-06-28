@@ -107,6 +107,37 @@ describe('lib/api/agent/stream', () => {
     })).rejects.toThrow('session is already running');
   });
 
+  it('includes plan mode in streamed agent requests', async () => {
+    fetchMock.mockResolvedValue(new Response(createSSEStream([
+      buildSSEEvent({
+        id: 'trace-plan:000001',
+        step_id: '',
+        trace_id: 'trace-plan',
+        session_id: 'session-plan',
+        turn: 0,
+        type: 'done',
+        payload: { session_id: 'session-plan', session_ended: false },
+      }),
+    ]), {
+      status: 200,
+      headers: { 'Content-Type': 'text/event-stream' },
+    }));
+
+    await streamMessage({
+      message: 'make a plan',
+      mode: 'plan',
+      onEvent: async () => undefined,
+      traceId: 'trace-plan',
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({
+      message: 'make a plan',
+      mode: 'plan',
+      trace_id: 'trace-plan',
+    });
+  });
+
   it('includes image inputs in the streamed agent request', async () => {
     fetchMock.mockResolvedValue(new Response(createSSEStream([
       buildSSEEvent({

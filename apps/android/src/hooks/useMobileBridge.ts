@@ -25,6 +25,7 @@ import { loadSettings, normalizeBridgeUrl, saveSettings } from "../lib/settingsS
 import type {
   AgentRuntimeType,
   AgentPayload,
+  AgentRequestMode,
   ChatSelectedSkill,
   ConfigPayload,
   ExternalAgentApprovalDecision,
@@ -56,6 +57,7 @@ type TaskRunScope = "user" | "orchestration";
 interface SendAgentMessageOptions {
   agentRuntime?: AgentRuntimeType;
   codexModel?: string;
+  mode?: AgentRequestMode;
   message: string;
   history: MobileConversationMessage[];
   onReply: (reply: AgentPayload) => void;
@@ -1132,7 +1134,11 @@ export function useMobileBridge() {
         message: options.message,
         selectedSkill: options.selectedSkill,
       });
-      if (agentRuntime === "ghost" && !settings.remoteExecutionEnabled) {
+      if (options.mode === "plan" && !config) {
+        options.onStatus({ tone: "error", text: "请先连接电脑端" });
+        return { ok: false };
+      }
+      if (agentRuntime === "ghost" && !settings.remoteExecutionEnabled && options.mode !== "plan") {
         if (options.selectedSkill) {
           options.onStatus({ tone: "error", text: "本地运行不支持技能" });
           return { ok: false };
@@ -1195,6 +1201,7 @@ export function useMobileBridge() {
         }
         : {
           message: agentMessage,
+          ...(options.mode ? { mode: options.mode } : {}),
           ...(initialSessionId ? { session_id: initialSessionId } : {}),
           ...((config?.provider && config?.model)
             ? {

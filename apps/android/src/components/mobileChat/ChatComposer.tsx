@@ -1,12 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, FormEvent, KeyboardEvent, RefObject } from "react";
-import type { AgentRuntimeType, ChatSelectedSkill, SkillPayload } from "../../mobileTypes";
+import type { AgentModeSelection, ChatSelectedSkill, SkillPayload } from "../../mobileTypes";
 import { COMPOSER_MENU_OPTIONS } from "./data";
 import { UiIcon } from "./icons";
 import "./ChatComposer.css";
 
 interface ChatComposerProps {
-  agentRuntime: AgentRuntimeType;
+  agentMode: AgentModeSelection;
   canEnableCodexMode?: boolean;
   canSubmit?: boolean;
   value: string;
@@ -15,7 +15,7 @@ interface ChatComposerProps {
   loading: boolean;
   selectedSkill?: ChatSelectedSkill | null;
   skills?: SkillPayload[];
-  onSwitchAgentRuntime?: (runtime: AgentRuntimeType) => void;
+  onChangeAgentMode?: (mode: AgentModeSelection) => void;
   onClearSelectedSkill?: () => void;
   onRefreshSkills?: () => Promise<boolean> | Promise<void> | boolean | void;
   onSelectSkill?: (skill: SkillPayload) => void;
@@ -26,6 +26,7 @@ interface ChatComposerProps {
 
 const COMPOSER_SKILL_EMPTY_LABEL = "暂无";
 const COMPOSER_CODEX_DISABLED_LABEL = "连接电脑后可用";
+const COMPOSER_CODEX_MODE_LABEL = "codex模式";
 const COMPOSER_TEXTAREA_COLLAPSED_HEIGHT_PX = 52;
 const COMPOSER_TEXTAREA_MAX_HEIGHT_PX = 200;
 const TEXTAREA_SCROLL_HEIGHT_EPSILON_PX = 1;
@@ -54,12 +55,14 @@ export function ChatComposer(props: ChatComposerProps) {
   const attachmentMenuOpen = menuView === "attachment";
   const featureMenuOpen = menuView === "features";
   const skillMenuOpen = menuView === "skills";
-  const codexModeEnabled = props.agentRuntime === "codex";
-  const codexModeToggleEnabled = codexModeEnabled || props.canEnableCodexMode === true;
-  const codexModeDescription = codexModeEnabled
-    ? "已开启，当前发送到 Codex"
+  const agentModeActive = props.agentMode !== null;
+  const codexModeToggleEnabled = agentModeActive || props.canEnableCodexMode === true;
+  const codexModeDescription = props.agentMode === "normal"
+    ? "normal 已开启"
+    : props.agentMode === "plan"
+    ? "plan 已开启"
     : codexModeToggleEnabled
-    ? "已关闭，点击后切换到 Codex"
+    ? "ghost 模式"
     : COMPOSER_CODEX_DISABLED_LABEL;
   const enabledSkills = sortEnabledSkills(props.skills ?? []);
   const dockStyle: ComposerDockStyle = {
@@ -121,17 +124,17 @@ export function ChatComposer(props: ChatComposerProps) {
     textareaRef.current?.focus();
   }
 
-  function handleSwitchAgentRuntime(runtime: AgentRuntimeType): void {
-    if (!props.onSwitchAgentRuntime || runtime === props.agentRuntime) {
+  function handleChangeAgentMode(mode: AgentModeSelection): void {
+    if (!props.onChangeAgentMode) {
       textareaRef.current?.focus();
       return;
     }
 
-    if (runtime === "codex" && props.canEnableCodexMode !== true) {
+    if (mode !== null && mode !== props.agentMode && props.canEnableCodexMode !== true) {
       return;
     }
 
-    props.onSwitchAgentRuntime(runtime);
+    props.onChangeAgentMode(mode);
     setMenuView(null);
     textareaRef.current?.focus();
   }
@@ -165,22 +168,24 @@ export function ChatComposer(props: ChatComposerProps) {
             <span>功能</span>
           </div>
           <div className="composer-feature-mode-switch" role="group" aria-label="Codex 模式">
+            <span className="composer-feature-mode-label">{COMPOSER_CODEX_MODE_LABEL}</span>
             <button
-              className={!codexModeEnabled ? "is-active" : ""}
+              className={props.agentMode === "normal" ? "is-active" : ""}
               type="button"
-              aria-pressed={!codexModeEnabled}
-              onClick={() => handleSwitchAgentRuntime("ghost")}
+              aria-pressed={props.agentMode === "normal"}
+              disabled={!codexModeToggleEnabled && props.agentMode !== "normal"}
+              onClick={() => handleChangeAgentMode(props.agentMode === "normal" ? null : "normal")}
             >
-              Ghost
+              normal
             </button>
             <button
-              className={codexModeEnabled ? "is-active" : ""}
+              className={props.agentMode === "plan" ? "is-active" : ""}
               type="button"
-              aria-pressed={codexModeEnabled}
-              disabled={!codexModeToggleEnabled}
-              onClick={() => handleSwitchAgentRuntime("codex")}
+              aria-pressed={props.agentMode === "plan"}
+              disabled={!codexModeToggleEnabled && props.agentMode !== "plan"}
+              onClick={() => handleChangeAgentMode(props.agentMode === "plan" ? null : "plan")}
             >
-              Codex
+              plan
             </button>
           </div>
           <div className="composer-feature-status" role="status">{codexModeDescription}</div>

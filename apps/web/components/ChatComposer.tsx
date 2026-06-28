@@ -8,10 +8,10 @@ import { ComposerInputRow, type ComposerActionState } from '@/components/ChatCom
 import { ComposerMetaRow } from '@/components/ComposerMetaRow';
 import { ignorePromise } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
-import type { AgentRuntimeType, ChatSelectedSkill, SkillPayload } from '@/lib/types';
+import type { AgentModeSelection, ChatSelectedSkill, SkillPayload } from '@/lib/types';
 
 interface ChatComposerProps {
-  agentRuntime: AgentRuntimeType;
+  agentMode: AgentModeSelection;
   canEnableCodexMode?: boolean;
   codexModeDisabledMessage?: string;
   value: string;
@@ -37,7 +37,7 @@ interface ChatComposerProps {
   onSelectFiles?: (files: FileList) => Promise<void> | void;
   onRefreshSkills?: () => Promise<void> | void;
   onSelectSkill?: (skill: SkillPayload) => void;
-  onSwitchAgentRuntime?: (runtime: AgentRuntimeType) => void;
+  onChangeAgentMode?: (mode: AgentModeSelection) => void;
 }
 
 const COMPOSER_TEXTAREA_MAX_HEIGHT_PX = 200;
@@ -47,7 +47,7 @@ const COMPOSER_ROW_COLUMN_GAP_PX = 4;
 type ComposerMenuView = 'attachment' | 'features' | 'skills' | null;
 
 export const ChatComposer: FC<ChatComposerProps> = ({
-  agentRuntime,
+  agentMode,
   canEnableCodexMode = false,
   codexModeDisabledMessage,
   value,
@@ -73,7 +73,7 @@ export const ChatComposer: FC<ChatComposerProps> = ({
   onSelectFiles,
   onRefreshSkills,
   onSelectSkill,
-  onSwitchAgentRuntime,
+  onChangeAgentMode,
 }) => {
   const { copy } = useWebLocale();
   const composerShellRef = useRef<HTMLDivElement | null>(null);
@@ -88,18 +88,20 @@ export const ChatComposer: FC<ChatComposerProps> = ({
   const attachmentMenuOpen = menuView === 'attachment';
   const featureMenuOpen = menuView === 'features';
   const skillMenuOpen = menuView === 'skills';
-  const codexModeEnabled = agentRuntime === 'codex';
-  const codexModeToggleEnabled = codexModeEnabled || canEnableCodexMode;
-  const codexModeDescription = codexModeEnabled
-    ? copy.chat.composerCodexEnabled
+  const agentModeActive = agentMode !== null;
+  const codexModeToggleEnabled = agentModeActive || canEnableCodexMode;
+  const codexModeDescription = agentMode === 'normal'
+    ? copy.chat.composerCodexNormalEnabled
+    : agentMode === 'plan'
+    ? copy.chat.composerCodexPlanEnabled
     : codexModeToggleEnabled
-    ? copy.chat.composerCodexDisabled
+    ? copy.chat.composerCodexInactive
     : codexModeDisabledMessage ?? copy.chat.composerCodexUnavailable;
-  const fileDisabled = disabled || sending || codexModeEnabled || onSelectFiles === undefined;
+  const fileDisabled = disabled || sending || onSelectFiles === undefined;
   const attachmentDisabled = disabled || sending || (
     onSelectFiles === undefined
     && onSelectSkill === undefined
-    && onSwitchAgentRuntime === undefined
+    && onChangeAgentMode === undefined
   );
   const action = buildComposerActionState({
     canSend,
@@ -181,7 +183,7 @@ export const ChatComposer: FC<ChatComposerProps> = ({
   }
 
   function handleFeatureClick() {
-    if (disabled || sending || onSwitchAgentRuntime === undefined) {
+    if (disabled || sending || onChangeAgentMode === undefined) {
       return;
     }
 
@@ -195,17 +197,17 @@ export const ChatComposer: FC<ChatComposerProps> = ({
     textareaRef.current?.focus();
   }
 
-  function handleSwitchAgentRuntime(runtime: AgentRuntimeType) {
-    if (!onSwitchAgentRuntime || runtime === agentRuntime) {
+  function handleChangeAgentMode(mode: AgentModeSelection) {
+    if (!onChangeAgentMode) {
       textareaRef.current?.focus();
       return;
     }
 
-    if (runtime === 'codex' && !canEnableCodexMode) {
+    if (mode !== null && mode !== agentMode && !canEnableCodexMode) {
       return;
     }
 
-    onSwitchAgentRuntime(runtime);
+    onChangeAgentMode(mode);
     setMenuView(null);
     textareaRef.current?.focus();
   }
@@ -238,10 +240,11 @@ export const ChatComposer: FC<ChatComposerProps> = ({
 
         <ComposerInputRow
           action={action}
-          agentRuntime={agentRuntime}
+          agentMode={agentMode}
           attachmentMenuOpen={attachmentMenuOpen}
           ariaLabel={effectiveAriaLabel}
           codexModeDescription={codexModeDescription}
+          codexModeLabel={copy.chat.composerCodexModeBadge}
           codexModeTitle={copy.chat.composerCodexModeTitle}
           codexToggleEnabled={codexModeToggleEnabled}
           disabled={disabled}
@@ -254,7 +257,7 @@ export const ChatComposer: FC<ChatComposerProps> = ({
           onFileClick={handleFileClick}
           onRefreshSkills={onRefreshSkills}
           onSelectSkill={onSelectSkill ? handleSelectSkill : undefined}
-          onSwitchAgentRuntime={onSwitchAgentRuntime ? handleSwitchAgentRuntime : undefined}
+          onChangeAgentMode={onChangeAgentMode ? handleChangeAgentMode : undefined}
           onFeatureClick={handleFeatureClick}
           onSkillClick={handleSkillClick}
           onChange={onChange}
@@ -288,12 +291,12 @@ export const ChatComposer: FC<ChatComposerProps> = ({
           attachmentTitle={copy.chat.composerAddContent}
           menuFileLabel={copy.chat.composerAttachmentFile}
           menuFeatureLabel={copy.chat.composerAttachmentFeature}
-          ghostRuntimeLabel={copy.chat.composerRuntimeGhost}
-          codexRuntimeLabel={copy.chat.composerRuntimeCodex}
+          normalModeLabel={copy.chat.composerRuntimeNormal}
+          planModeLabel={copy.chat.composerRuntimePlan}
           menuSkillLabel={copy.chat.composerAttachmentSkill}
           selectedSkillClearLabel={selectedSkill ? copy.chat.composerClearSelectedSkill(selectedSkill.name) : undefined}
           menuUnavailableLabel={copy.chat.composerAttachmentUnavailable}
-          fileUnavailableLabel={codexModeEnabled ? copy.chat.composerCodexImagesUnsupported : copy.chat.composerAttachmentUnavailable}
+          fileUnavailableLabel={copy.chat.composerAttachmentUnavailable}
           value={value}
         />
 

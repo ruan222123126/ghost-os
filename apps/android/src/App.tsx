@@ -20,6 +20,7 @@ import { useMobileSessions } from "./hooks/useMobileSessions";
 import { DEFAULT_CODEX_MODEL, normalizeCodexModel } from "./lib/codexModels";
 import type {
   AgentPayload,
+  AgentModeSelection,
   AgentRuntimeType,
   ChatSelectedSkill,
   ConfigPayload,
@@ -123,6 +124,7 @@ function App() {
   const [message, setMessage] = useState("");
   const [selectedSkill, setSelectedSkill] = useState<ChatSelectedSkill | null>(null);
   const [agentRuntime, setAgentRuntime] = useState<AgentRuntimeType>("ghost");
+  const [agentMode, setAgentMode] = useState<AgentModeSelection>(null);
   const [codexModel, setCodexModel] = useState<string>(DEFAULT_CODEX_MODEL);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -135,17 +137,19 @@ function App() {
   const chatConfig = settings.remoteExecutionEnabled ? config : localRuntimeConfig;
   const chatProviderList = providerList;
   const activeCodexModel = normalizeCodexModel(codexModel);
+  const effectiveAgentRuntime = agentMode === "plan" ? "ghost" : agentRuntime;
   const sendAgentMessageForRuntime = useCallback(
     (options: Parameters<typeof sendAgentMessage>[0]) => sendAgentMessage({
       ...options,
-      agentRuntime,
-      codexModel: agentRuntime === "codex" ? activeCodexModel : undefined,
+      agentRuntime: effectiveAgentRuntime,
+      mode: agentMode === "plan" ? "plan" : undefined,
+      codexModel: effectiveAgentRuntime === "codex" ? activeCodexModel : undefined,
     }),
-    [activeCodexModel, agentRuntime, sendAgentMessage],
+    [activeCodexModel, agentMode, effectiveAgentRuntime, sendAgentMessage],
   );
   const stopAgentRunForRuntime = useCallback(
-    (input: Parameters<typeof stopAgentRun>[0]) => stopAgentRun({ ...input, agentRuntime }),
-    [agentRuntime, stopAgentRun],
+    (input: Parameters<typeof stopAgentRun>[0]) => stopAgentRun({ ...input, agentRuntime: effectiveAgentRuntime }),
+    [effectiveAgentRuntime, stopAgentRun],
   );
   const mobileSessions = useMobileSessions({
     bridgeConnected: Boolean(config),
@@ -155,7 +159,9 @@ function App() {
     getSession,
     pinnedHistoryIds,
     persistComputerSessionsEnabled: settings.persistComputerSessionsEnabled,
-    sendAvailable: agentRuntime === "codex"
+    sendAvailable: agentMode === "plan"
+      ? Boolean(config)
+      : agentRuntime === "codex"
       ? Boolean(config)
       : settings.remoteExecutionEnabled
       ? Boolean(config)
@@ -166,7 +172,7 @@ function App() {
     stopAgentRun: stopAgentRunForRuntime,
   });
   const displayStatus = mobileSessions.activeStatus.tone === "idle" ? status : mobileSessions.activeStatus;
-  const supportsComposerSkills = Boolean(config) && (agentRuntime === "codex" || settings.remoteExecutionEnabled);
+  const supportsComposerSkills = Boolean(config) && (agentMode === "plan" || agentRuntime === "codex" || settings.remoteExecutionEnabled);
   const canSubmit = isNonEmptyMessage(message) || selectedSkill !== null;
   const runtimeLabel = useMemo(
     () => displayRuntime(agentRuntime, agentRuntime === "codex" ? config : chatConfig, activeCodexModel),
@@ -386,21 +392,21 @@ function App() {
         {showScrollDown ? <ScrollDownButton onClick={() => scrollToBottom()} /> : null}
 
         <ChatComposer
-          agentRuntime={agentRuntime}
+          agentMode={agentMode}
           canEnableCodexMode={Boolean(config)}
           canSubmit={canSubmit}
           disabled={!mobileSessions.canSend}
           value={message}
-          canStop={(settings.remoteExecutionEnabled || agentRuntime === "codex") && mobileSessions.canStop}
+          canStop={(settings.remoteExecutionEnabled || agentRuntime === "codex" || agentMode === "plan") && mobileSessions.canStop}
           loading={mobileSessions.activeStatus.tone === "loading"}
           selectedSkill={selectedSkill}
           skills={supportsComposerSkills ? skillList : undefined}
           onClearSelectedSkill={() => setSelectedSkill(null)}
           onRefreshSkills={supportsComposerSkills ? refreshSkills : undefined}
           onSelectSkill={supportsComposerSkills ? (skill) => setSelectedSkill({ id: skill.id, name: skill.name }) : undefined}
-          onSwitchAgentRuntime={setAgentRuntime}
+          onChangeAgentMode={setAgentMode}
           onSubmit={sendMessage}
-          onStop={(settings.remoteExecutionEnabled || agentRuntime === "codex") ? async () => {
+          onStop={(settings.remoteExecutionEnabled || agentRuntime === "codex" || agentMode === "plan") ? async () => {
             await mobileSessions.stopCurrentRun();
           } : undefined}
           onChange={setMessage}

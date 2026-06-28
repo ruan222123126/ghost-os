@@ -1,7 +1,7 @@
 import React from 'react';
 import TestRenderer, { act, type ReactTestInstance } from 'react-test-renderer';
 import { WebLocaleProvider } from '@/lib/i18n/provider';
-import type { AgentRuntimeType, ChatSelectedSkill, SkillPayload } from '@/lib/types';
+import type { AgentModeSelection, ChatSelectedSkill, SkillPayload } from '@/lib/types';
 import { ChatComposer } from './ChatComposer';
 
 describe('components/ChatComposer', () => {
@@ -96,7 +96,7 @@ describe('components/ChatComposer', () => {
     expect(fileInputClick).not.toHaveBeenCalled();
   });
 
-  it('opens the feature panel from the plus menu and toggles codex mode', () => {
+  it('opens the feature panel from the plus menu and toggles plan mode off and on', () => {
     const harness = renderComposerHarness({ canEnableCodexMode: true });
 
     act(() => {
@@ -106,11 +106,11 @@ describe('components/ChatComposer', () => {
       harness.menuItem('Feature').props.onClick();
     });
 
-    expect(harness.runtimeButton('Ghost').props['aria-pressed']).toBe(true);
-    expect(harness.runtimeButton('Codex').props['aria-pressed']).toBe(false);
+    expect(harness.runtimeButton('normal').props['aria-pressed']).toBe(false);
+    expect(harness.runtimeButton('plan').props['aria-pressed']).toBe(false);
 
     act(() => {
-      harness.runtimeButton('Codex').props.onClick();
+      harness.runtimeButton('plan').props.onClick();
     });
 
     act(() => {
@@ -120,8 +120,21 @@ describe('components/ChatComposer', () => {
       harness.menuItem('Feature').props.onClick();
     });
 
-    expect(harness.runtimeButton('Ghost').props['aria-pressed']).toBe(false);
-    expect(harness.runtimeButton('Codex').props['aria-pressed']).toBe(true);
+    expect(harness.runtimeButton('normal').props['aria-pressed']).toBe(false);
+    expect(harness.runtimeButton('plan').props['aria-pressed']).toBe(true);
+
+    act(() => {
+      harness.runtimeButton('plan').props.onClick();
+    });
+    act(() => {
+      harness.plusButton().props.onClick();
+    });
+    act(() => {
+      harness.menuItem('Feature').props.onClick();
+    });
+
+    expect(harness.runtimeButton('normal').props['aria-pressed']).toBe(false);
+    expect(harness.runtimeButton('plan').props['aria-pressed']).toBe(false);
   });
 
   it('disables codex mode in the feature menu when unavailable', () => {
@@ -134,7 +147,7 @@ describe('components/ChatComposer', () => {
       harness.menuItem('Feature').props.onClick();
     });
 
-    expect(harness.runtimeButton('Codex').props.disabled).toBe(true);
+    expect(harness.runtimeButton('plan').props.disabled).toBe(true);
     expect(harness.statusNode('Codex is unavailable right now')).toBeTruthy();
   });
 
@@ -283,7 +296,7 @@ interface ComposerTextareaLayoutMock {
 function renderComposerHarness(options: {
   canEnableCodexMode?: boolean;
   fileInputClick?: () => void;
-  initialAgentRuntime?: AgentRuntimeType;
+  initialAgentMode?: AgentModeSelection;
   initialValue?: string;
   initialSelectedSkill?: ChatSelectedSkill;
   onSubmit?: (value: string) => Promise<void> | void;
@@ -299,7 +312,7 @@ function renderComposerHarness(options: {
   const {
     canEnableCodexMode = false,
     fileInputClick,
-    initialAgentRuntime = 'ghost',
+    initialAgentMode = null,
     initialSelectedSkill = null,
     initialValue = '',
     onRefreshSkills,
@@ -312,7 +325,7 @@ function renderComposerHarness(options: {
   const textareaLayout = options.textareaLayout ? createTextareaLayoutMock(options.textareaLayout) : null;
 
   function Harness() {
-    const [agentRuntime, setAgentRuntime] = React.useState<AgentRuntimeType>(initialAgentRuntime);
+    const [agentMode, setAgentMode] = React.useState<AgentModeSelection>(initialAgentMode);
     const [value, setValue] = React.useState(initialValue);
     const [selectedSkill, setSelectedSkill] = React.useState<ChatSelectedSkill | null>(initialSelectedSkill);
     renderedValue = value;
@@ -320,7 +333,7 @@ function renderComposerHarness(options: {
       WebLocaleProvider,
       { initialLocale: 'en-US' },
       React.createElement(ChatComposer, {
-        agentRuntime,
+        agentMode,
         canEnableCodexMode,
         value,
         onChange: setValue,
@@ -335,7 +348,7 @@ function renderComposerHarness(options: {
         onClearSelectedSkill: () => setSelectedSkill(null),
         onRefreshSkills,
         onSelectFiles,
-        onSwitchAgentRuntime: setAgentRuntime,
+        onChangeAgentMode: setAgentMode,
         onSelectSkill: onSelectSkill
           ? (skill: SkillPayload) => setSelectedSkill({ id: skill.id, name: skill.name })
           : undefined,

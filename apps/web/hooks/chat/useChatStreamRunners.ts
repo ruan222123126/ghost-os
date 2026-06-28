@@ -141,6 +141,7 @@ function useAgentStreamRunner(options: StreamRunnerOptions) {
         : await streamMessage({
           images: run.images,
           message: run.message,
+          mode: run.mode,
           onEvent: handleEvent,
           sessionId: run.sessionId,
           signal: run.signal,

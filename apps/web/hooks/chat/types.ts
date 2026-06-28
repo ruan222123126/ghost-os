@@ -56,6 +56,7 @@ export interface StreamAgentRunInput {
   agentRuntime?: AgentRuntimeType;
   images?: SessionImageContent[];
   message: string;
+  mode?: ChatSendInput['mode'];
   model?: string;
   permissionMode?: ExternalCodexPermissionMode;
   projectRoot?: string;

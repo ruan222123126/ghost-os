@@ -207,6 +207,7 @@ function buildStreamRunInput(
     agentRuntime: 'ghost',
     images: draftImagesToSessionImages(input.images),
     message: context.agentMessage,
+    mode: input.mode,
     sessionId: context.sessionId || undefined,
     signal: context.abortController.signal,
     traceId: context.traceId,

@@ -54,6 +54,7 @@ const PAYLOAD_SESSION_ID_RESOLVERS: Partial<Record<AgentStreamEvent['type'], Eve
 export interface StreamAgentMessageOptions {
   images?: AgentRequest['images'];
   message: string;
+  mode?: AgentRequest['mode'];
   onEvent: (event: AgentStreamEvent) => void | Promise<void>;
   sessionId?: string;
   signal?: AbortSignal;
@@ -85,6 +86,9 @@ export async function streamMessage(options: StreamAgentMessageOptions): Promise
   const body: AgentRequest = { message: options.message };
   if (options.images?.length) {
     body.images = options.images.map((image) => ({ ...image }));
+  }
+  if (options.mode) {
+    body.mode = options.mode;
   }
   if (options.sessionId?.trim()) {
     body.session_id = options.sessionId.trim();

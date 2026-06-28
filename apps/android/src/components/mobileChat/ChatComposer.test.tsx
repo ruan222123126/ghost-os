@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AgentRuntimeType, ChatSelectedSkill, SkillPayload } from "../../mobileTypes";
+import type { AgentModeSelection, ChatSelectedSkill, SkillPayload } from "../../mobileTypes";
 import { ChatComposer } from "./ChatComposer";
 
 let measuredScrollHeight = 52;
@@ -107,22 +107,30 @@ describe("ChatComposer", () => {
     expect(screen.getByText("暂无")).toBeTruthy();
   });
 
-  it("opens the feature menu from the plus menu and toggles codex mode", () => {
+  it("opens the feature menu from the plus menu and toggles plan mode off and on", () => {
     renderComposerHarness({ canEnableCodexMode: true });
 
     fireEvent.click(screen.getByRole("button", { name: "添加内容" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "功能" }));
 
-    expect(screen.getByRole("button", { name: "Ghost" }).getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByRole("button", { name: "Codex" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByText("codex模式")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "normal" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByRole("button", { name: "plan" }).getAttribute("aria-pressed")).toBe("false");
 
-    fireEvent.click(screen.getByRole("button", { name: "Codex" }));
+    fireEvent.click(screen.getByRole("button", { name: "plan" }));
 
     fireEvent.click(screen.getByRole("button", { name: "添加内容" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "功能" }));
 
-    expect(screen.getByRole("button", { name: "Ghost" }).getAttribute("aria-pressed")).toBe("false");
-    expect(screen.getByRole("button", { name: "Codex" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "normal" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByRole("button", { name: "plan" }).getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "添加内容" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "功能" }));
+
+    expect(screen.getByRole("button", { name: "normal" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByRole("button", { name: "plan" }).getAttribute("aria-pressed")).toBe("false");
   });
 
   it("disables codex mode in the feature menu when the bridge is unavailable", () => {
@@ -131,7 +139,7 @@ describe("ChatComposer", () => {
     fireEvent.click(screen.getByRole("button", { name: "添加内容" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "功能" }));
 
-    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Codex" }).disabled).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "plan" }).disabled).toBe(true);
     expect(screen.getByText("连接电脑后可用")).toBeTruthy();
   });
 
@@ -156,7 +164,7 @@ describe("ChatComposer", () => {
 
       return (
         <ChatComposer
-          agentRuntime="ghost"
+          agentMode={null}
           canSubmit={value.trim().length > 0}
           loading={false}
           onChange={setValue}
@@ -193,7 +201,7 @@ function mockTextareaScrollHeight(): void {
 
 function renderComposerHarness(options: {
   canEnableCodexMode?: boolean;
-  initialAgentRuntime?: AgentRuntimeType;
+  initialAgentMode?: AgentModeSelection;
   canStop?: boolean;
   disabled?: boolean;
   initialSelectedSkill?: ChatSelectedSkill | null;
@@ -206,7 +214,7 @@ function renderComposerHarness(options: {
 } = {}) {
   const {
     canEnableCodexMode = false,
-    initialAgentRuntime = "ghost",
+    initialAgentMode = null,
     canStop = false,
     disabled = false,
     initialSelectedSkill = null,
@@ -219,13 +227,13 @@ function renderComposerHarness(options: {
   } = options;
 
   function Harness() {
-    const [agentRuntime, setAgentRuntime] = useState<AgentRuntimeType>(initialAgentRuntime);
+    const [agentMode, setAgentMode] = useState<AgentModeSelection>(initialAgentMode);
     const [value, setValue] = useState(initialValue);
     const [selectedSkill, setSelectedSkill] = useState<ChatSelectedSkill | null>(initialSelectedSkill);
 
     return (
       <ChatComposer
-        agentRuntime={agentRuntime}
+        agentMode={agentMode}
         canEnableCodexMode={canEnableCodexMode}
         canStop={canStop}
         disabled={disabled}
@@ -234,9 +242,9 @@ function renderComposerHarness(options: {
         skills={skills}
         onChange={setValue}
         onClearSelectedSkill={() => setSelectedSkill(null)}
+        onChangeAgentMode={setAgentMode}
         onRefreshSkills={onRefreshSkills}
         onSelectSkill={onSelectSkill ? (skill) => setSelectedSkill({ id: skill.id, name: skill.name }) : undefined}
-        onSwitchAgentRuntime={setAgentRuntime}
         onStop={onStop}
         onSubmit={vi.fn(async (event) => {
           event.preventDefault();

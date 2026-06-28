@@ -7,6 +7,8 @@ export interface HostProfile {
 
 export type ConnectionMode = "webrtc" | "http";
 export type AgentRuntimeType = "ghost" | "codex";
+export type AgentModeSelection = "normal" | "plan" | null;
+export type AgentRequestMode = "plan";
 export type ExternalCodexPermissionMode = "read-only" | "default" | "safe-yolo" | "yolo";
 export type ExternalAgentApprovalDecision = "approved" | "approved_for_session" | "denied" | "abort";
 

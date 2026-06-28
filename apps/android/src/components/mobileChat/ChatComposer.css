@@ -327,22 +327,35 @@
 }
 
 .composer-feature-mode-switch {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+  padding-top: 17px;
+}
+
+.composer-feature-mode-label {
+  position: absolute;
+  top: 0;
+  left: 2px;
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
 }
 
 .composer-feature-mode-switch button {
   min-width: 0;
   min-height: 48px;
+  border: 1px solid #e5e7eb;
   border-radius: 18px;
   padding: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: #6b7280;
-  background: transparent;
+  color: #111827;
+  background: #ffffff;
   font-size: 15px;
   font-weight: 400;
   line-height: 1;
@@ -355,14 +368,19 @@
 }
 
 .composer-feature-mode-switch button.is-active {
-  color: #111827;
-  background: #ffffff;
+  border-color: #111827;
+  color: #ffffff;
+  background: #111827;
   font-weight: 500;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
 
 .composer-feature-mode-switch button:hover {
   color: #374151;
+}
+
+.composer-feature-mode-switch button.is-active:hover {
+  color: #ffffff;
 }
 
 .composer-feature-mode-switch button:disabled {
@@ -514,17 +532,28 @@
   }
 
   .composer-feature-mode-switch button {
+    border-color: #3a3d42;
+    color: #111827;
+    background: #ffffff;
+  }
+
+  .composer-feature-mode-label {
     color: #a3a7ad;
   }
 
   .composer-feature-mode-switch button.is-active {
-    color: #e8eaed;
-    background: #282a2c;
+    border-color: #111827;
+    color: #ffffff;
+    background: #111827;
     box-shadow: none;
   }
 
   .composer-feature-mode-switch button:hover {
-    color: #e8eaed;
+    color: #111827;
+  }
+
+  .composer-feature-mode-switch button.is-active:hover {
+    color: #ffffff;
   }
 
   .composer-feature-status,
