@@ -33,7 +33,9 @@ type activeTurn struct {
 	traceID   string
 	turn      int
 	sink      streaming.Sink
-	done      chan turnDone
+	done      chan struct{}
+	result    turnDone
+	finished  bool
 	text      strings.Builder
 }
 
@@ -129,11 +131,18 @@ func (m *Manager) ExecuteStream(
 			ext.Status = StatusRunning
 		})
 	}
+	active, activeDone := runtime.activeDoneState()
 	select {
 	case <-ctx.Done():
 		_ = runtime.client.InterruptTurn(context.Background(), threadID, turnID)
+		_ = m.updateRuntimeState(sessionID, func(ext *session.ExternalRuntime) {
+			ext.Status = StatusIdle
+			ext.TurnID = ""
+			ext.PendingApprovals = nil
+		})
 		return "", sessionID, ctx.Err()
-	case done := <-runtime.activeDone():
+	case <-activeDone:
+		done := runtime.activeResult(active)
 		if done.err != nil {
 			return "", sessionID, done.err
 		}
@@ -163,12 +172,27 @@ func (m *Manager) Stop(ctx context.Context, req api.ExternalAgentStopParams) (ap
 	if ext == nil || strings.TrimSpace(ext.ThreadID) == "" {
 		return api.ExternalAgentResponse{}, ErrExternalRunMissing
 	}
-	if err := runtime.client.InterruptTurn(ctx, ext.ThreadID, ext.TurnID); err != nil {
+	turnID := strings.TrimSpace(ext.TurnID)
+	if turnID == "" {
+		return api.ExternalAgentResponse{}, ErrExternalRunMissing
+	}
+	active, done := runtime.activeDoneState()
+	if err := runtime.client.InterruptTurn(ctx, ext.ThreadID, turnID); err != nil {
 		return api.ExternalAgentResponse{}, err
+	}
+	select {
+	case <-ctx.Done():
+		return api.ExternalAgentResponse{}, ctx.Err()
+	case <-done:
+		result := runtime.activeResult(active)
+		if result.err != nil {
+			return api.ExternalAgentResponse{}, result.err
+		}
 	}
 	_ = m.updateRuntimeState(sessionID, func(ext *session.ExternalRuntime) {
 		ext.Status = StatusIdle
 		ext.TurnID = ""
+		ext.PendingApprovals = nil
 	})
 	return api.ExternalAgentResponse{
 		Status:    StatusIdle,

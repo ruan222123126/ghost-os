@@ -168,7 +168,7 @@ func (r *runtimeSession) beginTurn(sessionID string, traceID string, turn int, s
 		traceID:   traceID,
 		turn:      turn,
 		sink:      ensureSink(sink),
-		done:      make(chan turnDone, 1),
+		done:      make(chan struct{}),
 	}
 	return nil
 }
@@ -179,15 +179,27 @@ func (r *runtimeSession) activeSnapshot() *activeTurn {
 	return r.active
 }
 
-func (r *runtimeSession) activeDone() <-chan turnDone {
+func (r *runtimeSession) activeDoneState() (*activeTurn, <-chan struct{}) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.active == nil {
-		ch := make(chan turnDone)
+		ch := make(chan struct{})
 		close(ch)
-		return ch
+		return nil, ch
 	}
-	return r.active.done
+	return r.active, r.active.done
+}
+
+func (r *runtimeSession) activeResult(active *activeTurn) turnDone {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if active != nil {
+		return active.result
+	}
+	if r.active == nil {
+		return turnDone{}
+	}
+	return r.active.result
 }
 
 func (r *runtimeSession) clearActive() {
@@ -216,14 +228,16 @@ func (r *runtimeSession) appendText(text string) {
 func (r *runtimeSession) finish(done turnDone) {
 	r.mu.Lock()
 	active := r.active
-	r.mu.Unlock()
 	if active == nil {
+		r.mu.Unlock()
 		return
 	}
-	select {
-	case active.done <- done:
-	default:
+	if !active.finished {
+		active.result = done
+		active.finished = true
+		close(active.done)
 	}
+	r.mu.Unlock()
 }
 
 func resolveCWD(requestRoot string, configRoot string) string {

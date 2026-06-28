@@ -370,6 +370,130 @@ func TestManagerStopInterruptsCurrentTurn(t *testing.T) {
 	}
 }
 
+func TestManagerStopWaitsForTurnAbortBeforeReturning(t *testing.T) {
+	manager, _, fake := newExternalAgentTestManager(t)
+	fake.turnStarted = make(chan struct{})
+	fake.interrupted = make(chan struct{})
+	interruptObserved := make(chan struct{})
+	releaseAbort := make(chan struct{})
+	fake.startTurn = func(ctx context.Context, client *fakeCodexClient, opts TurnOptions) (string, error) {
+		client.emit(CodexEvent{Type: "task_started", Payload: map[string]any{"turn_id": "turn-wait"}})
+		close(client.turnStarted)
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-client.interrupted:
+			close(interruptObserved)
+		}
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-releaseAbort:
+		}
+		client.emit(CodexEvent{Type: "turn_aborted", Payload: map[string]any{"reason": "stopped"}})
+		return "turn-wait", nil
+	}
+	sink := newCollectingSink()
+	done := make(chan executeResult, 1)
+	go func() {
+		message, sessionID, err := manager.ExecuteStream(context.Background(), api.ExternalAgentRequest{
+			Message: "pause me",
+		}, "trace-stop-wait", sink, true)
+		done <- executeResult{message: message, sessionID: sessionID, err: err}
+	}()
+
+	<-fake.turnStarted
+	started := sink.waitForType(t, streaming.EventRunStarted)
+	if err := waitUntil(func() bool {
+		ext, err := manager.externalRuntime(started.SessionID)
+		return err == nil && ext != nil && ext.TurnID == "turn-wait"
+	}); err != nil {
+		t.Fatalf("runtime did not record turn id: %v", err)
+	}
+
+	stopDone := make(chan error, 1)
+	go func() {
+		_, err := manager.Stop(context.Background(), api.ExternalAgentStopParams{SessionID: started.SessionID})
+		stopDone <- err
+	}()
+	<-interruptObserved
+	select {
+	case err := <-stopDone:
+		t.Fatalf("Stop returned before turn_aborted: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(releaseAbort)
+	if err := <-stopDone; err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	if result := waitExecuteResult(t, done); result.err != nil {
+		t.Fatalf("ExecuteStream after stop: %v", result.err)
+	}
+}
+
+func TestManagerExecuteStreamResumesCodexThreadAfterStop(t *testing.T) {
+	manager, _, fake := newExternalAgentTestManager(t)
+	fake.turnStarted = make(chan struct{})
+	fake.interrupted = make(chan struct{})
+	fake.startTurn = func(ctx context.Context, client *fakeCodexClient, opts TurnOptions) (string, error) {
+		client.emit(CodexEvent{Type: "task_started", Payload: map[string]any{"turn_id": "turn-stop-resume"}})
+		close(client.turnStarted)
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-client.interrupted:
+			client.emit(CodexEvent{Type: "turn_aborted", Payload: map[string]any{"reason": "stopped"}})
+			return "turn-stop-resume", nil
+		}
+	}
+	sink := newCollectingSink()
+	done := make(chan executeResult, 1)
+	go func() {
+		message, sessionID, err := manager.ExecuteStream(context.Background(), api.ExternalAgentRequest{
+			Message: "pause before continuing",
+		}, "trace-stop-resume", sink, true)
+		done <- executeResult{message: message, sessionID: sessionID, err: err}
+	}()
+
+	<-fake.turnStarted
+	started := sink.waitForType(t, streaming.EventRunStarted)
+	if err := waitUntil(func() bool {
+		ext, err := manager.externalRuntime(started.SessionID)
+		return err == nil && ext != nil && ext.TurnID == "turn-stop-resume"
+	}); err != nil {
+		t.Fatalf("runtime did not record turn id: %v", err)
+	}
+	if _, err := manager.Stop(context.Background(), api.ExternalAgentStopParams{SessionID: started.SessionID}); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	if result := waitExecuteResult(t, done); result.err != nil {
+		t.Fatalf("ExecuteStream after stop: %v", result.err)
+	}
+
+	fake.startTurn = func(ctx context.Context, client *fakeCodexClient, opts TurnOptions) (string, error) {
+		client.emit(CodexEvent{Type: "task_started", Payload: map[string]any{"turn_id": "turn-continued"}})
+		client.emit(CodexEvent{Type: "agent_message", Payload: map[string]any{"message": "continued"}})
+		client.emit(CodexEvent{Type: "task_complete", Payload: map[string]any{"turn_id": "turn-continued"}})
+		return "turn-continued", nil
+	}
+	message, sessionID, err := manager.ExecuteStream(context.Background(), api.ExternalAgentRequest{
+		Message:   "continue",
+		SessionID: started.SessionID,
+	}, "trace-continued", newCollectingSink(), false)
+	if err != nil {
+		t.Fatalf("ExecuteStream resume: %v", err)
+	}
+	if sessionID != started.SessionID {
+		t.Fatalf("unexpected resumed session id: got %q want %q", sessionID, started.SessionID)
+	}
+	if message != "continued" {
+		t.Fatalf("unexpected resumed message: got %q want %q", message, "continued")
+	}
+	if fake.resumeThreadID() != "thread-1" {
+		t.Fatalf("expected resume thread-1, got %q", fake.resumeThreadID())
+	}
+}
+
 func TestManagerRuntimeForSessionPassesConfiguredExecutionPaths(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("GHOST_CONFIG_PATH", filepath.Join(tempDir, "config.toml"))
@@ -564,6 +688,12 @@ func (f *fakeCodexClient) interruptTurnID() string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.turnID
+}
+
+func (f *fakeCodexClient) resumeThreadID() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.resumeThreadOpts.ThreadID
 }
 
 type collectingSink struct {
