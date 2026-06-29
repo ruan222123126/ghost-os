@@ -70,12 +70,12 @@ export function buildDraftHydratedState(
       return source;
     }
 
-    const overlapCount = countCoveredDraftPrefix(committedMessages, draftMessages);
-    if (overlapCount === 0) {
+    const coveredPrefixMessageIds = collectCoveredDraftPrefixMessageIds(committedMessages, draftMessages);
+    if (coveredPrefixMessageIds.length === 0) {
       return source;
     }
 
-    return trimDraftPrefix(source, draftMessages.slice(0, overlapCount).map((message) => message.id));
+    return trimDraftPrefix(source, coveredPrefixMessageIds);
   }
 }
 
@@ -226,26 +226,24 @@ function buildDraftToolMessage(
   };
 }
 
-function countCoveredDraftPrefix(
+function collectCoveredDraftPrefixMessageIds(
   committedMessages: ChatMessage[],
   draftMessages: ChatMessage[],
-): number {
-  let committedIndex = Math.max(0, committedMessages.length - draftMessages.length);
-  let matched = 0;
+): string[] {
+  const recentCommittedMessages = committedMessages.slice(-Math.max(draftMessages.length * 2, 8));
+  const coveredMessageIds: string[] = [];
 
-  while (committedIndex < committedMessages.length && matched < draftMessages.length) {
-    if (committedMessageCoversDraftMessage(committedMessages[committedIndex], draftMessages[matched])) {
-      committedIndex += 1;
-      matched += 1;
-      continue;
-    }
-    if (matched > 0) {
+  for (const draftMessage of draftMessages) {
+    const covered = recentCommittedMessages.some((committedMessage) => (
+      committedMessageCoversDraftMessage(committedMessage, draftMessage)
+    ));
+    if (!covered) {
       break;
     }
-    committedIndex += 1;
+    coveredMessageIds.push(draftMessage.id);
   }
 
-  return matched;
+  return coveredMessageIds;
 }
 
 function trimDraftPrefix(

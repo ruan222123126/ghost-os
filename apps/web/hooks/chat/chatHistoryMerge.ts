@@ -1,4 +1,7 @@
-import { chatMessagesEquivalent } from '@/lib/chatMessageEquivalence';
+import {
+  chatMessagesEquivalent,
+  committedMessageCoversDraftMessage,
+} from '@/lib/chatMessageEquivalence';
 import type { ChatMessage, SessionDetail } from '@/lib/types';
 
 interface EquivalentPair {
@@ -99,7 +102,7 @@ function mergeMessagesByPairs(
       messages: previous,
       start: previousIndex,
       end: pair.previousIndex,
-    });
+    }, latest);
     appendLatestMessages(merged, {
       messages: latest,
       start: latestIndex,
@@ -114,7 +117,7 @@ function mergeMessagesByPairs(
     messages: previous,
     start: previousIndex,
     end: previous.length,
-  });
+  }, latest);
   appendLatestMessages(merged, {
     messages: latest,
     start: latestIndex,
@@ -123,10 +126,14 @@ function mergeMessagesByPairs(
   return merged;
 }
 
-function appendPreservedPreviousMessages(merged: ChatMessage[], range: MessageRange): void {
+function appendPreservedPreviousMessages(
+  merged: ChatMessage[],
+  range: MessageRange,
+  latestMessages: ChatMessage[],
+): void {
   for (let index = range.start; index < range.end; index += 1) {
     const message = range.messages[index];
-    if (shouldPreserveUnmatchedPreviousMessage(message)) {
+    if (shouldPreserveUnmatchedPreviousMessage(message, latestMessages)) {
       merged.push(message);
     }
   }
@@ -138,14 +145,22 @@ function appendLatestMessages(merged: ChatMessage[], range: MessageRange): void 
   }
 }
 
-function shouldPreserveUnmatchedPreviousMessage(message: ChatMessage): boolean {
+function shouldPreserveUnmatchedPreviousMessage(
+  message: ChatMessage,
+  latestMessages: ChatMessage[],
+): boolean {
   if (!isEphemeralMessageID(message.id)) {
     return true;
   }
 
-  return message.kind === 'user'
-    || message.kind === 'assistant'
-    || message.kind === 'tool';
+  if (message.kind === 'user') {
+    return true;
+  }
+  if (message.kind !== 'assistant' && message.kind !== 'tool') {
+    return false;
+  }
+
+  return !latestMessages.some((latestMessage) => committedMessageCoversDraftMessage(latestMessage, message));
 }
 
 function isEphemeralMessageID(id: string): boolean {

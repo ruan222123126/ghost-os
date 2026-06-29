@@ -55,7 +55,7 @@ export function committedMessageCoversDraftMessage(
     case 'error':
     case 'event':
     case 'system':
-      return contentCoveredByCommitted(committed.content, draft.content);
+      return textSegmentCoveredByCommitted(committed.content, draft.content);
     case 'tool':
       return toolMessageCoveredByCommitted(committed, draft as ToolChatMessage);
     default:
@@ -112,10 +112,21 @@ function toolMessageCoveredByCommitted(
     return false;
   }
 
-  return contentCoveredByCommitted(committed.content, draft.content);
+  return toolContentCoveredByCommitted(committed.content, draft.content);
 }
 
-function contentCoveredByCommitted(committed: string, draft: string): boolean {
+function textSegmentCoveredByCommitted(committed: string, draft: string): boolean {
+  const normalizedCommitted = normalizeText(committed);
+  const normalizedDraft = normalizeText(draft);
+  if (!normalizedCommitted || !normalizedDraft) {
+    return false;
+  }
+
+  return normalizedCommitted === normalizedDraft
+    || normalizedCommitted.includes(normalizedDraft);
+}
+
+function toolContentCoveredByCommitted(committed: string, draft: string): boolean {
   const normalizedCommitted = normalizeText(committed);
   const normalizedDraft = normalizeText(draft);
   if (!normalizedCommitted || !normalizedDraft) {
