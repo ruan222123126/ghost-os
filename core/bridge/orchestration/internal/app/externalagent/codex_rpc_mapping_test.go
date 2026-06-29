@@ -30,6 +30,36 @@ func TestEventFromNotificationNormalizesCodexEventMessageDelta(t *testing.T) {
 	}
 }
 
+func TestEventFromNotificationMapsCompletedAgentMessageAsSnapshot(t *testing.T) {
+	event, ok := eventFromNotification("item/completed", json.RawMessage(`{
+		"item": {
+			"type": "agentMessage",
+			"text": "hello"
+		}
+	}`))
+	if !ok {
+		t.Fatal("expected completed agent message notification to map")
+	}
+	if event.Type != codexEventAgentMessageSnapshot || stringValue(event.Payload["message"]) != "hello" {
+		t.Fatalf("unexpected event: %+v", event)
+	}
+}
+
+func TestEventFromNotificationMapsCodexAgentMessageAsSnapshot(t *testing.T) {
+	event, ok := eventFromNotification("codex/event", json.RawMessage(`{
+		"msg": {
+			"type": "agent_message",
+			"message": "hello"
+		}
+	}`))
+	if !ok {
+		t.Fatal("expected codex/event agent message notification to map")
+	}
+	if event.Type != codexEventAgentMessageSnapshot || stringValue(event.Payload["message"]) != "hello" {
+		t.Fatalf("unexpected event: %+v", event)
+	}
+}
+
 func TestEventFromNotificationNormalizesCodexReasoningDelta(t *testing.T) {
 	event, ok := eventFromNotification("codex/event", json.RawMessage(`{
 		"msg": {

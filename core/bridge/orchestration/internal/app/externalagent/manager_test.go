@@ -229,6 +229,42 @@ func TestManagerExecuteStreamMapsCodexAgentMessageContentDelta(t *testing.T) {
 	})
 }
 
+func TestManagerExecuteStreamDoesNotReplayAgentMessageSnapshot(t *testing.T) {
+	manager, sessionStore, fake := newExternalAgentTestManager(t)
+	fake.startTurn = func(ctx context.Context, client *fakeCodexClient, opts TurnOptions) (string, error) {
+		client.emit(CodexEvent{Type: "task_started", Payload: map[string]any{"turn_id": "turn-snapshot"}})
+		client.emit(CodexEvent{Type: "agent_message_content_delta", Payload: map[string]any{"delta": "hello"}})
+		client.emit(CodexEvent{Type: codexEventAgentMessageSnapshot, Payload: map[string]any{"message": "hello"}})
+		client.emit(CodexEvent{Type: "task_complete", Payload: map[string]any{"turn_id": "turn-snapshot"}})
+		return "turn-snapshot", nil
+	}
+	sink := &collectingSink{}
+
+	message, sessionID, err := manager.ExecuteStream(context.Background(), api.ExternalAgentRequest{
+		Message: "answer once",
+	}, "trace-snapshot", sink, true)
+	if err != nil {
+		t.Fatalf("ExecuteStream: %v", err)
+	}
+	if message != "hello" {
+		t.Fatalf("unexpected final message: got %q want %q", message, "hello")
+	}
+	assertEventTypes(t, sink.events(), []streaming.EventType{
+		streaming.EventRunStarted,
+		streaming.EventCompletionDelta,
+		streaming.EventMessage,
+		streaming.EventDone,
+	})
+
+	loaded, err := sessionStore.Load(sessionID)
+	if err != nil {
+		t.Fatalf("load session: %v", err)
+	}
+	if countAssistantText(loaded.Messages, "hello") != 1 || countAssistantText(loaded.Messages, "hellohello") != 0 {
+		t.Fatalf("expected completed agent message snapshot to be persisted once: %+v", loaded.Messages)
+	}
+}
+
 func TestManagerExecuteStreamSetsCodexPlanModeBeforeTurn(t *testing.T) {
 	manager, sessionStore, fake := newExternalAgentTestManager(t)
 	fake.threadModel = "gpt-5.5"

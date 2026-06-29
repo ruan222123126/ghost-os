@@ -6,6 +6,8 @@ import (
 	"strings"
 )
 
+const codexEventAgentMessageSnapshot = "agent_message_snapshot"
+
 func approvalRequestFromRPC(id int, method string, raw json.RawMessage) (ApprovalRequest, bool) {
 	params := map[string]any{}
 	_ = json.Unmarshal(raw, &params)
@@ -101,6 +103,9 @@ func rawEventFromNotification(method string, params map[string]any) (CodexEvent,
 
 func normalizeCodexEvent(event CodexEvent) CodexEvent {
 	switch event.Type {
+	case "agent_message":
+		event.Type = codexEventAgentMessageSnapshot
+		setNormalizedText(event.Payload, "message")
 	case "agent_message_chunk", "agent_message_delta", "agent_message_content_delta":
 		event.Type = "agent_message"
 		setNormalizedText(event.Payload, "message")
@@ -176,8 +181,8 @@ func agentMessageEvent(method string, item map[string]any) (CodexEvent, bool) {
 		return CodexEvent{}, false
 	}
 	text := stringValue(item["text"])
-	return CodexEvent{Type: "agent_message", Method: method, Payload: map[string]any{
-		"type":    "agent_message",
+	return CodexEvent{Type: codexEventAgentMessageSnapshot, Method: method, Payload: map[string]any{
+		"type":    codexEventAgentMessageSnapshot,
 		"message": text,
 	}}, text != ""
 }

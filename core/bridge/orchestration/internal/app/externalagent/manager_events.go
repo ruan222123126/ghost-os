@@ -19,6 +19,8 @@ func (m *Manager) handleEvent(ctx context.Context, runtime *runtimeSession, even
 	switch event.Type {
 	case "task_started":
 		m.recordTaskStarted(active, event)
+	case codexEventAgentMessageSnapshot:
+		m.recordAgentMessageSnapshot(ctx, runtime, active, event)
 	case "agent_message", "agent_message_chunk", "agent_message_delta", "agent_message_content_delta":
 		m.recordAgentMessage(ctx, runtime, active, event)
 	case "agent_reasoning", "agent_reasoning_delta", "agent_reasoning_content_delta", "reasoning_content_delta", "reasoning_raw_content_delta":
@@ -61,6 +63,16 @@ func (m *Manager) recordAgentMessage(ctx context.Context, runtime *runtimeSessio
 		"kind": "text",
 		"text": text,
 	})
+}
+
+func (m *Manager) recordAgentMessageSnapshot(ctx context.Context, runtime *runtimeSession, active *activeTurn, event CodexEvent) {
+	text := firstString(event.Payload["message"], event.Payload["text"], event.Payload["delta"], event.Payload["chunk"], event.Payload["content"])
+	if text == "" {
+		return
+	}
+	if delta := runtime.textSnapshotDelta(text); delta != "" {
+		m.recordAgentMessage(ctx, runtime, active, CodexEvent{Payload: map[string]any{"message": delta}})
+	}
 }
 
 func (m *Manager) recordReasoning(ctx context.Context, active *activeTurn, event CodexEvent) {
@@ -225,4 +237,44 @@ func resolveToolEndResult(payload map[string]any) (string, string) {
 		output = statusText
 	}
 	return output, errorText
+}
+
+func (r *runtimeSession) textSnapshotDelta(snapshot string) string {
+	text := strings.TrimSpace(snapshot)
+	if text == "" {
+		return ""
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.active == nil {
+		return ""
+	}
+
+	pending := strings.TrimSpace(r.active.pendingText.String())
+	if delta, ok := resolveSnapshotDelta(text, pending); ok {
+		return delta
+	}
+
+	final := strings.TrimSpace(r.active.text.String())
+	if delta, ok := resolveSnapshotDelta(text, final); ok {
+		return delta
+	}
+	if pending == "" && final != "" && strings.HasSuffix(final, text) {
+		return ""
+	}
+	return text
+}
+
+func resolveSnapshotDelta(snapshot string, current string) (string, bool) {
+	if current == "" {
+		return "", false
+	}
+	if snapshot == current || strings.HasPrefix(current, snapshot) {
+		return "", true
+	}
+	if strings.HasPrefix(snapshot, current) {
+		return strings.TrimSpace(strings.TrimPrefix(snapshot, current)), true
+	}
+	return "", false
 }
