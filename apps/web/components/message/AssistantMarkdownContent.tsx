@@ -1,7 +1,7 @@
 import nextDynamic from 'next/dynamic';
 import type { FC } from 'react';
 import { memo, useMemo } from 'react';
-import { shouldRenderAssistantMarkdown } from './assistantMarkdown';
+import { isMarkdownFenceLine, shouldRenderAssistantMarkdown } from './assistantMarkdown';
 
 interface AssistantMarkdownContentProps {
   content: string;
@@ -129,8 +129,4 @@ function splitStreamingMarkdownBlocks(content: string): {
     activeBlock: content.slice(blockStart),
     stableBlocks,
   };
-}
-
-function isMarkdownFenceLine(line: string): boolean {
-  return /^\s*```/.test(line);
 }

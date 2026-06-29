@@ -57,6 +57,20 @@ describe('components/message/AssistantMarkdownContent', () => {
     expect(html).toContain('```ts\nconsole.log(1)');
   });
 
+  it('does not split streaming tilde fences on blank lines inside code', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AssistantMarkdownContent, {
+        content: '# Heading\n\n~~~python\nimport random\n\nprint(random.random())',
+        enabled: true,
+        final: false,
+      }),
+    );
+
+    expect(html).toContain('data-final="true"');
+    expect(html).toContain('data-final="false"');
+    expect(html).toContain('~~~python\nimport random\n\nprint(random.random())');
+  });
+
   it('keeps raw HTML content on the plain text path', () => {
     const html = renderToStaticMarkup(
       React.createElement(AssistantMarkdownContent, {

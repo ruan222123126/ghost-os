@@ -10,18 +10,21 @@ vi.mock("markstream-react", async () => {
     default: ({
       codeBlockProps,
       content,
+      customId,
       final,
       htmlPolicy,
       typewriter,
     }: {
       codeBlockProps?: { showCopyButton?: boolean };
       content: string;
+      customId?: string;
       final?: boolean;
       htmlPolicy?: string;
       typewriter?: boolean;
     }) => React.createElement(
       "div",
       {
+        "data-custom-id": customId,
         "data-final": String(final),
         "data-html-policy": htmlPolicy,
         "data-show-copy": String(codeBlockProps?.showCopyButton),
@@ -30,6 +33,7 @@ vi.mock("markstream-react", async () => {
       },
       content,
     ),
+    setCustomComponents: vi.fn(),
   };
 });
 
@@ -43,6 +47,7 @@ describe("AssistantMarkdownContent", () => {
 
     const renderer = screen.getByTestId("markstream-renderer");
     expect(renderer.textContent).toBe("# Heading");
+    expect(renderer.getAttribute("data-custom-id")).toBe("ghost-os-mobile-assistant-markdown");
     expect(renderer.getAttribute("data-final")).toBe("true");
     expect(renderer.getAttribute("data-html-policy")).toBe("safe");
   });
