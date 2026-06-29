@@ -1,4 +1,7 @@
-use futures_util::StreamExt;
+use futures_util::{
+    future::{select, Either},
+    pin_mut, StreamExt,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -16,6 +19,8 @@ const MOBILE_LOCAL_PROVIDERS_FILE: &str = "mobile-local-providers.v1.json";
 const MOBILE_LOCAL_PROVIDER_SECRETS_FILE: &str = "mobile-local-provider-secrets.v1.json";
 const REQUEST_TIMEOUT_SECS: u64 = 60;
 const SSE_CONTENT_TYPE: &str = "text/event-stream";
+const STREAM_IPC_FLUSH_INTERVAL_MS: u64 = 50;
+const STREAM_IPC_MAX_BATCH_BYTES: usize = 16 * 1024;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -318,18 +323,24 @@ fn mobile_credential_delete(app: tauri::AppHandle, device_id: String) -> Result<
 }
 
 #[tauri::command]
-fn mobile_conversations_load(app: tauri::AppHandle) -> Result<Vec<Value>, String> {
+async fn mobile_conversations_load(app: tauri::AppHandle) -> Result<Vec<Value>, String> {
     let path = mobile_conversations_path(&app)?;
-    read_mobile_conversations(&path)
+    run_blocking_file_task("load mobile conversations", move || {
+        read_mobile_conversations(&path)
+    })
+    .await
 }
 
 #[tauri::command]
-fn mobile_conversations_save(
+async fn mobile_conversations_save(
     app: tauri::AppHandle,
     conversations: Vec<Value>,
 ) -> Result<(), String> {
     let path = mobile_conversations_path(&app)?;
-    write_mobile_conversations(&path, &conversations)
+    run_blocking_file_task("save mobile conversations", move || {
+        write_mobile_conversations(&path, &conversations)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -476,6 +487,16 @@ fn bridge_api_url(base_url: &str, path: &str) -> Result<reqwest::Url, String> {
         .map_err(|err| format!("build bridge URL failed: {err}"))
 }
 
+async fn run_blocking_file_task<T, F>(label: &'static str, task: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(task)
+        .await
+        .map_err(|err| format!("{label} task failed: {err}"))?
+}
+
 fn validate_envelope(envelope: &BridgeBusEnvelope<'_>) -> Result<(), String> {
     if envelope.action.is_empty() {
         return Err("bridge action is required".to_string());
@@ -599,18 +620,73 @@ async fn forward_stream_chunks(
     request_id: String,
 ) -> Result<(), String> {
     let mut stream = response.bytes_stream();
-    while let Some(item) = stream.next().await {
-        let bytes = item.map_err(|err| format!("read bridge stream failed: {err}"))?;
-        app.emit(
-            BRIDGE_AGENT_STREAM_CHUNK_EVENT,
-            BridgeAgentStreamChunk {
-                request_id: request_id.clone(),
-                chunk: bytes.to_vec(),
-            },
-        )
-        .map_err(|err| format!("emit bridge stream chunk failed: {err}"))?;
+    let flush_interval = Duration::from_millis(STREAM_IPC_FLUSH_INTERVAL_MS);
+    let flush_timer = tokio::time::sleep(flush_interval);
+    pin_mut!(flush_timer);
+    let mut pending = Vec::new();
+
+    loop {
+        if pending.is_empty() {
+            let Some(item) = stream.next().await else {
+                break;
+            };
+            let bytes = item.map_err(|err| format!("read bridge stream failed: {err}"))?;
+            append_stream_bytes(&mut pending, &bytes);
+            flush_timer
+                .as_mut()
+                .reset(tokio::time::Instant::now() + flush_interval);
+            if pending.len() >= STREAM_IPC_MAX_BATCH_BYTES {
+                emit_stream_chunk(&app, &request_id, std::mem::take(&mut pending))?;
+            }
+            continue;
+        }
+
+        let next_item = stream.next();
+        pin_mut!(next_item);
+        match select(next_item, flush_timer.as_mut()).await {
+            Either::Left((item, _timer)) => {
+                let Some(item) = item else {
+                    break;
+                };
+                let bytes = item.map_err(|err| format!("read bridge stream failed: {err}"))?;
+                append_stream_bytes(&mut pending, &bytes);
+                if pending.len() >= STREAM_IPC_MAX_BATCH_BYTES {
+                    emit_stream_chunk(&app, &request_id, std::mem::take(&mut pending))?;
+                    flush_timer
+                        .as_mut()
+                        .reset(tokio::time::Instant::now() + flush_interval);
+                }
+            }
+            Either::Right(((), _next_item)) => {
+                emit_stream_chunk(&app, &request_id, std::mem::take(&mut pending))?;
+            }
+        }
     }
+    emit_stream_chunk(&app, &request_id, pending)?;
     Ok(())
+}
+
+fn append_stream_bytes(pending: &mut Vec<u8>, bytes: &[u8]) {
+    pending.extend_from_slice(bytes);
+}
+
+fn emit_stream_chunk(
+    app: &tauri::AppHandle,
+    request_id: &str,
+    chunk: Vec<u8>,
+) -> Result<(), String> {
+    if chunk.is_empty() {
+        return Ok(());
+    }
+
+    app.emit(
+        BRIDGE_AGENT_STREAM_CHUNK_EVENT,
+        BridgeAgentStreamChunk {
+            request_id: request_id.to_string(),
+            chunk,
+        },
+    )
+    .map_err(|err| format!("emit bridge stream chunk failed: {err}"))
 }
 
 fn is_sse_content_type(content_type: &str) -> bool {

@@ -1260,11 +1260,20 @@ export function useMobileBridge() {
       const streamAction = agentRuntime === "codex"
         ? initialSessionId ? "EXTERNAL_AGENT_SEND" : "EXTERNAL_AGENT_START"
         : "AGENT_SEND";
+      let pendingStreamStatus: StatusMessage | undefined;
+      const enqueueStreamProjectionCommit = () => {
+        enqueueStreamReplyCommit(streamCommittersRef.current, requestId, () => {
+          const status = pendingStreamStatus;
+          pendingStreamStatus = undefined;
+          if (status) {
+            options.onStatus(status);
+          }
+          options.onReply(createAgentPayloadFromRuntime(runtime));
+        });
+      };
       const projector: MobileAgentStreamProjector = {
-        commitReply: (nextRuntime) => {
-          enqueueStreamReplyCommit(streamCommittersRef.current, requestId, () => {
-            options.onReply(createAgentPayloadFromRuntime(nextRuntime));
-          });
+        commitReply: () => {
+          enqueueStreamProjectionCommit();
         },
         commitSessionId: (sessionId) => {
           const trimmedSessionId = sessionId.trim();
@@ -1274,7 +1283,10 @@ export function useMobileBridge() {
           options.onSessionId(trimmedSessionId);
           refreshSessionsInBackground();
         },
-        setStatus: options.onStatus,
+        setStatus: (status) => {
+          pendingStreamStatus = status;
+          enqueueStreamProjectionCommit();
+        },
       };
 
       options.onReply(createAgentPayloadFromRuntime(runtime));

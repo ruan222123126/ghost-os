@@ -1,4 +1,5 @@
 const FALLBACK_FRAME_DELAY_MS = 16;
+const MIN_STREAM_COMMIT_INTERVAL_MS = 50;
 
 export interface StreamReplyCommitter {
   cancel: () => void;
@@ -11,6 +12,7 @@ export function createStreamReplyCommitter(): StreamReplyCommitter {
   let pendingCommit: (() => void) | null = null;
   let scheduledHandle: number | null = null;
   let scheduledKind: "raf" | "timeout" | null = null;
+  let lastCommitAtMs = 0;
 
   function schedule(): void {
     if (cancelled || scheduledHandle !== null || pendingCommit === null) {
@@ -21,6 +23,13 @@ export function createStreamReplyCommitter(): StreamReplyCommitter {
       const commit = pendingCommit;
       pendingCommit = null;
       commit?.();
+      return;
+    }
+
+    const delayMs = nextCommitDelayMs();
+    if (delayMs > 0) {
+      scheduledKind = "timeout";
+      scheduledHandle = window.setTimeout(runScheduledCommit, delayMs);
       return;
     }
 
@@ -44,7 +53,10 @@ export function createStreamReplyCommitter(): StreamReplyCommitter {
 
     const commit = pendingCommit;
     pendingCommit = null;
-    commit?.();
+    if (commit) {
+      lastCommitAtMs = Date.now();
+      commit();
+    }
   }
 
   function cancel(): void {
@@ -80,7 +92,10 @@ export function createStreamReplyCommitter(): StreamReplyCommitter {
       scheduledKind = null;
     }
 
-    commit?.();
+    if (commit) {
+      lastCommitAtMs = Date.now();
+      commit();
+    }
   }
 
   function enqueue(commit: () => void): void {
@@ -99,6 +114,13 @@ export function createStreamReplyCommitter(): StreamReplyCommitter {
     enqueue,
     flush,
   };
+
+  function nextCommitDelayMs(): number {
+    if (lastCommitAtMs === 0) {
+      return 0;
+    }
+    return Math.max(0, MIN_STREAM_COMMIT_INTERVAL_MS - (Date.now() - lastCommitAtMs));
+  }
 }
 
 export function enqueueStreamReplyCommit(

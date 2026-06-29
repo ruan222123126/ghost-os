@@ -301,6 +301,8 @@ code {
   max-width: 100%;
   margin: 0 auto;
   display: flex;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 140px;
 }
 
 .message-row + .message-row {

@@ -60,6 +60,14 @@ function AssistantMarkdownContentBase({
   final = true,
   showCopyButton = true,
 }: AssistantMarkdownContentProps) {
+  if (!final) {
+    return (
+      <div className="assistant-markdown assistant-markdown-streaming">
+        <pre>{content}</pre>
+      </div>
+    );
+  }
+
   return (
     <div className="assistant-markdown">
       <MarkdownRender

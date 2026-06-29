@@ -52,12 +52,12 @@ describe("AssistantMarkdownContent", () => {
     expect(renderer.getAttribute("data-html-policy")).toBe("safe");
   });
 
-  it("marks streaming content as non-final", () => {
+  it("renders streaming content as plain text before final markdown parse", () => {
     render(<AssistantMarkdownContent content="```ts\nconsole.log(1)" final={false} showCopyButton={false} />);
 
-    const renderer = screen.getByTestId("markstream-renderer");
-    expect(renderer.getAttribute("data-final")).toBe("false");
-    expect(renderer.getAttribute("data-typewriter")).toBe("true");
-    expect(renderer.getAttribute("data-show-copy")).toBe("false");
+    expect(screen.queryByTestId("markstream-renderer")).toBeNull();
+    const pre = document.querySelector("pre");
+    expect(pre?.textContent).toContain("```ts");
+    expect(pre?.textContent).toContain("console.log(1)");
   });
 });

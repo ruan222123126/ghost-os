@@ -10,6 +10,7 @@ import {
 
 describe("streamReplyCommitter", () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -50,6 +51,29 @@ describe("streamReplyCommitter", () => {
     expect(commit).toHaveBeenCalledTimes(1);
     scheduled?.(0);
     expect(commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("throttles commits after the first frame", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1000);
+    let scheduled: FrameRequestCallback | undefined;
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      scheduled = callback;
+      return 1;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+    const commit = vi.fn();
+    const committer = createStreamReplyCommitter();
+
+    committer.enqueue(commit);
+    scheduled?.(1000);
+    expect(commit).toHaveBeenCalledTimes(1);
+
+    committer.enqueue(commit);
+    vi.advanceTimersByTime(49);
+    expect(commit).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(1);
+    expect(commit).toHaveBeenCalledTimes(2);
   });
 
   it("cancels all pending committers without invoking callbacks", () => {
