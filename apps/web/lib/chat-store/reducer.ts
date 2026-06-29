@@ -184,7 +184,7 @@ function hydrateTurnDraftState(
   sessionId: string,
   draft: SessionTurnDraft | null | undefined,
 ): ChatStateStore {
-  const hydrated = buildDraftHydratedState(draft, sessionId.trim());
+  const hydrated = buildDraftHydratedState(draft, sessionId.trim(), state.committedMessages);
   return {
     ...state,
     pendingQuestionState: hydrated.pendingQuestionState,

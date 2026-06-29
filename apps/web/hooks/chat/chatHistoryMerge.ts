@@ -1,4 +1,5 @@
-import type { ChatMessage, SessionDetail, ToolChatMessage, UserChatMessage } from '@/lib/types';
+import { chatMessagesEquivalent } from '@/lib/chatMessageEquivalence';
+import type { ChatMessage, SessionDetail } from '@/lib/types';
 
 interface EquivalentPair {
   previousIndex: number;
@@ -50,7 +51,7 @@ function buildEquivalentPairs(previous: ChatMessage[], latest: ChatMessage[]): E
   let latestIndex = 0;
 
   while (previousIndex < previous.length && latestIndex < latest.length) {
-    if (messagesEquivalent(previous[previousIndex], latest[latestIndex])) {
+    if (chatMessagesEquivalent(previous[previousIndex], latest[latestIndex])) {
       pairs.push({ previousIndex, latestIndex });
       previousIndex += 1;
       latestIndex += 1;
@@ -75,7 +76,7 @@ function buildEquivalentMatrix(previous: ChatMessage[], latest: ChatMessage[]): 
 
   for (let previousIndex = previous.length - 1; previousIndex >= 0; previousIndex -= 1) {
     for (let latestIndex = latest.length - 1; latestIndex >= 0; latestIndex -= 1) {
-      matrix[previousIndex][latestIndex] = messagesEquivalent(previous[previousIndex], latest[latestIndex])
+      matrix[previousIndex][latestIndex] = chatMessagesEquivalent(previous[previousIndex], latest[latestIndex])
         ? matrix[previousIndex + 1][latestIndex + 1] + 1
         : Math.max(matrix[previousIndex + 1][latestIndex], matrix[previousIndex][latestIndex + 1]);
     }
@@ -145,56 +146,6 @@ function shouldPreserveUnmatchedPreviousMessage(message: ChatMessage): boolean {
   return message.kind === 'user'
     || message.kind === 'assistant'
     || message.kind === 'tool';
-}
-
-function messagesEquivalent(previous: ChatMessage, latest: ChatMessage): boolean {
-  if (previous.id === latest.id) {
-    return true;
-  }
-  if (previous.kind !== latest.kind) {
-    return false;
-  }
-
-  switch (previous.kind) {
-    case 'user':
-      return userMessagesEquivalent(previous, latest as UserChatMessage);
-    case 'assistant':
-    case 'thinking':
-    case 'error':
-    case 'event':
-    case 'system':
-      return normalizeText(previous.content) === normalizeText(latest.content);
-    case 'tool':
-      return toolMessagesEquivalent(previous, latest as ToolChatMessage);
-    default:
-      return false;
-  }
-}
-
-function userMessagesEquivalent(previous: UserChatMessage, latest: UserChatMessage): boolean {
-  return normalizeText(previous.content) === normalizeText(latest.content)
-    && countImages(previous) === countImages(latest)
-    && normalizeText(previous.selectedSkill?.id) === normalizeText(latest.selectedSkill?.id);
-}
-
-function toolMessagesEquivalent(previous: ToolChatMessage, latest: ToolChatMessage): boolean {
-  const previousToolCallId = previous.toolCallId?.trim();
-  const latestToolCallId = latest.toolCallId?.trim();
-  if (previousToolCallId && latestToolCallId) {
-    return previousToolCallId === latestToolCallId;
-  }
-
-  return normalizeText(previous.toolName) === normalizeText(latest.toolName)
-    && normalizeText(previous.toolInput) === normalizeText(latest.toolInput)
-    && normalizeText(previous.content) === normalizeText(latest.content);
-}
-
-function countImages(message: UserChatMessage): number {
-  return message.images?.length ?? 0;
-}
-
-function normalizeText(value?: string): string {
-  return value?.trim() ?? '';
 }
 
 function isEphemeralMessageID(id: string): boolean {
