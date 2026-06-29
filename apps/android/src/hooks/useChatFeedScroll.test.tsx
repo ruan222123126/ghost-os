@@ -226,6 +226,40 @@ describe("useChatFeedScroll", () => {
     expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 700, behavior: "smooth" });
   });
 
+  it("keeps the post-send lock until visible reply content appears", () => {
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 300 });
+    const localMessage = message("pending:user:1710000000000", "user");
+    const { rerender } = render(<ScrollHarness messages={[]} metrics={metrics} />);
+    rerender(
+      <ScrollHarness
+        messages={[localMessage]}
+        metrics={metrics}
+        postSendFocusRequest={postSendRequest(localMessage.id)}
+        rowTops={{ [localMessage.id]: 120 }}
+      />,
+    );
+    flushRaf();
+    expect(latestSnapshot().trailingSpacerPx).toBe(320);
+
+    metrics.scrollHeight = 1020;
+    rerender(
+      <ScrollHarness
+        messages={[localMessage]}
+        metrics={metrics}
+        reply={reply("")}
+        rowTops={{ [localMessage.id]: 120 }}
+        statusTone="loading"
+      />,
+    );
+    flushRaf();
+
+    vi.mocked(feedElement().scrollTo).mockClear();
+    metrics.scrollTop = 220;
+    fireEvent.scroll(feedElement());
+
+    expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 120, behavior: "auto" });
+  });
+
   it("cancels the post-send lock on manual upward scroll and clamps downward scroll into spacer", () => {
     const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 300 });
     const localMessage = message("pending:user:1710000000000", "user");

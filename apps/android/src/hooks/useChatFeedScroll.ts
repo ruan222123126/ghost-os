@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { MobileConversationMessage, StatusMessage } from "../mobileTypes";
+import type { AgentPayload, MobileConversationMessage, StatusMessage } from "../mobileTypes";
 
 const SCROLL_DOWN_THRESHOLD_PX = 50;
 const SCROLL_ANCHOR_TOLERANCE_PX = 2;
@@ -11,7 +11,7 @@ interface UseChatFeedScrollOptions {
   messages: MobileConversationMessage[];
   onLoadOlderHistory?: () => Promise<void>;
   postSendFocusRequest?: PostSendFocusRequest | null;
-  reply: unknown;
+  reply: AgentPayload | undefined;
   statusTone: StatusMessage["tone"];
 }
 
@@ -24,6 +24,7 @@ interface PostSendLock {
   anchorTop: number;
   anchored: boolean;
   autoFollowOnRelease: boolean;
+  baselineContentHeightPx: number;
   messageId: string;
 }
 
@@ -40,7 +41,8 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   const animationFrameRef = useRef<number | null>(null);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const [trailingSpacerPx, setTrailingSpacerPxState] = useState(0);
-  const hasReply = Boolean(options.reply);
+  const reply = options.reply;
+  const hasReply = Boolean(reply);
 
   const setTrailingSpacerPx = useCallback((value: number) => {
     const nextValue = Math.max(0, Math.ceil(value));
@@ -89,7 +91,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     if (autoFollowRef.current && (options.messages.length > 0 || hasReply)) {
       scrollToBottom("smooth");
     }
-  }, [hasReply, options.messages, options.statusTone]);
+  }, [hasReply, options.messages, options.statusTone, reply]);
 
   useLayoutEffect(() => {
     if (!options.loadingOlderHistory && olderLoadPendingRef.current) {
@@ -124,7 +126,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     return () => {
       resizeObserver.disconnect();
     };
-  }, [hasReply, options.messages.length, options.statusTone]);
+  }, [hasReply, options.messages.length, options.statusTone, reply]);
 
   useEffect(() => {
     return () => {
@@ -208,14 +210,16 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
       return false;
     }
 
+    const realContentHeightPx = measureRealContentHeight(element);
     postSendLockRef.current = {
       anchorTop,
       anchored: false,
       autoFollowOnRelease: true,
+      baselineContentHeightPx: realContentHeightPx,
       messageId,
     };
     postSendLockJustStartedRef.current = true;
-    setTrailingSpacerPx(requiredTrailingSpacerPx(element, anchorTop, trailingSpacerPxRef.current));
+    setTrailingSpacerPx(requiredTrailingSpacerPx(element, anchorTop, realContentHeightPx));
     setShowScrollDown(false);
     scheduleScroll(() => scrollToAnchor(anchorTop, behavior));
     return true;
@@ -235,8 +239,15 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     }
 
     lock.anchorTop = anchorTop;
-    const nextSpacerPx = requiredTrailingSpacerPx(element, anchorTop, trailingSpacerPxRef.current);
-    if (nextSpacerPx <= 0) {
+    const realContentHeightPx = measureRealContentHeight(element);
+    const nextSpacerPx = requiredTrailingSpacerPx(element, anchorTop, realContentHeightPx);
+    if (shouldReleasePostSendLock({
+      anchorTop,
+      baselineContentHeightPx: lock.baselineContentHeightPx,
+      clientHeight: element.clientHeight,
+      hasVisibleContent: hasVisibleContentAfterPostSendAnchor(options.messages, lock.messageId, reply),
+      realContentHeightPx,
+    })) {
       releasePostSendLock(lock.autoFollowOnRelease);
       return;
     }
@@ -255,6 +266,10 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
       return null;
     }
     return row.getBoundingClientRect().top - element.getBoundingClientRect().top + element.scrollTop;
+  }
+
+  function measureRealContentHeight(element: HTMLElement): number {
+    return Math.max(0, element.scrollHeight - trailingSpacerPxRef.current);
   }
 
   function scrollToAnchor(anchorTop: number, behavior: ScrollBehavior): void {
@@ -348,7 +363,75 @@ function hasUserMessage(messages: MobileConversationMessage[], messageId: string
   return messages.some((message) => message.id === messageId && message.role === "user");
 }
 
-function requiredTrailingSpacerPx(element: HTMLElement, anchorTop: number, currentSpacerPx: number): number {
-  const baseScrollHeight = Math.max(0, element.scrollHeight - currentSpacerPx);
-  return Math.max(0, anchorTop + element.clientHeight - baseScrollHeight);
+function requiredTrailingSpacerPx(element: HTMLElement, anchorTop: number, realContentHeightPx: number): number {
+  return Math.max(0, anchorTop + element.clientHeight - realContentHeightPx);
+}
+
+function shouldReleasePostSendLock(options: {
+  anchorTop: number;
+  baselineContentHeightPx: number;
+  clientHeight: number;
+  hasVisibleContent: boolean;
+  realContentHeightPx: number;
+}): boolean {
+  return options.hasVisibleContent
+    && options.realContentHeightPx > options.baselineContentHeightPx
+    && options.realContentHeightPx > options.anchorTop + options.clientHeight;
+}
+
+function hasVisibleContentAfterPostSendAnchor(
+  messages: MobileConversationMessage[],
+  messageId: string,
+  reply: AgentPayload | undefined,
+): boolean {
+  const anchorIndex = messages.findIndex((message) => message.id === messageId);
+  if (anchorIndex >= 0 && messages.slice(anchorIndex + 1).some(hasVisibleConversationMessageContent)) {
+    return true;
+  }
+  return hasVisibleReplyContent(reply);
+}
+
+function hasVisibleConversationMessageContent(message: MobileConversationMessage): boolean {
+  if (message.role === "user") {
+    return false;
+  }
+  return hasVisibleAssistantContent({
+    message: message.text,
+    parts: message.parts,
+    thinking: message.thinking,
+    tools: message.tools,
+  });
+}
+
+function hasVisibleReplyContent(reply: AgentPayload | undefined): boolean {
+  if (!reply) {
+    return false;
+  }
+  return hasVisibleAssistantContent(reply);
+}
+
+function hasVisibleAssistantContent(input: Pick<AgentPayload, "message" | "parts" | "thinking" | "tools">): boolean {
+  return hasNonBlankText(input.message)
+    || hasNonBlankText(input.thinking)
+    || Boolean(input.parts?.some(hasVisibleAssistantPart))
+    || Boolean(input.tools?.some(hasVisibleToolContent));
+}
+
+function hasVisibleAssistantPart(part: NonNullable<AgentPayload["parts"]>[number]): boolean {
+  if (part.kind === "text") {
+    return hasNonBlankText(part.text);
+  }
+  return hasVisibleToolContent(part.tool);
+}
+
+function hasVisibleToolContent(tool: NonNullable<AgentPayload["tools"]>[number]): boolean {
+  return hasNonBlankText(tool.toolName)
+    || hasNonBlankText(tool.input)
+    || hasNonBlankText(tool.output)
+    || hasNonBlankText(tool.error)
+    || hasNonBlankText(tool.approvalId);
+}
+
+function hasNonBlankText(value: string | undefined): boolean {
+  return Boolean(value?.trim());
 }
