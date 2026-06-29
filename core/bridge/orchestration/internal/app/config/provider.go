@@ -13,6 +13,7 @@ import (
 
 const (
 	ActionProvidersGet      = bus.ActionConfigProvidersGet
+	ActionProviderExport    = bus.ActionConfigProviderExport
 	ActionProviderCreate    = bus.ActionConfigProviderCreate
 	ActionProviderUpdate    = bus.ActionConfigProviderUpdate
 	ActionProviderDelete    = bus.ActionConfigProviderDelete
@@ -24,6 +25,8 @@ type Store interface {
 	Update(bridgeconfig.UpdateRequest) error
 	ListProviders() ([]bridgeconfig.ProviderRecord, error)
 	ListProviderSyncRecords() ([]bridgeconfig.ProviderRecord, error)
+	GetProvider(name string) (bridgeconfig.ProviderRecord, error)
+	GetProviderByID(providerID string) (bridgeconfig.ProviderRecord, error)
 	AddProvider(bridgeconfig.ProviderRecord) error
 	UpdateProvider(string, bridgeconfig.ProviderRecord) error
 	DeleteProvider(string) error
@@ -48,6 +51,29 @@ func (s Service) List(traceID string) (api.ProviderListResponse, int, error) {
 	}
 	s.log(traceID, ActionProvidersGet, "success", nil)
 	return payload, http.StatusOK, nil
+}
+
+func (s Service) Export(req api.ProviderExportRequest, traceID string) (api.ProviderConfigInput, int, error) {
+	s.log(traceID, ActionProviderExport, "running", nil)
+	providerID := strings.TrimSpace(req.ProviderID)
+	name := strings.TrimSpace(req.Name)
+
+	var (
+		record bridgeconfig.ProviderRecord
+		err    error
+	)
+	if providerID != "" {
+		record, err = s.Store.GetProviderByID(providerID)
+	} else {
+		record, err = s.Store.GetProvider(name)
+	}
+	if err != nil {
+		s.log(traceID, ActionProviderExport, "error", err)
+		return api.ProviderConfigInput{}, MapProviderError(err), err
+	}
+
+	s.log(traceID, ActionProviderExport, "success", nil)
+	return providerInputFromRecord(record), http.StatusOK, nil
 }
 
 func (s Service) Create(req api.ProviderConfigInput, traceID string) (api.ProviderListResponse, int, error) {
@@ -140,6 +166,31 @@ func providerRecordFromInput(req api.ProviderConfigInput) bridgeconfig.ProviderR
 		ModelContextWindowTokens:   CloneModelTokenOverrides(req.ModelContextWindowTokens),
 		ModelResponseReserveTokens: CloneModelTokenOverrides(req.ModelResponseReserveTokens),
 	}
+}
+
+func providerInputFromRecord(record bridgeconfig.ProviderRecord) api.ProviderConfigInput {
+	return api.ProviderConfigInput{
+		Name:                       record.Name,
+		Type:                       string(record.Type),
+		ProviderID:                 strings.TrimSpace(record.ProviderID),
+		UpdatedAt:                  strings.TrimSpace(record.UpdatedAt),
+		DeletedAt:                  strings.TrimSpace(record.DeletedAt),
+		BaseURL:                    CloneOptionalStringPointer(stringPointer(record.BaseURL)),
+		APIKey:                     CloneOptionalStringPointer(record.APIKey),
+		Models:                     append([]string(nil), record.Models...),
+		ContextWindowTokens:        record.ContextWindowTokens,
+		ResponseReserveTokens:      record.ResponseReserveTokens,
+		ModelContextWindowTokens:   CloneModelTokenOverrides(record.ModelContextWindowTokens),
+		ModelResponseReserveTokens: CloneModelTokenOverrides(record.ModelResponseReserveTokens),
+	}
+}
+
+func stringPointer(raw string) *string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 func BuildProviderConfigResponses(providers []bridgeconfig.ProviderRecord) []api.ProviderConfigResponse {

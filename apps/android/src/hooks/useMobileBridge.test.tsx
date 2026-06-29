@@ -340,6 +340,21 @@ describe("useMobileBridge", () => {
       }
 
       const request = bridgeBusRequestFromArgs(args);
+      if (request.action === "CONFIG_PROVIDER_EXPORT") {
+        return {
+          error: "",
+          payload: {
+            api_key: "remote-secret",
+            base_url: "https://api.openai.com/v1",
+            models: ["gpt-4o"],
+            name: "Remote OpenAI",
+            provider_id: "remote-provider-1",
+            type: "openai",
+            updated_at: "2026-01-01T00:00:00.000Z",
+          },
+          status: "success",
+        };
+      }
       return {
         error: "",
         payload: request.action === "CONFIG_PROVIDERS_GET"
@@ -387,6 +402,21 @@ describe("useMobileBridge", () => {
       }
 
       const request = bridgeBusRequestFromArgs(args);
+      if (request.action === "CONFIG_PROVIDER_EXPORT") {
+        return {
+          error: "",
+          payload: {
+            api_key: "remote-secret",
+            base_url: "https://api.openai.com/v1",
+            models: ["gpt-4o"],
+            name: "Remote OpenAI",
+            provider_id: "remote-provider-1",
+            type: "openai",
+            updated_at: "2026-01-01T00:00:00.000Z",
+          },
+          status: "success",
+        };
+      }
       return {
         error: "",
         payload: request.action === "CONFIG_PROVIDERS_GET"
@@ -428,8 +458,67 @@ describe("useMobileBridge", () => {
         providerId: "remote-provider-1",
       },
     });
+    expect(bridgeBusRequests().some((request) => request.action === "CONFIG_PROVIDER_EXPORT")).toBe(true);
     expect(onReply).toHaveBeenCalledWith(expect.objectContaining({ message: "local reply" }));
     expect(onStatus).not.toHaveBeenCalledWith(expect.objectContaining({ text: "请先配置 provider 和模型" }));
+  });
+
+  it("completes remote provider import before connectBridge resolves", async () => {
+    window.localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        apiToken: "token",
+        bridgeUrl: "http://100.80.12.34:8080",
+        connectionMode: "http",
+        remoteExecutionEnabled: false,
+      }),
+    );
+    vi.mocked(invoke).mockImplementation(async (command: string, args?: unknown) => {
+      if (command === "mobile_local_llm_send") {
+        return {
+          message: "local reply",
+          model: "gpt-4o",
+          provider_id: "remote-provider-1",
+        };
+      }
+      if (command !== "bridge_bus_request") {
+        return {};
+      }
+
+      const request = bridgeBusRequestFromArgs(args);
+      if (request.action === "CONFIG_PROVIDER_EXPORT") {
+        return {
+          error: "",
+          payload: {
+            api_key: "remote-secret",
+            base_url: "https://api.openai.com/v1",
+            models: ["gpt-4o"],
+            name: "Remote OpenAI",
+            provider_id: "remote-provider-1",
+            type: "openai",
+            updated_at: "2026-01-01T00:00:00.000Z",
+          },
+          status: "success",
+        };
+      }
+      return {
+        error: "",
+        payload: request.action === "CONFIG_PROVIDERS_GET"
+          ? remoteProviderListPayload()
+          : payloadForAction(request.action, request.params),
+        status: "success",
+      };
+    });
+
+    const { result } = renderHook(() => useMobileBridge());
+
+    await act(async () => {
+      await result.current.connectBridge();
+    });
+
+    expect(result.current.localProviderList?.providers[0]).toMatchObject({
+      provider_id: "remote-provider-1",
+    });
   });
 
   it("switches the local model without updating computer config when model following is off", async () => {

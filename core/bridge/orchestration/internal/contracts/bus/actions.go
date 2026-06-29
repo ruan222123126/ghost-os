@@ -15,6 +15,7 @@ const (
 	ActionConfigGet            = "CONFIG_GET"
 	ActionConfigUpdate         = "CONFIG_UPDATE"
 	ActionConfigProvidersGet   = "CONFIG_PROVIDERS_GET"
+	ActionConfigProviderExport = "CONFIG_PROVIDER_EXPORT"
 	ActionConfigProviderCreate = "CONFIG_PROVIDER_CREATE"
 	ActionConfigProviderUpdate = "CONFIG_PROVIDER_UPDATE"
 	ActionConfigProviderDelete = "CONFIG_PROVIDER_DELETE"

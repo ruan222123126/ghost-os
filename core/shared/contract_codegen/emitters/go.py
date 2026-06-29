@@ -209,6 +209,7 @@ type SessionSourceResolution = sessionSourceResolution
 type SessionDeleteResponse = sessionDeleteResponse
 type ConfigResponse = configResponse
 type ConfigUpdateRequest = configUpdateRequest
+type ProviderExportRequest = providerExportRequest
 type ProviderCreateRequest = providerCreateRequest
 type ProviderUpdateRequest = providerUpdateRequest
 type ProviderConfigResponse = providerConfigResponse

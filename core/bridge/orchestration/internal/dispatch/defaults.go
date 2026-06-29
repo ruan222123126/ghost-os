@@ -29,6 +29,7 @@ type DefaultHandlers struct {
 	ConfigGet            TraceHandler
 	ConfigUpdate         TypedHandler[api.ConfigUpdateRequest]
 	ConfigProvidersGet   TraceHandler
+	ConfigProviderExport TypedHandler[api.ProviderExportRequest]
 	ConfigProviderCreate TypedHandler[api.ProviderConfigInput]
 	ConfigProviderUpdate TypedHandler[api.ProviderBusUpdateRequest]
 	ConfigProviderDelete TypedHandler[api.ProviderBusDeleteRequest]
@@ -72,6 +73,7 @@ func registerConfigActions(router *Router, handlers DefaultHandlers) {
 	RegisterTrace(router, bus.ActionConfigGet, handlers.ConfigGet)
 	RegisterTyped(router, bus.ActionConfigUpdate, handlers.ConfigUpdate)
 	RegisterTrace(router, appconfig.ActionProvidersGet, handlers.ConfigProvidersGet)
+	RegisterTyped(router, appconfig.ActionProviderExport, handlers.ConfigProviderExport)
 	RegisterTyped(router, appconfig.ActionProviderCreate, handlers.ConfigProviderCreate)
 	RegisterTyped(router, appconfig.ActionProviderUpdate, handlers.ConfigProviderUpdate)
 	RegisterTyped(router, appconfig.ActionProviderDelete, handlers.ConfigProviderDelete)

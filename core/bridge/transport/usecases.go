@@ -76,6 +76,10 @@ type ConfigUsecase interface {
 	Get(traceID string) (bridgeorchestration.ServiceResult, error)
 	Update(req bridgeorchestration.ConfigUpdateRequest, traceID string) (bridgeorchestration.ServiceResult, error)
 	ListProviders(traceID string) (bridgeorchestration.ServiceResult, error)
+	ExportProvider(
+		req bridgeorchestration.ProviderExportRequest,
+		traceID string,
+	) (bridgeorchestration.ServiceResult, error)
 	CreateProvider(req bridgeorchestration.ProviderCreateRequest, traceID string) (bridgeorchestration.ServiceResult, error)
 	UpdateProvider(
 		name string,
@@ -307,6 +311,13 @@ func (a orchestrationConfigAdapter) Update(
 
 func (a orchestrationConfigAdapter) ListProviders(traceID string) (bridgeorchestration.ServiceResult, error) {
 	return a.service.ExecuteProvidersGetAction(traceID)
+}
+
+func (a orchestrationConfigAdapter) ExportProvider(
+	req bridgeorchestration.ProviderExportRequest,
+	traceID string,
+) (bridgeorchestration.ServiceResult, error) {
+	return a.service.ExecuteProviderExportAction(req, traceID)
 }
 
 func (a orchestrationConfigAdapter) CreateProvider(

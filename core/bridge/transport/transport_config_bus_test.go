@@ -193,6 +193,47 @@ func TestBusProviderWriteActionsRegression(t *testing.T) {
 	}
 }
 
+func TestBusProviderExportRegression(t *testing.T) {
+	handler := newTestHandler(t, nil)
+
+	createResp := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/bus",
+		`{"action":"CONFIG_PROVIDER_CREATE","params":{"name":"crs","type":"custom","base_url":"https://example.com/v1","api_key":"sk-xxx","models":["gpt-5.4"]},"trace_id":"trace-provider-create"}`,
+		nil,
+	)
+	if createResp.Code != http.StatusOK {
+		t.Fatalf("unexpected create status: got %d want %d body=%s", createResp.Code, http.StatusOK, createResp.Body.String())
+	}
+
+	exportResp := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/bus",
+		`{"action":"CONFIG_PROVIDER_EXPORT","params":{"name":"crs"},"trace_id":"trace-provider-export"}`,
+		nil,
+	)
+	if exportResp.Code != http.StatusOK {
+		t.Fatalf("unexpected export status: got %d want %d body=%s", exportResp.Code, http.StatusOK, exportResp.Body.String())
+	}
+
+	body := decodeResponseBody(t, exportResp)
+	payload, ok := body.Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected provider export payload type: %T", body.Payload)
+	}
+	if payload["name"] != "crs" {
+		t.Fatalf("unexpected export name: %#v", payload)
+	}
+	if payload["provider_id"] == "" {
+		t.Fatalf("expected provider_id in export payload: %#v", payload)
+	}
+	if payload["api_key"] != "sk-xxx" {
+		t.Fatalf("expected api_key in export payload: %#v", payload)
+	}
+}
+
 func TestBusProviderWriteActionErrorsRegression(t *testing.T) {
 	handler := newTestHandler(t, nil)
 

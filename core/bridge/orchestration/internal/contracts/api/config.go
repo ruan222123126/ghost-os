@@ -117,6 +117,12 @@ type ProviderBusUpdateRequest struct {
 	TraceID  string              `json:"trace_id,omitempty"`
 }
 
+type ProviderExportRequest struct {
+	Name       string `json:"name,omitempty"`
+	ProviderID string `json:"provider_id,omitempty"`
+	TraceID    string `json:"trace_id,omitempty"`
+}
+
 type ProviderBusDeleteRequest struct {
 	Name       string `json:"name"`
 	ProviderID string `json:"provider_id,omitempty"`

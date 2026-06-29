@@ -87,6 +87,11 @@ export interface ProviderConfigInputPayload {
   model_response_reserve_tokens?: Record<string, number>;
 }
 
+export interface ProviderExportRequestPayload {
+  name?: string;
+  provider_id?: string;
+}
+
 export interface ProviderSyncRecordPayload {
   provider_id: string;
   updated_at: string;

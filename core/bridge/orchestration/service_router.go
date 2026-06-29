@@ -99,7 +99,6 @@ func newBridgeServiceWithStreamExecutor(
 	registerDefaultActions(service)
 	return service
 }
-
 func newBridgeServiceState(store bridgeconfig.Store, sessionStore *session.Store) *bridgeService {
 	runtimeState := serviceruntime.NewState()
 	sessionPush := internaltrace.NewSessionPushHub()
@@ -241,6 +240,7 @@ func defaultActionHandlers(service *bridgeService) dispatch.DefaultHandlers {
 		ConfigProvidersGet: func(_ context.Context, traceID string) (ServiceResult, error) {
 			return service.executeProvidersGetAction(traceID)
 		},
+		ConfigProviderExport: service.handleConfigProviderExportAction,
 		ConfigProviderCreate: func(_ context.Context, params providerCreateRequest, traceID string) (ServiceResult, error) {
 			return service.executeProviderCreateAction(params, traceID)
 		},

@@ -35,6 +35,7 @@ import type {
   OrchestrationTaskPayload,
   ProviderConfigInputPayload,
   ProviderConfigPayload,
+  ProviderExportRequestPayload,
   ProviderListPayload,
   SessionDetail,
   SessionMetadata,
@@ -226,6 +227,13 @@ function resolveProviderForSettings(
 ): ProviderConfigPayload | undefined {
   return providerList?.providers.find((provider) => provider.provider_id === settings.localProviderId)
     ?? providerList?.providers.find((provider) => !provider.deleted_at);
+}
+
+function providerExportRequestFromRecord(record: ProviderConfigPayload): ProviderExportRequestPayload {
+  return {
+    name: record.name,
+    provider_id: record.provider_id,
+  };
 }
 
 function mergeLocalProvidersWithRemote(
@@ -486,29 +494,51 @@ export function useMobileBridge() {
   const syncRemoteProvidersToLocal = useCallback(async (remote: ProviderListPayload): Promise<void> => {
     const local = await loadLocalProviderList();
     const localById = new Map(local.providers.map((provider) => [provider.provider_id, provider]));
+    const remoteById = new Map(remote.providers.map((provider) => [provider.provider_id, provider]));
 
     for (const record of remote.provider_sync_records ?? []) {
       const localProvider = localById.get(record.provider_id);
       if (localProvider && localProvider.updated_at > record.updated_at) {
         continue;
       }
+      if (record.deleted_at) {
+        await createOrUpdateLocalProvider({
+          base_url: record.base_url,
+          deleted_at: record.deleted_at,
+          model_context_window_tokens: record.model_context_window_tokens,
+          model_response_reserve_tokens: record.model_response_reserve_tokens,
+          models: record.models,
+          name: record.name || localProvider?.name || record.provider_id,
+          provider_id: record.provider_id,
+          response_reserve_tokens: record.response_reserve_tokens,
+          type: record.type ?? localProvider?.type ?? "openai",
+          updated_at: record.updated_at,
+        });
+        continue;
+      }
 
-      await createOrUpdateLocalProvider({
-        base_url: record.base_url,
-        deleted_at: record.deleted_at,
-        model_context_window_tokens: record.model_context_window_tokens,
-        model_response_reserve_tokens: record.model_response_reserve_tokens,
-        models: record.models,
-        name: record.name || localProvider?.name || record.provider_id,
-        provider_id: record.provider_id,
-        response_reserve_tokens: record.response_reserve_tokens,
-        type: record.type ?? localProvider?.type ?? "openai",
-        updated_at: record.updated_at,
-      });
+      const remoteProvider = remoteById.get(record.provider_id);
+      const exported = await requestBridge<ProviderConfigInputPayload>(
+        "CONFIG_PROVIDER_EXPORT",
+        providerExportRequestFromRecord(remoteProvider ?? {
+          api_key_set: Boolean(record.api_key_set),
+          base_url: record.base_url ?? "",
+          model_context_window_tokens: record.model_context_window_tokens,
+          model_response_reserve_tokens: record.model_response_reserve_tokens,
+          models: record.models,
+          name: record.name || localProvider?.name || record.provider_id,
+          provider_id: record.provider_id,
+          response_reserve_tokens: record.response_reserve_tokens,
+          sync_state: "synced",
+          type: record.type ?? localProvider?.type ?? "openai",
+          updated_at: record.updated_at,
+        }),
+      );
+      await createOrUpdateLocalProvider(exported);
     }
 
     setLocalProviderList(await loadLocalProviderList());
-  }, []);
+  }, [requestBridge]);
 
   const loadSkills = useCallback(async (): Promise<SkillPayload[]> => {
     setSkillListError("");
@@ -569,15 +599,19 @@ export function useMobileBridge() {
     }
   }, [connectionStatus.tone, loadProviders, refreshLocalProviders]);
 
-  const syncProvidersBidirectionally = useCallback(async (): Promise<void> => {
-    if (connectionStatus.tone !== "success") {
-      return;
-    }
+  const performProviderSync = useCallback(async (): Promise<void> => {
     const remote = await loadProviders();
     await syncLocalProvidersToRemote(remote);
     const refreshedRemote = await loadProviders();
     await syncRemoteProvidersToLocal(refreshedRemote);
-  }, [connectionStatus.tone, loadProviders, syncLocalProvidersToRemote, syncRemoteProvidersToLocal]);
+  }, [loadProviders, syncLocalProvidersToRemote, syncRemoteProvidersToLocal]);
+
+  const syncProvidersBidirectionally = useCallback(async (): Promise<void> => {
+    if (connectionStatus.tone !== "success") {
+      return;
+    }
+    await performProviderSync();
+  }, [connectionStatus.tone, performProviderSync]);
 
   useEffect(() => {
     if (connectionStatus.tone === "success") {
@@ -1008,6 +1042,7 @@ export function useMobileBridge() {
         webRTCClientRef.current = client;
       }
       await refreshRuntimeConfig();
+      await performProviderSync();
       connectedTargetRef.current = currentConnectionTarget;
       setSettings((current) => ({
         ...current,
@@ -1041,6 +1076,7 @@ export function useMobileBridge() {
     refreshSkillsAfterConnect,
     refreshTasksAfterConnect,
     refreshOrchestrationsAfterConnect,
+    performProviderSync,
     refreshRuntimeConfig,
     refreshSessionsAfterConnect,
     settings,
@@ -1143,7 +1179,7 @@ export function useMobileBridge() {
           options.onStatus({ tone: "error", text: "本地运行不支持技能" });
           return { ok: false };
         }
-        const localProvider = resolveProviderForSettings(mergedProviderList, settings);
+        const localProvider = resolveProviderForSettings(selectedLocalProviderList, settings);
         const model = settings.localModel?.trim() || localProvider?.models?.[0]?.trim() || "";
         if (!localProvider || !model) {
           options.onStatus({ tone: "error", text: "请先配置 provider 和模型" });
@@ -1283,7 +1319,7 @@ export function useMobileBridge() {
       config?.provider,
       config?.project_root,
       config?.external_codex_permission_mode,
-      mergedProviderList,
+      selectedLocalProviderList,
       refreshSessionsInBackground,
       settings.connectionMode,
       settings.localModel,

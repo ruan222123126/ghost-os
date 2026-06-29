@@ -875,6 +875,16 @@ pub struct OrchestrationAgentNode {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct ProviderExportRequest {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub provider_id: Option<String>,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct TaskRuntimeOverrides {
     #[serde(default)]
     pub provider_name: Option<String>,

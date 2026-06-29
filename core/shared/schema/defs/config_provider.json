@@ -193,6 +193,26 @@
         "kotlin": { "name": "ProviderBusUpdateRequest" }
       }
     },
+    "providerExportRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "provider_id": { "type": "string", "minLength": 1 },
+        "trace_id": { "type": "string" }
+      },
+      "anyOf": [
+        { "required": ["name"] },
+        { "required": ["provider_id"] }
+      ],
+      "x-codegen": {
+        "order": 245,
+        "go": { "name": "providerExportRequest" },
+        "ts": { "name": "ProviderExportRequest" },
+        "rust": { "name": "ProviderExportRequest" },
+        "kotlin": { "name": "ProviderExportRequest" }
+      }
+    },
     "providerBusDeleteRequest": {
       "type": "object",
       "additionalProperties": false,

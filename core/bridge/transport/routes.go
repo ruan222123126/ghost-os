@@ -16,6 +16,7 @@ var transportRoutes = []transportRoute{
 	{pattern: "/api/questions/answer/stream", handler: (*transport).handleQuestionAnswerStream},
 	{pattern: "/api/config", handler: (*transport).handleConfig},
 	{pattern: "/api/config/providers", handler: (*transport).handleConfigProviders},
+	{pattern: "/api/config/providers/export", handler: (*transport).handleConfigProviderExport},
 	{pattern: "/api/config/providers/", handler: (*transport).handleConfigProviderByName},
 	{pattern: "/api/config/active-provider", handler: (*transport).handleActiveProvider},
 	{pattern: "/api/prompts/system", handler: (*transport).handleSystemPrompts},
