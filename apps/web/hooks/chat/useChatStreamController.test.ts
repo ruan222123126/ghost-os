@@ -168,6 +168,63 @@ describe('hooks/chat/useChatStreamController', () => {
       'endHistorySync:session-resolved',
     ]);
   });
+
+  it('coalesces adjacent streamed text deltas before applying runtime actions', async () => {
+    const actionsBySession: Array<{ sessionId: string; text: string; type: string }> = [];
+    mockedStreamMessage.mockImplementation(async (options) => {
+      await options.onEvent(buildRunStartedEvent('session-coalesced'));
+      await options.onEvent(buildTextDeltaEvent('session-coalesced', 'hel'));
+      await options.onEvent(buildTextDeltaEvent('session-coalesced', 'lo'));
+      return {
+        sessionEnded: false,
+        sessionId: 'session-coalesced',
+      };
+    });
+
+    let latestState: HookRenderState | null = null;
+    await act(async () => {
+      TestRenderer.create(
+        React.createElement(
+          WebLocaleProvider,
+          { initialLocale: 'en-US' },
+          React.createElement(HookProbe, {
+            applyRuntimeActions: (sessionId, actions) => {
+              for (const action of actions) {
+                if (action.type === 'append_streaming_assistant_text') {
+                  actionsBySession.push({ sessionId, text: action.text, type: action.type });
+                }
+              }
+            },
+            beginHistorySync: () => undefined,
+            currentSessionId: '',
+            endHistorySync: () => undefined,
+            migrateSessionState: () => undefined,
+            onRender: (state) => {
+              latestState = state;
+            },
+            setChatError: () => undefined,
+            syncRecentHistory: async () => undefined,
+          }),
+        ),
+      );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await latestState!.runAgentStream({
+        message: 'hello',
+        traceId: 'trace-coalesced',
+      });
+    });
+
+    expect(actionsBySession).toEqual([
+      {
+        sessionId: 'session-coalesced',
+        text: 'hello',
+        type: 'append_streaming_assistant_text',
+      },
+    ]);
+  });
 });
 
 function HookProbe(props: {

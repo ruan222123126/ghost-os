@@ -1,4 +1,5 @@
 import type { FC, RefObject } from 'react';
+import { memo } from 'react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { QuestionInput } from '@/components/QuestionInput';
 import type {
@@ -230,7 +231,7 @@ const QuestionMessageRow: FC<{
   </div>
 );
 
-export const MessageRow: FC<MessageRowProps> = ({
+const MessageRowBase: FC<MessageRowProps> = ({
   message,
   toolCard,
   assistantMarkdownEnabled = true,
@@ -303,3 +304,6 @@ export const MessageRow: FC<MessageRowProps> = ({
       return null;
   }
 };
+
+export const MessageRow = memo(MessageRowBase);
+MessageRow.displayName = 'MessageRow';

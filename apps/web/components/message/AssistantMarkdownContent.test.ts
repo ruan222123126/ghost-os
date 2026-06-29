@@ -41,6 +41,22 @@ describe('components/message/AssistantMarkdownContent', () => {
     expect(html).toContain('data-final="true"');
   });
 
+  it('renders stable streaming markdown blocks separately from the active block', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AssistantMarkdownContent, {
+        content: '# Heading\n\n```ts\nconsole.log(1)',
+        enabled: true,
+        final: false,
+      }),
+    );
+
+    expect(html).toContain('mock-dynamic-markdown');
+    expect(html).toContain('data-final="true"');
+    expect(html).toContain('data-final="false"');
+    expect(html).toContain('# Heading');
+    expect(html).toContain('```ts\nconsole.log(1)');
+  });
+
   it('keeps raw HTML content on the plain text path', () => {
     const html = renderToStaticMarkup(
       React.createElement(AssistantMarkdownContent, {
