@@ -402,22 +402,111 @@ describe("useMobileSessions", () => {
     });
   });
 
+  it("loads one snapshot when selecting a background running session", async () => {
+    saveStored([
+      storedConversation("session-1", "One", [message("session-1", "user", "one")]),
+      storedConversation("session-2", "Two", [message("session-2", "user", "two")]),
+    ]);
+    let runStarted = false;
+    let finishRun: (() => void) | undefined;
+    const getSession = vi.fn(async (sessionId: string) => {
+      if (sessionId === "session-1") {
+        return sessionDetailWithMessages(sessionId, [
+          { index: 0, role: "user", text: "one" },
+          ...(runStarted ? [{ index: 1, role: "user" as const, text: "run one" }] : []),
+        ], {
+          hasMoreBefore: false,
+          messageCount: runStarted ? 2 : 1,
+          nextBefore: null,
+        });
+      }
+      return sessionDetailWithMessages(sessionId, [
+        { index: 0, role: "user", text: "two" },
+      ], {
+        hasMoreBefore: false,
+        messageCount: 1,
+        nextBefore: null,
+      });
+    });
+    const sendAgentMessage = vi.fn((options: SendOptions) => {
+      runStarted = true;
+      options.onStatus({ tone: "loading", text: "运行中" });
+      return new Promise<SendResult>((resolve) => {
+        finishRun = () => {
+          options.onReply(agentReply("session-1", "done"));
+          options.onStatus({ tone: "success", text: "回复已返回" });
+          resolve({ mode: "remote", ok: true, reply: agentReply("session-1", "done"), sessionId: "session-1" });
+        };
+      });
+    });
+    const { result } = renderMobileSessions({ getSession, sendAgentMessage });
+
+    await act(async () => {
+      await result.current.selectSession("session-1");
+    });
+    act(() => {
+      void result.current.sendMessage("run one");
+    });
+    await waitFor(() => expect(result.current.canSend).toBe(false));
+
+    await act(async () => {
+      await result.current.selectSession("session-2");
+    });
+    act(() => {
+      const streamOptions = sendAgentMessage.mock.calls[0]?.[0];
+      streamOptions?.onReply(agentReply("session-1", "partial"));
+    });
+    await act(async () => {
+      await result.current.selectSession("session-1");
+    });
+
+    expect(result.current.activeReply).toBeUndefined();
+    expect(result.current.activeMessages.map((item) => item.text)).toEqual(["one", "run one"]);
+    expect(getSession.mock.calls.filter(([sessionId]) => sessionId === "session-1")).toHaveLength(2);
+
+    await act(async () => {
+      finishRun?.();
+    });
+  });
+
   it("marks background completion unread on the matching session only", async () => {
     saveStored([
       storedConversation("session-1", "One", [message("session-1", "user", "one")]),
       storedConversation("session-2", "Two", [message("session-2", "user", "two")]),
     ]);
+    let completed = false;
     let finishRun: (() => void) | undefined;
+    const getSession = vi.fn(async (sessionId: string) => {
+      if (sessionId === "session-1" && completed) {
+        return sessionDetailWithMessages(sessionId, [
+          { index: 0, role: "user", text: "one" },
+          { index: 1, role: "user", text: "run one" },
+          { index: 2, role: "assistant", text: "done from bridge" },
+        ], {
+          hasMoreBefore: false,
+          messageCount: 3,
+          nextBefore: null,
+        });
+      }
+      return sessionDetailWithMessages(sessionId, [
+        { index: 0, role: "user", text: sessionId === "session-1" ? "one" : "two" },
+      ], {
+        hasMoreBefore: false,
+        messageCount: 1,
+        nextBefore: null,
+      });
+    });
     const sendAgentMessage = vi.fn((options: SendOptions) => {
       options.onStatus({ tone: "loading", text: "运行中" });
       return new Promise<SendResult>((resolve) => {
         finishRun = () => {
+          completed = true;
           options.onStatus({ tone: "success", text: "回复已返回" });
-          resolve({ ok: true, reply: agentReply("session-1", "done"), sessionId: "session-1" });
+          resolve({ mode: "remote", ok: true, reply: agentReply("session-1", "done"), sessionId: "session-1" });
         };
       });
     });
-    const { result } = renderMobileSessions({ sendAgentMessage });
+    const { result } = renderMobileSessions({ getSession, sendAgentMessage });
 
     await act(async () => {
       await result.current.selectSession("session-1");
@@ -432,6 +521,79 @@ describe("useMobileSessions", () => {
     });
     await waitFor(() => expect(result.current.historyItems.find((item) => item.id === "session-1")?.unread).toBe(true));
     expect(result.current.historyItems.find((item) => item.id === "session-2")?.unread).toBe(false);
+    expect(getSession.mock.calls.filter(([sessionId]) => sessionId === "session-1")).toHaveLength(2);
+
+    await act(async () => {
+      await result.current.selectSession("session-1");
+    });
+    expect(result.current.activeMessages.map((item) => item.text)).toEqual(["one", "run one", "done from bridge"]);
+  });
+
+  it("keeps a newly resolved session in background when the user switches before session id arrives", async () => {
+    saveStored([
+      storedConversation("session-2", "Two", [message("session-2", "user", "two")]),
+    ]);
+    let completed = false;
+    let emitSessionId: (() => void) | undefined;
+    let finishRun: (() => void) | undefined;
+    const getSession = vi.fn(async (sessionId: string) => {
+      if (sessionId === "session-new" && completed) {
+        return sessionDetailWithMessages(sessionId, [
+          { index: 0, role: "user", text: "new run" },
+          { index: 1, role: "assistant", text: "done from bridge" },
+        ], {
+          hasMoreBefore: false,
+          messageCount: 2,
+          nextBefore: null,
+        });
+      }
+      return sessionDetailWithMessages(sessionId, [
+        { index: 0, role: "user", text: sessionId === "session-2" ? "two" : "new run" },
+      ], {
+        hasMoreBefore: false,
+        messageCount: 1,
+        nextBefore: null,
+      });
+    });
+    const sendAgentMessage = vi.fn((options: SendOptions) =>
+      new Promise<SendResult>((resolve) => {
+        emitSessionId = () => {
+          options.onSessionId("session-new");
+        };
+        finishRun = () => {
+          completed = true;
+          options.onStatus({ tone: "success", text: "回复已返回" });
+          resolve({ mode: "remote", ok: true, reply: agentReply("session-new", "done"), sessionId: "session-new" });
+        };
+      }));
+    const { result } = renderMobileSessions({ getSession, sendAgentMessage });
+
+    act(() => {
+      void result.current.sendMessage("new run");
+    });
+    await waitFor(() => expect(result.current.canSend).toBe(false));
+    await act(async () => {
+      await result.current.selectSession("session-2");
+    });
+    expect(result.current.activeSessionId).toBe("session-2");
+
+    act(() => {
+      emitSessionId?.();
+    });
+    expect(result.current.activeSessionId).toBe("session-2");
+    expect(result.current.historyItems.find((item) => item.id === "session-new")?.unread).toBe(true);
+
+    await act(async () => {
+      finishRun?.();
+    });
+    await waitFor(() => expect(result.current.historyItems.find((item) => item.id === "session-new")?.unread).toBe(true));
+    expect(result.current.activeSessionId).toBe("session-2");
+    expect(getSession.mock.calls.filter(([sessionId]) => sessionId === "session-new")).toHaveLength(1);
+
+    await act(async () => {
+      await result.current.selectSession("session-new");
+    });
+    expect(result.current.activeMessages.map((item) => item.text)).toEqual(["new run", "done from bridge"]);
   });
 
   it("does not sync all Bridge sessions when computer session persistence is disabled", async () => {
@@ -639,10 +801,12 @@ interface SendOptions {
   requestId?: string;
   selectedSkill?: ChatSelectedSkill;
   sessionId?: string;
+  shouldStreamRealtime?: (sessionId: string) => boolean;
   traceId?: string;
 }
 
 interface SendResult {
+  mode?: "local" | "remote";
   ok: boolean;
   reply?: AgentPayload;
   sessionId?: string;

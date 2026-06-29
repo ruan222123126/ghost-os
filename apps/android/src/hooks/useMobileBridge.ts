@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createTraceId, errorMessage, hasTauriRuntime } from "../lib/bridgeBus";
 import type { BridgeBusCommand, BridgeEnvelope } from "../lib/bridgeBus";
-import { streamAgentMessageHTTP } from "../lib/agentStream";
+import { resolveSessionId, streamAgentMessageHTTP } from "../lib/agentStream";
 import type { AgentStreamEvent } from "../lib/agentStream";
 import {
   createAgentPayloadFromRuntime,
@@ -75,6 +75,7 @@ interface SendAgentMessageOptions {
   requestId?: string;
   selectedSkill?: ChatSelectedSkill;
   sessionId?: string;
+  shouldStreamRealtime?: (sessionId: string) => boolean;
   traceId?: string;
 }
 
@@ -323,6 +324,28 @@ function upsertById<TItem extends { id: string }>(
     return existing.map((item) => (item.id === task.id ? task : item));
   }
   return [task, ...existing];
+}
+
+function shouldProjectStreamEvent(
+  event: AgentStreamEvent,
+  currentSessionId: string,
+  shouldStreamRealtime?: (sessionId: string) => boolean,
+): boolean {
+  const sessionId = resolveSessionId(event) || currentSessionId.trim();
+  return !sessionId || shouldStreamRealtime?.(sessionId) !== false;
+}
+
+function commitStreamEventSessionId(
+  event: AgentStreamEvent,
+  runtime: { sessionId: string },
+  projector: Pick<MobileAgentStreamProjector, "commitSessionId">,
+): void {
+  const sessionId = resolveSessionId(event);
+  if (!sessionId || sessionId === runtime.sessionId) {
+    return;
+  }
+  runtime.sessionId = sessionId;
+  projector.commitSessionId(sessionId);
 }
 
 export function useMobileBridge() {
@@ -1298,6 +1321,10 @@ export function useMobileBridge() {
       options.onStatus({ tone: "loading", text: "发送中" });
       try {
         const applyEvent = (event: AgentStreamEvent) => {
+          if (!shouldProjectStreamEvent(event, runtime.sessionId, options.shouldStreamRealtime)) {
+            commitStreamEventSessionId(event, runtime, projector);
+            return;
+          }
           projectMobileAgentStreamEvent(event, runtime, projector);
         };
         const result = settings.connectionMode === "http"
@@ -1324,6 +1351,7 @@ export function useMobileBridge() {
           runtime.sessionId = resolvedSessionId;
           projector.commitSessionId(resolvedSessionId);
         }
+        runtime.sessionEnded = result.sessionEnded;
         flushStreamReplyCommit(streamCommittersRef.current, requestId);
         if (!result.awaitingHuman) {
           options.onStatus({ tone: "success", text: result.sessionEnded ? "会话已结束" : "回复已返回" });
