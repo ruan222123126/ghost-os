@@ -121,7 +121,7 @@ func (s *Store) Load(sessionID string) (*Session, error) {
 	}
 
 	var sess *Session
-	if err := s.withSessionLock(id, false, func() error {
+	if err := s.withStoreLock(func() error {
 		return s.withTx("load session", func(tx *sql.Tx) error {
 			loaded, loadErr := loadSessionTx(tx, id)
 			if loadErr != nil {
@@ -147,7 +147,7 @@ func (s *Store) LoadPage(sessionID string, params PageParams) (*Session, Message
 		sess *Session
 		page MessagePage
 	)
-	if err := s.withSessionLock(id, false, func() error {
+	if err := s.withStoreLock(func() error {
 		return s.withTx("load session page", func(tx *sql.Tx) error {
 			loaded, loadErr := loadSessionTx(tx, id)
 			if loadErr != nil {
@@ -177,7 +177,7 @@ func (s *Store) Save(sess *Session) error {
 		return err
 	}
 
-	return s.withSessionLock(id, true, func() error {
+	return s.withStoreLock(func() error {
 		if err := s.withTx("save session", func(tx *sql.Tx) error {
 			return saveSessionTx(tx, id, sess)
 		}); err != nil {

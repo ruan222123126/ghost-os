@@ -26,10 +26,6 @@ func (s *bridgeService) requireTaskMutationRunner() (apptasks.Mutation, int, err
 	return s.taskActions().RequireMutationRunner()
 }
 
-func legacyStatusFromServiceError(err error) int {
-	return bus.StatusFromError(err)
-}
-
 func (s *bridgeService) taskActions() taskservice.Actions {
 	return taskservice.New(taskservice.Config{
 		Store:             s.taskStore(),

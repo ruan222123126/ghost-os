@@ -17,7 +17,7 @@ func (s *Store) UpdateTitle(sessionID string, title string) error {
 	if normalizedTitle == "" {
 		return errors.New("session title cannot be empty")
 	}
-	return s.withSessionLock(id, true, func() error {
+	return s.withStoreLock(func() error {
 		return s.withTx("update session title", func(tx *sql.Tx) error {
 			return updateSessionTitleTx(tx, id, normalizedTitle)
 		})

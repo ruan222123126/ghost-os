@@ -3,6 +3,7 @@ package orchestration
 import (
 	"context"
 	"encoding/json"
+	"ghost-os/bridge/orchestration/internal/contracts/bus"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -229,7 +230,7 @@ func TestEnsureSessionActiveRequiresSessionStoreForExistingSession(t *testing.T)
 	if kind := ServiceErrorKindOf(err); kind != ServiceErrorInternal {
 		t.Fatalf("unexpected error kind: got=%s want=%s", kind, ServiceErrorInternal)
 	}
-	if code := legacyStatusFromServiceError(err); code != http.StatusInternalServerError {
+	if code := bus.StatusFromError(err); code != http.StatusInternalServerError {
 		t.Fatalf("unexpected status code: got=%d want=%d", code, http.StatusInternalServerError)
 	}
 	if !strings.Contains(err.Error(), "session store is not configured") {
@@ -256,7 +257,7 @@ func TestEnsureSessionNotInflightRequiresRunRegistryForExistingSession(t *testin
 	if kind := ServiceErrorKindOf(err); kind != ServiceErrorInternal {
 		t.Fatalf("unexpected error kind: got=%s want=%s", kind, ServiceErrorInternal)
 	}
-	if code := legacyStatusFromServiceError(err); code != http.StatusInternalServerError {
+	if code := bus.StatusFromError(err); code != http.StatusInternalServerError {
 		t.Fatalf("unexpected status code: got=%d want=%d", code, http.StatusInternalServerError)
 	}
 	if !strings.Contains(err.Error(), "run registry is not configured") {

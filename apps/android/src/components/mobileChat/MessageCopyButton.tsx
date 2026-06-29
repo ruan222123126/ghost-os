@@ -1,41 +1,10 @@
 import { Check, Copy } from "lucide-react";
 import { useState } from "react";
-
-const COPY_RESET_DELAY_MS = 1600;
+import { COPY_FEEDBACK_RESET_DELAY_MS, copyTextToClipboard } from "../../../../shared/browserClipboard";
 
 interface MessageCopyButtonProps {
   text: string;
   variant?: "default" | "code";
-}
-
-async function copyWithClipboard(text: string): Promise<boolean> {
-  if (!navigator.clipboard?.writeText) {
-    return false;
-  }
-
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function copyWithTextArea(text: string): boolean {
-  const textArea = document.createElement("textarea");
-  textArea.value = text;
-  textArea.style.position = "fixed";
-  textArea.style.opacity = "0";
-  document.body.appendChild(textArea);
-  textArea.select();
-
-  try {
-    return document.execCommand("copy");
-  } catch {
-    return false;
-  } finally {
-    document.body.removeChild(textArea);
-  }
 }
 
 export function MessageCopyButton({ text, variant = "default" }: MessageCopyButtonProps) {
@@ -52,13 +21,13 @@ export function MessageCopyButton({ text, variant = "default" }: MessageCopyButt
       return;
     }
 
-    const didCopy = (await copyWithClipboard(text)) || copyWithTextArea(text);
+    const didCopy = await copyTextToClipboard(text);
     if (!didCopy) {
       return;
     }
 
     setCopied(true);
-    window.setTimeout(() => setCopied(false), COPY_RESET_DELAY_MS);
+    window.setTimeout(() => setCopied(false), COPY_FEEDBACK_RESET_DELAY_MS);
   }
 
   return (

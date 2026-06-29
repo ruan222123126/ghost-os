@@ -6,6 +6,7 @@ import (
 	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
+	"ghost-os/bridge/orchestration/internal/contracts/bus"
 	"ghost-os/bridge/orchestration/internal/domain/sessionturn"
 	"ghost-os/bridge/tools"
 	"os"
@@ -344,7 +345,7 @@ func TestExecuteAgentActionRejectsPlanModeToolCalls(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error but got nil")
 	}
-	if code := legacyStatusFromServiceError(err); code != 500 {
+	if code := bus.StatusFromError(err); code != 500 {
 		t.Fatalf("unexpected status code: got %d want %d", code, 500)
 	}
 	if !strings.Contains(err.Error(), "cannot contain tool calls") {
