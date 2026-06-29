@@ -36,7 +36,7 @@ export function MobileConnectionPanel(props: MobileConnectionPanelProps) {
     setPairingUri("");
     setPairingError("");
     setPairingWarning("");
-  }, [props.open, props.settings.apiToken, props.settings.bridgeUrl]);
+  }, [props.open]);
 
   async function importPairing(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
