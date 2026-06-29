@@ -45,6 +45,7 @@ import type {
   ProviderExportRequestPayload,
   ProviderListPayload,
   SessionDetail,
+  SessionGetOptions,
   SessionMetadata,
   SkillPayload,
   StatusMessage,
@@ -952,9 +953,13 @@ export function useMobileBridge() {
   }, [refreshSessions]);
 
   const getSession = useCallback(
-    async (sessionId: string): Promise<SessionDetail> => {
+    async (sessionId: string, options: SessionGetOptions = {}): Promise<SessionDetail> => {
       return parseSessionDetail(
-        await requestBridge<unknown>("SESSION_GET", { id: sessionId.trim(), limit: SESSION_DETAIL_PAGE_LIMIT }),
+        await requestBridge<unknown>("SESSION_GET", {
+          id: sessionId.trim(),
+          limit: options.limit ?? SESSION_DETAIL_PAGE_LIMIT,
+          ...(options.before === undefined ? {} : { before: options.before }),
+        }),
       );
     },
     [requestBridge],

@@ -36,6 +36,7 @@ import type {
   MobileSessionRunState,
   MobileSessionView,
   SessionDetail,
+  SessionGetOptions,
   SessionMetadata,
   StatusMessage,
   StoredMobileConversation,
@@ -91,7 +92,7 @@ interface UseMobileSessionsOptions {
   bridgeConnected: boolean;
   computerSessionSyncScope?: string;
   getFullSession: (sessionId: string) => Promise<SessionDetail>;
-  getSession: (sessionId: string) => Promise<SessionDetail>;
+  getSession: (sessionId: string, options?: SessionGetOptions) => Promise<SessionDetail>;
   pinnedHistoryIds: string[];
   persistComputerSessionsEnabled: boolean;
   sendAvailable?: boolean;
@@ -135,6 +136,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
   const activeSessionIdRef = useRef<string | undefined>(undefined);
   const postSendFocusTokenRef = useRef(0);
   const stoppingRunKeysRef = useRef<Set<string>>(new Set());
+  const sessionViewsRef = useRef<Record<string, MobileSessionView>>(sessionViews);
   const storedConversationsRef = useRef<StoredMobileConversation[]>(storedConversations);
   const syncRunIdRef = useRef(0);
 
@@ -145,6 +147,10 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
   useEffect(() => {
     storedConversationsRef.current = storedConversations;
   }, [storedConversations]);
+
+  useEffect(() => {
+    sessionViewsRef.current = sessionViews;
+  }, [sessionViews]);
 
   useEffect(() => {
     if (!hasTauriRuntime()) {
@@ -239,6 +245,8 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
   const activeMessages = activeView?.messages ?? homeMessages;
   const activeReply = activeView?.reply ?? homeReply;
   const activeRun = activeView?.run ?? homeRun;
+  const hasOlderHistory = Boolean(activeView?.hasOlderHistory);
+  const loadingOlderHistory = Boolean(activeView?.loadingOlderHistory);
   const activeStatus = runStateToStatus(activeRun, HOME_IDLE_STATUS);
   const sendAvailable = options.sendAvailable ?? options.bridgeConnected;
   const historyItems = useMemo(
@@ -402,6 +410,9 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
         title: existing?.title || stored?.title || sessionFallbackTitle(trimmedSessionId),
         unread: false,
         bridgeOwned: existing?.bridgeOwned ?? false,
+        hasOlderHistory: existing?.hasOlderHistory ?? false,
+        loadingOlderHistory: false,
+        nextHistoryBefore: existing?.nextHistoryBefore ?? null,
       }),
     );
 
@@ -428,6 +439,9 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
           unread: false,
           bridgeOwned: true,
           updatedAt: detail.updated_at,
+          hasOlderHistory: detail.page.has_more_before,
+          loadingOlderHistory: false,
+          nextHistoryBefore: detail.page.next_before ?? null,
         }),
       );
       persistConversation({
@@ -441,6 +455,70 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       });
     } catch (error) {
       applyRunStatus(trimmedSessionId, { tone: "error", text: errorMessage(error) });
+    }
+  }
+
+  async function loadOlderHistory(): Promise<void> {
+    const sessionId = activeSessionIdRef.current?.trim() || "";
+    if (!sessionId || !options.bridgeConnected) {
+      return;
+    }
+
+    const view = sessionViewsRef.current[sessionId];
+    const nextBefore = view?.nextHistoryBefore ?? null;
+    if (!view?.hasOlderHistory || view.loadingOlderHistory || nextBefore === null) {
+      return;
+    }
+
+    setSessionViews((current) =>
+      upsertSessionView(current, sessionId, {
+        loadingOlderHistory: true,
+      }),
+    );
+
+    try {
+      const detail = await options.getSession(sessionId, { before: nextBefore });
+      const currentView = sessionViewsRef.current[detail.id] ?? sessionViewsRef.current[sessionId];
+      if (!currentView) {
+        setSessionViews((current) =>
+          upsertSessionView(current, sessionId, {
+            loadingOlderHistory: false,
+          }),
+        );
+        return;
+      }
+      const messages = prependUniqueConversationMessages(
+        currentView.messages,
+        sessionDetailToConversationMessages(detail),
+      );
+      setSessionViews((current) =>
+        upsertSessionView(current, detail.id, {
+          bridgeOwned: true,
+          hasOlderHistory: detail.page.has_more_before,
+          loadingOlderHistory: false,
+          messages,
+          nextHistoryBefore: detail.page.next_before ?? null,
+          title: detail.title.trim() || currentView.title || sessionFallbackTitle(detail.id),
+          unread: activeSessionIdRef.current !== detail.id,
+          updatedAt: detail.updated_at,
+        }),
+      );
+      persistConversation({
+        createdAt: detail.created_at,
+        id: detail.id,
+        messages,
+        sourceMessageCount: detail.message_count,
+        syncedMessageCount: messages.length,
+        title: detail.title.trim() || currentView.title || sessionFallbackTitle(detail.id),
+        updatedAt: detail.updated_at,
+      });
+    } catch (error) {
+      setSessionViews((current) =>
+        upsertSessionView(current, sessionId, {
+          loadingOlderHistory: false,
+        }),
+      );
+      applyRunStatus(sessionId, { tone: "error", text: `历史消息加载失败：${errorMessage(error)}` });
     }
   }
 
@@ -538,6 +616,9 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
           title,
           unread: activeSessionIdRef.current !== detail.id,
           updatedAt: detail.updated_at,
+          hasOlderHistory: detail.page.has_more_before,
+          loadingOlderHistory: false,
+          nextHistoryBefore: detail.page.next_before ?? null,
         }),
       );
       persistConversation({
@@ -665,6 +746,9 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
         title,
         unread: activeSessionIdRef.current !== detail.id,
         updatedAt: detail.updated_at,
+        hasOlderHistory: false,
+        loadingOlderHistory: false,
+        nextHistoryBefore: null,
       }),
     );
     persistConversation({
@@ -780,7 +864,10 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     clearCurrentConversation,
     computerSessionPersistStatus,
     hasConversation: activeMessages.length > 0 || Boolean(activeReply),
+    hasOlderHistory,
     historyItems,
+    loadOlderHistory,
+    loadingOlderHistory,
     postSendFocusRequest,
     selectSession,
     sendMessage,
@@ -833,7 +920,9 @@ function isCancellationStatus(status: StatusMessage): boolean {
 }
 
 function isStoredConversationCurrent(conversation: StoredMobileConversation, session: SessionMetadata): boolean {
-  return conversation.updated_at === session.updated_at && conversation.source_message_count === session.message_count;
+  return conversation.updated_at === session.updated_at
+    && conversation.source_message_count === session.message_count
+    && conversation.synced_message_count === session.message_count;
 }
 
 function mergeSyncedConversations(
@@ -857,6 +946,14 @@ function compareStoredConversations(left: StoredMobileConversation, right: Store
     return updatedOrder;
   }
   return left.title.localeCompare(right.title, "zh-Hans");
+}
+
+function prependUniqueConversationMessages(
+  current: MobileConversationMessage[],
+  older: MobileConversationMessage[],
+): MobileConversationMessage[] {
+  const currentIds = new Set(current.map((message) => message.id));
+  return [...older.filter((message) => !currentIds.has(message.id)), ...current];
 }
 
 function initialStoredConversations(): StoredMobileConversation[] {

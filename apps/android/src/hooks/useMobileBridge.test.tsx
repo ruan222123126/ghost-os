@@ -95,6 +95,32 @@ describe("useMobileBridge", () => {
     expect(detail.page.has_more_before).toBe(false);
   });
 
+  it("loads a session detail page with explicit before and limit", async () => {
+    useHTTPSettings();
+    vi.mocked(invoke).mockImplementation(async (command: string, args?: unknown) => {
+      if (command !== "bridge_bus_request") {
+        return {};
+      }
+      const request = bridgeBusRequestFromArgs(args);
+      return {
+        error: "",
+        payload: request.action === "SESSION_GET"
+          ? sessionDetailPayload([], false)
+          : payloadForAction(request.action, request.params),
+        status: "success",
+      };
+    });
+    const { result } = renderHook(() => useMobileBridge());
+
+    await result.current.getSession("session-1", { before: 12, limit: 25 });
+
+    expect(lastBridgeBusRequest("SESSION_GET")?.params).toEqual({
+      before: 12,
+      id: "session-1",
+      limit: 25,
+    });
+  });
+
   it("searches sessions through SESSIONS_SEARCH", async () => {
     useHTTPSettings();
     vi.mocked(invoke).mockImplementation(async (command: string, args?: unknown) => {

@@ -122,7 +122,12 @@ export function upsertSessionView(
     [id]: {
       id,
       bridgeOwned: patch.bridgeOwned ?? existing?.bridgeOwned ?? false,
+      hasOlderHistory: patch.hasOlderHistory ?? existing?.hasOlderHistory ?? false,
+      loadingOlderHistory: patch.loadingOlderHistory ?? existing?.loadingOlderHistory ?? false,
       messages: patch.messages ?? existing?.messages ?? [],
+      nextHistoryBefore: hasOwnProperty(patch, "nextHistoryBefore")
+        ? patch.nextHistoryBefore
+        : existing?.nextHistoryBefore ?? null,
       reply: hasOwnProperty(patch, "reply") ? patch.reply : existing?.reply,
       run: patch.run ?? existing?.run ?? createIdleRunState(),
       title: patch.title ?? existing?.title ?? sessionFallbackTitle(id),

@@ -136,16 +136,22 @@ export function AssistantReply(props: AssistantReplyProps) {
 }
 
 export const ConversationMessageList = memo(function ConversationMessageList(props: {
+  loadingOlderHistory?: boolean;
   messages: MobileConversationMessage[];
   onApproveExternalAgent?: (input: ExternalApprovalActionInput) => Promise<boolean>;
   registerUserMessageRow: (messageId: string) => (node: HTMLDivElement | null) => void;
 }) {
-  if (props.messages.length === 0) {
+  if (props.messages.length === 0 && !props.loadingOlderHistory) {
     return null;
   }
 
   return (
     <>
+      {props.loadingOlderHistory ? (
+        <div className="history-loading-row" role="status" aria-live="polite">
+          正在加载更早消息
+        </div>
+      ) : null}
       {props.messages.map((message) => (
         <ConversationMessageRow
           key={message.id}

@@ -3,9 +3,13 @@ import type { MobileConversationMessage, StatusMessage } from "../mobileTypes";
 
 const SCROLL_DOWN_THRESHOLD_PX = 50;
 const SCROLL_ANCHOR_TOLERANCE_PX = 2;
+const LOAD_OLDER_THRESHOLD_PX = 32;
 
 interface UseChatFeedScrollOptions {
+  hasOlderHistory?: boolean;
+  loadingOlderHistory?: boolean;
   messages: MobileConversationMessage[];
+  onLoadOlderHistory?: () => Promise<void>;
   postSendFocusRequest?: PostSendFocusRequest | null;
   reply: unknown;
   statusTone: StatusMessage["tone"];
@@ -30,6 +34,8 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   const postSendLockRef = useRef<PostSendLock | null>(null);
   const postSendLockJustStartedRef = useRef(false);
   const autoFollowRef = useRef(true);
+  const olderLoadPendingRef = useRef(false);
+  const olderLoadAnchorRef = useRef<OlderLoadAnchor | null>(null);
   const trailingSpacerPxRef = useRef(0);
   const animationFrameRef = useRef<number | null>(null);
   const [showScrollDown, setShowScrollDown] = useState(false);
@@ -53,6 +59,9 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   }, []);
 
   useLayoutEffect(() => {
+    if (restoreOlderLoadAnchor()) {
+      return;
+    }
     const request = options.postSendFocusRequest;
     if (!request || handledPostSendTokenRef.current === request.token) {
       return;
@@ -66,6 +75,9 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   }, [options.messages, options.postSendFocusRequest]);
 
   useLayoutEffect(() => {
+    if (restoreOlderLoadAnchor()) {
+      return;
+    }
     if (postSendLockRef.current) {
       if (postSendLockJustStartedRef.current) {
         postSendLockJustStartedRef.current = false;
@@ -78,6 +90,13 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
       scrollToBottom("smooth");
     }
   }, [hasReply, options.messages, options.statusTone]);
+
+  useLayoutEffect(() => {
+    if (!options.loadingOlderHistory && olderLoadPendingRef.current) {
+      olderLoadPendingRef.current = false;
+      olderLoadAnchorRef.current = null;
+    }
+  }, [options.loadingOlderHistory]);
 
   useLayoutEffect(() => {
     const element = scrollRef.current;
@@ -121,6 +140,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
 
     const lock = postSendLockRef.current;
     if (!lock) {
+      maybeLoadOlderHistory(element);
       const shouldShow = shouldShowScrollDown(element);
       autoFollowRef.current = !shouldShow;
       setShowScrollDown(shouldShow);
@@ -266,6 +286,44 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     animationFrameRef.current = null;
   }
 
+  function maybeLoadOlderHistory(element: HTMLElement): void {
+    if (
+      !options.hasOlderHistory
+      || options.loadingOlderHistory
+      || olderLoadPendingRef.current
+      || olderLoadAnchorRef.current
+      || element.scrollTop > LOAD_OLDER_THRESHOLD_PX
+      || !options.onLoadOlderHistory
+    ) {
+      return;
+    }
+
+    olderLoadPendingRef.current = true;
+    olderLoadAnchorRef.current = {
+      scrollHeight: element.scrollHeight,
+      scrollTop: element.scrollTop,
+    };
+    autoFollowRef.current = false;
+    void options.onLoadOlderHistory().catch(() => {
+      olderLoadPendingRef.current = false;
+      olderLoadAnchorRef.current = null;
+    });
+  }
+
+  function restoreOlderLoadAnchor(): boolean {
+    const anchor = olderLoadAnchorRef.current;
+    const element = scrollRef.current;
+    if (!anchor || !element || element.scrollHeight <= anchor.scrollHeight) {
+      return false;
+    }
+
+    const delta = element.scrollHeight - anchor.scrollHeight;
+    olderLoadAnchorRef.current = null;
+    scrollToAnchor(anchor.scrollTop + delta, "auto");
+    setShowScrollDown(shouldShowScrollDown(element));
+    return true;
+  }
+
   return {
     handleScroll,
     registerUserMessageRow,
@@ -275,6 +333,11 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     showScrollDown,
     trailingSpacerPx,
   };
+}
+
+interface OlderLoadAnchor {
+  scrollHeight: number;
+  scrollTop: number;
 }
 
 function shouldShowScrollDown(element: HTMLElement): boolean {

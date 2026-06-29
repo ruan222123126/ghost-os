@@ -319,6 +319,11 @@ export interface SessionMessagePage {
   next_before?: number | null;
 }
 
+export interface SessionGetOptions {
+  before?: number;
+  limit?: number;
+}
+
 export interface SessionMetadata {
   id: string;
   title: string;
@@ -396,8 +401,11 @@ export interface MobileSessionRunState {
 
 export interface MobileSessionView {
   bridgeOwned: boolean;
+  hasOlderHistory?: boolean;
   id: string;
+  loadingOlderHistory?: boolean;
   messages: MobileConversationMessage[];
+  nextHistoryBefore?: number | null;
   reply?: AgentPayload;
   run: MobileSessionRunState;
   title: string;

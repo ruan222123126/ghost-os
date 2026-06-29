@@ -94,6 +94,39 @@ describe("useChatFeedScroll", () => {
     expect(latestSnapshot().trailingSpacerPx).toBe(0);
   });
 
+  it("loads older history at the top and preserves the current viewport", async () => {
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 0 });
+    const loadOlderHistory = vi.fn(async () => undefined);
+    const latest = message("session-1:1:user", "user");
+    const older = message("session-1:0:user", "user");
+    const { rerender } = render(
+      <ScrollHarness
+        hasOlderHistory
+        messages={[latest]}
+        metrics={metrics}
+        onLoadOlderHistory={loadOlderHistory}
+      />,
+    );
+    vi.mocked(feedElement().scrollTo).mockClear();
+    metrics.scrollTop = 0;
+
+    fireEvent.scroll(feedElement());
+
+    expect(loadOlderHistory).toHaveBeenCalledTimes(1);
+
+    metrics.scrollHeight = 1300;
+    rerender(
+      <ScrollHarness
+        hasOlderHistory={false}
+        messages={[older, latest]}
+        metrics={metrics}
+        onLoadOlderHistory={loadOlderHistory}
+      />,
+    );
+
+    expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 300, behavior: "auto" });
+  });
+
   it("focuses requested user messages without depending on id shape", () => {
     const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 300 });
     const userMessage = message("session-1:3:user", "user");
@@ -277,15 +310,21 @@ class MockResizeObserver {
 }
 
 function ScrollHarness(props: {
+  hasOlderHistory?: boolean;
+  loadingOlderHistory?: boolean;
   messages: MobileConversationMessage[];
   metrics: FeedMetrics;
+  onLoadOlderHistory?: () => Promise<void>;
   postSendFocusRequest?: PostSendFocusRequest | null;
   reply?: AgentPayload;
   rowTops?: Record<string, number>;
   statusTone?: StatusMessage["tone"];
 }) {
   const scroll = useChatFeedScroll({
+    hasOlderHistory: props.hasOlderHistory,
+    loadingOlderHistory: props.loadingOlderHistory,
     messages: props.messages,
+    onLoadOlderHistory: props.onLoadOlderHistory,
     postSendFocusRequest: props.postSendFocusRequest,
     reply: props.reply,
     statusTone: props.statusTone ?? "idle",

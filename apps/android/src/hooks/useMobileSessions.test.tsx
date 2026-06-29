@@ -129,6 +129,56 @@ describe("useMobileSessions", () => {
     });
   });
 
+  it("loads older Bridge session history pages before current messages", async () => {
+    const getSession = vi.fn(async (sessionId: string, options?: { before?: number }) => {
+      if (options?.before === 1) {
+        return sessionDetailWithMessages(sessionId, [
+          { index: 0, role: "user", text: "older" },
+        ], {
+          hasMoreBefore: false,
+          messageCount: 2,
+          nextBefore: null,
+        });
+      }
+      return sessionDetailWithMessages(sessionId, [
+        { index: 1, role: "user", text: "latest" },
+      ], {
+        hasMoreBefore: true,
+        messageCount: 2,
+        nextBefore: 1,
+      });
+    });
+    const { result } = renderMobileSessions({
+      getSession,
+      sessions: [session("session-1", "Bridge title")],
+      sessionsLoaded: true,
+    });
+
+    await act(async () => {
+      await result.current.selectSession("session-1");
+    });
+
+    expect(result.current.activeMessages.map((message) => message.text)).toEqual(["latest"]);
+    expect(result.current.hasOlderHistory).toBe(true);
+
+    await act(async () => {
+      await result.current.loadOlderHistory();
+    });
+
+    expect(getSession).toHaveBeenLastCalledWith("session-1", { before: 1 });
+    expect(result.current.activeMessages.map((message) => message.text)).toEqual(["older", "latest"]);
+    expect(result.current.hasOlderHistory).toBe(false);
+    expect(result.current.loadingOlderHistory).toBe(false);
+    expect(loadStored()[0]).toMatchObject({
+      messages: [
+        expect.objectContaining({ text: "older" }),
+        expect.objectContaining({ text: "latest" }),
+      ],
+      source_message_count: 2,
+      synced_message_count: 2,
+    });
+  });
+
   it("restores selected skill metadata from wrapped Bridge user messages", async () => {
     const getSession = vi.fn(async (sessionId: string) => selectedSkillSessionDetail(sessionId));
     const { result } = renderMobileSessions({
@@ -388,6 +438,7 @@ describe("useMobileSessions", () => {
       {
         ...storedConversation("session-1", "Cached", [message("session-1", "user", "loaded")]),
         source_message_count: 1,
+        synced_message_count: 1,
         updated_at: "2026-01-02T00:00:00.000Z",
       },
     ]);
@@ -612,6 +663,27 @@ function sessionDetail(id: string): SessionDetail {
     page: {
       has_more_before: false,
       limit: 100,
+    },
+  };
+}
+
+function sessionDetailWithMessages(
+  id: string,
+  messages: SessionDetail["messages"],
+  options: {
+    hasMoreBefore: boolean;
+    messageCount: number;
+    nextBefore: number | null;
+  },
+): SessionDetail {
+  return {
+    ...session(id, `Bridge ${id}`),
+    message_count: options.messageCount,
+    messages,
+    page: {
+      has_more_before: options.hasMoreBefore,
+      limit: 100,
+      next_before: options.nextBefore,
     },
   };
 }

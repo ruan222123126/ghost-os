@@ -182,7 +182,10 @@ function App() {
     showScrollDown,
     trailingSpacerPx,
   } = useChatFeedScroll({
+    hasOlderHistory: mobileSessions.hasOlderHistory,
+    loadingOlderHistory: mobileSessions.loadingOlderHistory,
     messages: mobileSessions.activeMessages,
+    onLoadOlderHistory: mobileSessions.loadOlderHistory,
     postSendFocusRequest: mobileSessions.postSendFocusRequest,
     reply: mobileSessions.activeReply,
     statusTone: mobileSessions.activeStatus.tone,
@@ -357,6 +360,7 @@ function App() {
           ) : null}
 
           <ConversationMessageList
+            loadingOlderHistory={mobileSessions.loadingOlderHistory}
             messages={mobileSessions.activeMessages}
             onApproveExternalAgent={approveExternalAgent}
             registerUserMessageRow={registerUserMessageRow}

@@ -4,6 +4,17 @@
   position: relative;
 }
 
+.history-loading-row {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #5f6368;
+  font-size: 0.82rem;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
 .assistant-reply-parts {
   display: flex;
   flex-direction: column;
