@@ -137,7 +137,7 @@ func (m *Manager) ExecuteStream(
 		_ = m.finishWithError(ctx, sessionID, traceID, prepared.session.TurnIndex, runSink, err)
 		return "", sessionID, err
 	}
-	if strings.TrimSpace(turnID) != "" {
+	if strings.TrimSpace(turnID) != "" && runtime.activeTurnRunning() {
 		_ = m.updateRuntimeState(sessionID, func(ext *session.ExternalRuntime) {
 			ext.TurnID = turnID
 			ext.Status = StatusRunning

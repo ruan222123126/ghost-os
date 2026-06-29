@@ -183,6 +183,12 @@ func (r *runtimeSession) activeResult(active *activeTurn) turnDone {
 	return r.active.result
 }
 
+func (r *runtimeSession) activeTurnRunning() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.active != nil && !r.active.finished
+}
+
 func (r *runtimeSession) clearActive() {
 	r.mu.Lock()
 	r.active = nil

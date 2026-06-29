@@ -120,6 +120,10 @@ func (m *Manager) finishTurn(ctx context.Context, runtime *runtimeSession, activ
 		m.finishAbortedTurn(ctx, runtime, active)
 		return
 	}
+	if err := taskCompleteError(event.Payload); err != nil {
+		m.finishErroredTurn(ctx, runtime, active, err)
+		return
+	}
 	m.recordFinalMessageSnapshot(ctx, runtime, active, event)
 	final := strings.TrimSpace(runtime.finalText())
 	if final != "" {
@@ -139,6 +143,16 @@ func (m *Manager) finishTurn(ctx context.Context, runtime *runtimeSession, activ
 		"session_ended": false,
 	})
 	runtime.finish(turnDone{})
+}
+
+func taskCompleteError(payload map[string]any) error {
+	if errorText := firstString(payload["error"], payload["error_message"], payload["errorMessage"]); errorText != "" {
+		return fmt.Errorf("%s", errorText)
+	}
+	if statusText := firstString(payload["status"]); failedStatus(statusText) {
+		return fmt.Errorf("codex turn failed with status %q", statusText)
+	}
+	return nil
 }
 
 func (m *Manager) recordFinalMessageSnapshot(ctx context.Context, runtime *runtimeSession, active *activeTurn, event CodexEvent) {
@@ -167,6 +181,19 @@ func (m *Manager) finishAbortedTurn(ctx context.Context, runtime *runtimeSession
 		"session_id": active.sessionID,
 		"aborted":    true,
 	})
+}
+
+func (m *Manager) finishErroredTurn(ctx context.Context, runtime *runtimeSession, active *activeTurn, err error) {
+	_ = m.updateRuntimeState(active.sessionID, func(ext *session.ExternalRuntime) {
+		ext.Status = StatusError
+		ext.TurnID = ""
+		ext.PendingApprovals = nil
+	})
+	_ = emit(ctx, active.sink, active.traceID, active.sessionID, active.turn, "", streaming.EventError, map[string]any{
+		"message":    err.Error(),
+		"session_id": active.sessionID,
+	})
+	runtime.finish(turnDone{err: err})
 }
 
 func (m *Manager) flushPendingAssistantMessage(runtime *runtimeSession, sessionID string) error {

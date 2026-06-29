@@ -407,6 +407,50 @@ func TestManagerExecuteStreamUsesTaskCompleteLastAgentMessage(t *testing.T) {
 	})
 }
 
+func TestManagerExecuteStreamReportsTaskCompleteError(t *testing.T) {
+	manager, sessionStore, fake := newExternalAgentTestManager(t)
+	fake.startTurn = func(ctx context.Context, client *fakeCodexClient, opts TurnOptions) (string, error) {
+		client.emit(CodexEvent{Type: "task_started", Payload: map[string]any{"turn_id": "turn-error"}})
+		client.emit(CodexEvent{Type: "agent_message", Payload: map[string]any{"message": "partial reply"}})
+		client.emit(CodexEvent{Type: "task_complete", Payload: map[string]any{
+			"turn_id":            "turn-error",
+			"status":             "failed",
+			"error":              "codex request failed",
+			"last_agent_message": "reply returned",
+		}})
+		return "turn-error", nil
+	}
+	sink := &collectingSink{}
+
+	message, sessionID, err := manager.ExecuteStream(context.Background(), api.ExternalAgentRequest{
+		Message: "run failing codex turn",
+	}, "trace-error", sink, true)
+	if err == nil || err.Error() != "codex request failed" {
+		t.Fatalf("expected codex error, got message=%q session=%q err=%v", message, sessionID, err)
+	}
+	if message != "" {
+		t.Fatalf("expected empty final message on error, got %q", message)
+	}
+	events := sink.events()
+	assertEventTypes(t, events, []streaming.EventType{
+		streaming.EventRunStarted,
+		streaming.EventCompletionDelta,
+		streaming.EventError,
+	})
+	payload, ok := events[2].Payload.(map[string]any)
+	if !ok || payload["message"] != "codex request failed" {
+		t.Fatalf("unexpected error payload: %#v", events[2].Payload)
+	}
+
+	loaded, err := sessionStore.Load(sessionID)
+	if err != nil {
+		t.Fatalf("load session: %v", err)
+	}
+	if loaded.ExternalRuntime == nil || loaded.ExternalRuntime.Status != StatusError {
+		t.Fatalf("expected external runtime status error, got %+v", loaded.ExternalRuntime)
+	}
+}
+
 func TestManagerApprovalBlocksUntilApproved(t *testing.T) {
 	manager, sessionStore, fake := newExternalAgentTestManager(t)
 	fake.startTurn = func(ctx context.Context, client *fakeCodexClient, opts TurnOptions) (string, error) {
