@@ -1,9 +1,10 @@
-import { forwardRef, useEffect, useRef, useState, type ReactNode } from "react";
+import { forwardRef, memo, useEffect, useRef, useState, type ReactNode } from "react";
 import type {
   AgentPayload,
   ChatSelectedSkill,
   ExternalAgentApprovalDecision,
   MobileAssistantPart,
+  MobileConversationMessage,
   MobileToolCard,
   StatusMessage,
 } from "../../mobileTypes";
@@ -133,6 +134,51 @@ export function AssistantReply(props: AssistantReplyProps) {
     </AssistantPanel>
   );
 }
+
+export const ConversationMessageList = memo(function ConversationMessageList(props: {
+  messages: MobileConversationMessage[];
+  onApproveExternalAgent?: (input: ExternalApprovalActionInput) => Promise<boolean>;
+  registerUserMessageRow: (messageId: string) => (node: HTMLDivElement | null) => void;
+}) {
+  if (props.messages.length === 0) {
+    return null;
+  }
+
+  return (
+    <>
+      {props.messages.map((message) => (
+        <ConversationMessageRow
+          key={message.id}
+          message={message}
+          onApproveExternalAgent={props.onApproveExternalAgent}
+          registerUserMessageRow={props.registerUserMessageRow}
+        />
+      ))}
+    </>
+  );
+});
+
+const ConversationMessageRow = memo(function ConversationMessageRow(props: {
+  message: MobileConversationMessage;
+  onApproveExternalAgent?: (input: ExternalApprovalActionInput) => Promise<boolean>;
+  registerUserMessageRow: (messageId: string) => (node: HTMLDivElement | null) => void;
+}) {
+  if (props.message.role === "user") {
+    return (
+      <ChatBubble ref={props.registerUserMessageRow(props.message.id)} selectedSkill={props.message.selectedSkill}>
+        {props.message.text}
+      </ChatBubble>
+    );
+  }
+
+  return (
+    <AssistantReply
+      reply={conversationMessageToAgentPayload(props.message)}
+      status={assistantMessageStatus()}
+      onApproveExternalAgent={props.onApproveExternalAgent}
+    />
+  );
+});
 
 function AssistantReplyParts(props: {
   final: boolean;
@@ -487,4 +533,19 @@ function resolveAssistantParts(reply: AgentPayload | undefined): MobileAssistant
     });
   }
   return parts;
+}
+
+function assistantMessageStatus(): StatusMessage {
+  return { tone: "success", text: "回复已返回" };
+}
+
+function conversationMessageToAgentPayload(message: MobileConversationMessage): AgentPayload {
+  return {
+    message: message.text,
+    parts: message.parts,
+    session_ended: false,
+    session_id: message.sessionId ?? "",
+    thinking: message.thinking,
+    tools: message.tools,
+  };
 }

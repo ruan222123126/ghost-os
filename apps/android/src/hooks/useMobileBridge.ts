@@ -22,6 +22,13 @@ import {
 import { parseSessionDetail, parseSessionMetadataList } from "../lib/sessionPayloadParser";
 import { MobileWebRTCBridge } from "../lib/mobileWebRTC";
 import { loadSettings, normalizeBridgeUrl, saveSettings } from "../lib/settingsStorage";
+import {
+  cancelAllStreamReplyCommitters,
+  cancelStreamReplyCommit,
+  enqueueStreamReplyCommit,
+  flushStreamReplyCommit,
+  type StreamReplyCommitter,
+} from "../lib/streamReplyCommitter";
 import type {
   AgentRuntimeType,
   AgentPayload,
@@ -344,6 +351,7 @@ export function useMobileBridge() {
   const connectedTargetRef = useRef<string | undefined>(undefined);
   const autoConnectAttemptedRef = useRef(false);
   const pendingAutoConnectTargetRef = useRef<string | undefined>(undefined);
+  const streamCommittersRef = useRef(new Map<string, StreamReplyCommitter>());
 
   const bridgeUrl = useMemo(() => normalizeBridgeUrl(settings.bridgeUrl), [settings.bridgeUrl]);
   const apiToken = useMemo(() => settings.apiToken?.trim() || "", [settings.apiToken]);
@@ -381,6 +389,7 @@ export function useMobileBridge() {
 
   useEffect(() => {
     return () => {
+      cancelAllStreamReplyCommitters(streamCommittersRef.current);
       webRTCClientRef.current?.close();
     };
   }, []);
@@ -1253,7 +1262,9 @@ export function useMobileBridge() {
         : "AGENT_SEND";
       const projector: MobileAgentStreamProjector = {
         commitReply: (nextRuntime) => {
-          options.onReply(createAgentPayloadFromRuntime(nextRuntime));
+          enqueueStreamReplyCommit(streamCommittersRef.current, requestId, () => {
+            options.onReply(createAgentPayloadFromRuntime(nextRuntime));
+          });
         },
         commitSessionId: (sessionId) => {
           const trimmedSessionId = sessionId.trim();
@@ -1295,8 +1306,8 @@ export function useMobileBridge() {
         if (resolvedSessionId) {
           runtime.sessionId = resolvedSessionId;
           projector.commitSessionId(resolvedSessionId);
-          projector.commitReply(runtime);
         }
+        flushStreamReplyCommit(streamCommittersRef.current, requestId);
         if (!result.awaitingHuman) {
           options.onStatus({ tone: "success", text: result.sessionEnded ? "会话已结束" : "回复已返回" });
         }
@@ -1307,6 +1318,7 @@ export function useMobileBridge() {
           sessionId: runtime.sessionId || resolvedSessionId,
         };
       } catch (error) {
+        cancelStreamReplyCommit(streamCommittersRef.current, requestId);
         options.onStatus({ tone: "error", text: errorMessage(error) });
         return { ok: false };
       }

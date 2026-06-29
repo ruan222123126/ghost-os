@@ -4,6 +4,7 @@ export {
   ChatBubble,
   ChatComposer,
   ChatHeader,
+  ConversationMessageList,
   MobileSidebar,
   MoreActionSheet,
   ScrollDownButton,

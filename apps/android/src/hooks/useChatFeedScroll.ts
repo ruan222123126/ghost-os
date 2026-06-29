@@ -34,6 +34,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   const animationFrameRef = useRef<number | null>(null);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const [trailingSpacerPx, setTrailingSpacerPxState] = useState(0);
+  const hasReply = Boolean(options.reply);
 
   const setTrailingSpacerPx = useCallback((value: number) => {
     const nextValue = Math.max(0, Math.ceil(value));
@@ -73,10 +74,10 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
       syncPostSendLock();
       return;
     }
-    if (autoFollowRef.current && (options.messages.length > 0 || options.reply)) {
+    if (autoFollowRef.current && (options.messages.length > 0 || hasReply)) {
       scrollToBottom("smooth");
     }
-  }, [options.messages, options.reply, options.statusTone]);
+  }, [hasReply, options.messages, options.statusTone]);
 
   useLayoutEffect(() => {
     const element = scrollRef.current;
@@ -90,7 +91,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
         return;
       }
 
-      if (autoFollowRef.current && (options.messages.length > 0 || options.reply)) {
+      if (autoFollowRef.current && (options.messages.length > 0 || hasReply)) {
         scrollToBottom("auto");
         return;
       }
@@ -104,7 +105,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     return () => {
       resizeObserver.disconnect();
     };
-  }, [options.messages.length, options.reply, options.statusTone]);
+  }, [hasReply, options.messages.length, options.statusTone]);
 
   useEffect(() => {
     return () => {

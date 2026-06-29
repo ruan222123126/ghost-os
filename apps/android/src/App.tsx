@@ -3,9 +3,9 @@ import type { FormEvent } from "react";
 import {
   AssistantIntro,
   AssistantReply,
-  ChatBubble,
   ChatComposer,
   ChatHeader,
+  ConversationMessageList,
   MobileSidebar,
   MoreActionSheet,
   ScrollDownButton,
@@ -19,14 +19,11 @@ import { useMobileBridge } from "./hooks/useMobileBridge";
 import { useMobileSessions } from "./hooks/useMobileSessions";
 import { DEFAULT_CODEX_MODEL, normalizeCodexModel } from "./lib/codexModels";
 import type {
-  AgentPayload,
   AgentModeSelection,
   AgentRuntimeType,
   ChatSelectedSkill,
   ConfigPayload,
-  MobileConversationMessage,
   ProviderListPayload,
-  StatusMessage,
   StoredSettings,
 } from "./mobileTypes";
 import "markstream-react/index.css";
@@ -70,10 +67,6 @@ function buildLocalRuntimeConfig(
     model: settings.localModel?.trim() || provider.models?.[0]?.trim() || "",
     provider: provider.name,
   };
-}
-
-function assistantMessageStatus(): StatusMessage {
-  return { tone: "success", text: "回复已返回" };
 }
 
 function App() {
@@ -363,24 +356,11 @@ function App() {
             <AssistantIntro onSelectSuggestion={setMessage} />
           ) : null}
 
-          {mobileSessions.activeMessages.map((item) =>
-            item.role === "user" ? (
-              <ChatBubble
-                key={item.id}
-                ref={registerUserMessageRow(item.id)}
-                selectedSkill={item.selectedSkill}
-              >
-                {item.text}
-              </ChatBubble>
-            ) : (
-              <AssistantReply
-                key={item.id}
-                reply={conversationMessageToAgentPayload(item)}
-                status={assistantMessageStatus()}
-                onApproveExternalAgent={approveExternalAgent}
-              />
-            ),
-          )}
+          <ConversationMessageList
+            messages={mobileSessions.activeMessages}
+            onApproveExternalAgent={approveExternalAgent}
+            registerUserMessageRow={registerUserMessageRow}
+          />
           <AssistantReply
             reply={mobileSessions.activeReply}
             status={displayStatus}
@@ -466,17 +446,6 @@ function App() {
       />
     </div>
   );
-}
-
-function conversationMessageToAgentPayload(message: MobileConversationMessage): AgentPayload {
-  return {
-    message: message.text,
-    parts: message.parts,
-    session_ended: false,
-    session_id: message.sessionId ?? "",
-    thinking: message.thinking,
-    tools: message.tools,
-  };
 }
 
 export default App;
