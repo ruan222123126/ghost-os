@@ -1,4 +1,4 @@
-import { forwardRef, memo, useEffect, useRef, useState, type ReactNode } from "react";
+import { forwardRef, memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Virtuoso } from "react-virtuoso";
 import type {
   AgentPayload,
@@ -141,45 +141,76 @@ export function AssistantReply(props: AssistantReplyProps) {
 }
 
 export const ConversationMessageList = memo(function ConversationMessageList(props: {
-  loadingOlderHistory?: boolean;
   messages: MobileConversationMessage[];
   onApproveExternalAgent?: (input: ExternalApprovalActionInput) => Promise<boolean>;
   registerUserMessageRow: (messageId: string) => (node: HTMLDivElement | null) => void;
+  reply: AgentPayload | undefined;
   scrollParent: HTMLElement | null;
+  status: StatusMessage;
 }) {
-  if (props.messages.length === 0 && !props.loadingOlderHistory) {
+  const listItems = useMemo(
+    () => conversationListItems(props.messages, props.reply, props.status),
+    [props.messages, props.reply, props.status],
+  );
+
+  if (listItems.length === 0) {
     return null;
   }
 
   return (
     <>
-      {props.loadingOlderHistory ? (
-        <div className="history-loading-row" role="status" aria-live="polite">
-          正在加载更早消息
-        </div>
-      ) : null}
       {props.scrollParent ? (
         <Virtuoso
           customScrollParent={props.scrollParent}
-          data={props.messages}
-          computeItemKey={(_, message) => message.id}
+          data={listItems}
+          computeItemKey={(_, item) => conversationListItemKey(item)}
           increaseViewportBy={{
             bottom: VIRTUAL_LIST_VIEWPORT_BOTTOM_PX,
             top: VIRTUAL_LIST_VIEWPORT_TOP_PX,
           }}
-          itemContent={(_, message) => (
-            <ConversationMessageRow
-              message={message}
-              onApproveExternalAgent={props.onApproveExternalAgent}
-              registerUserMessageRow={props.registerUserMessageRow}
-            />
-          )}
+          itemContent={(_, item) =>
+            item.kind === "reply" ? (
+              <AssistantReply
+                reply={item.reply}
+                status={item.status}
+                onApproveExternalAgent={props.onApproveExternalAgent}
+              />
+            ) : (
+              <ConversationMessageRow
+                message={item.message}
+                onApproveExternalAgent={props.onApproveExternalAgent}
+                registerUserMessageRow={props.registerUserMessageRow}
+              />
+            )}
           overscan={VIRTUAL_LIST_OVERSCAN_PX}
         />
       ) : null}
     </>
   );
 });
+
+type ConversationListItem =
+  | { kind: "message"; message: MobileConversationMessage }
+  | { kind: "reply"; reply: AgentPayload | undefined; status: StatusMessage };
+
+function conversationListItems(
+  messages: MobileConversationMessage[],
+  reply: AgentPayload | undefined,
+  status: StatusMessage,
+): ConversationListItem[] {
+  const items: ConversationListItem[] = messages.map((message) => ({ kind: "message", message }));
+  if (reply || status.tone === "error") {
+    items.push({ kind: "reply", reply, status });
+  }
+  return items;
+}
+
+function conversationListItemKey(item: ConversationListItem): string {
+  if (item.kind === "message") {
+    return item.message.id;
+  }
+  return `active-reply:${item.reply?.session_id ?? "status"}`;
+}
 
 const ConversationMessageRow = memo(function ConversationMessageRow(props: {
   message: MobileConversationMessage;

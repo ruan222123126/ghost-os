@@ -2,7 +2,6 @@ import { startTransition, useCallback, useEffect, useMemo, useRef, useState } fr
 import type { FormEvent } from "react";
 import {
   AssistantIntro,
-  AssistantReply,
   ChatComposer,
   ChatHeader,
   ConversationMessageList,
@@ -426,16 +425,12 @@ function App() {
           ) : null}
 
           <ConversationMessageList
-            loadingOlderHistory={mobileSessions.loadingOlderHistory}
             messages={mobileSessions.activeMessages}
             onApproveExternalAgent={approveExternalAgent}
             registerUserMessageRow={registerUserMessageRow}
-            scrollParent={chatFeedElement}
-          />
-          <AssistantReply
             reply={mobileSessions.activeReply}
+            scrollParent={chatFeedElement}
             status={displayStatus}
-            onApproveExternalAgent={approveExternalAgent}
           />
           <div aria-hidden="true" style={{ height: trailingSpacerPx }} />
         </main>
