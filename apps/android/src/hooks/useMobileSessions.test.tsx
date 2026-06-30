@@ -639,7 +639,7 @@ describe("useMobileSessions", () => {
     });
   });
 
-  it("marks background completion unread on the matching session only", async () => {
+  it("ignores inactive session completion until the user selects it again", async () => {
     saveStored([
       storedConversation("session-1", "One", [message("session-1", "user", "one")]),
       storedConversation("session-2", "Two", [message("session-2", "user", "two")]),
@@ -689,17 +689,18 @@ describe("useMobileSessions", () => {
       await result.current.selectSession("session-2");
       finishRun?.();
     });
-    await waitFor(() => expect(result.current.historyItems.find((item) => item.id === "session-1")?.unread).toBe(true));
+    expect(result.current.historyItems.find((item) => item.id === "session-1")?.unread).toBe(false);
     expect(result.current.historyItems.find((item) => item.id === "session-2")?.unread).toBe(false);
-    expect(getSession.mock.calls.filter(([sessionId]) => sessionId === "session-1")).toHaveLength(2);
+    expect(getSession.mock.calls.filter(([sessionId]) => sessionId === "session-1")).toHaveLength(1);
 
     await act(async () => {
       await result.current.selectSession("session-1");
     });
+    expect(getSession.mock.calls.filter(([sessionId]) => sessionId === "session-1")).toHaveLength(2);
     expect(result.current.activeMessages.map((item) => item.text)).toEqual(["one", "run one", "done from bridge"]);
   });
 
-  it("keeps a newly resolved session in background when the user switches before session id arrives", async () => {
+  it("ignores a newly resolved session when the user switches before session id arrives", async () => {
     saveStored([
       storedConversation("session-2", "Two", [message("session-2", "user", "two")]),
     ]);
@@ -751,18 +752,19 @@ describe("useMobileSessions", () => {
       emitSessionId?.();
     });
     expect(result.current.activeSessionId).toBe("session-2");
-    expect(result.current.historyItems.find((item) => item.id === "session-new")?.unread).toBe(true);
+    expect(result.current.historyItems.find((item) => item.id === "session-new")).toBeUndefined();
 
     await act(async () => {
       finishRun?.();
     });
-    await waitFor(() => expect(result.current.historyItems.find((item) => item.id === "session-new")?.unread).toBe(true));
     expect(result.current.activeSessionId).toBe("session-2");
-    expect(getSession.mock.calls.filter(([sessionId]) => sessionId === "session-new")).toHaveLength(1);
+    expect(result.current.historyItems.find((item) => item.id === "session-new")).toBeUndefined();
+    expect(getSession.mock.calls.filter(([sessionId]) => sessionId === "session-new")).toHaveLength(0);
 
     await act(async () => {
       await result.current.selectSession("session-new");
     });
+    expect(getSession.mock.calls.filter(([sessionId]) => sessionId === "session-new")).toHaveLength(1);
     expect(result.current.activeMessages.map((item) => item.text)).toEqual(["new run", "done from bridge"]);
   });
 

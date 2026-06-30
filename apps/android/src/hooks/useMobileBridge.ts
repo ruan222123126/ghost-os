@@ -364,8 +364,11 @@ function shouldProjectStreamEvent(
   currentSessionId: string,
   shouldStreamRealtime?: (sessionId: string) => boolean,
 ): boolean {
+  if (!shouldStreamRealtime) {
+    return true;
+  }
   const sessionId = resolveSessionId(event) || currentSessionId.trim();
-  return !sessionId || shouldStreamRealtime?.(sessionId) !== false;
+  return shouldStreamRealtime(sessionId);
 }
 
 function commitStreamEventSessionId(
