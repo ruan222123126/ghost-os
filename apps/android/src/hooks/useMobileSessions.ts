@@ -139,6 +139,8 @@ interface PostSendFocusRequest {
 const HOME_IDLE_STATUS: StatusMessage = { tone: "idle", text: "首页" };
 const PERSIST_DISABLED_STATUS: StatusMessage = { tone: "idle", text: "未开启" };
 const EXTERNAL_RUNNING_SESSION_POLL_INTERVAL_MS = 1500;
+const SESSION_MESSAGES_LOADING_STATUS_TEXT = "正在加载历史会话";
+const SESSION_MESSAGES_LOADED_STATUS_TEXT = "历史会话已加载";
 
 export function useMobileSessions(options: UseMobileSessionsOptions) {
   const [activeSessionId, setActiveSessionId] = useState<string>();
@@ -281,6 +283,11 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
   const activeRun = activeView?.run ?? homeRun;
   const hasOlderHistory = Boolean(activeView?.hasOlderHistory);
   const loadingOlderHistory = Boolean(activeView?.loadingOlderHistory);
+  const loadingSessionMessages = Boolean(
+    activeSessionId
+      && activeView?.run.status === "running"
+      && activeView.run.statusText === SESSION_MESSAGES_LOADING_STATUS_TEXT,
+  );
   const activeStatus = runStateToStatus(activeRun, HOME_IDLE_STATUS);
   const sendAvailable = options.sendAvailable ?? options.bridgeConnected;
   const historyItems = useMemo(
@@ -538,6 +545,12 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     setPostSendFocusRequest(null);
     const stored = storedConversations.find((conversation) => conversation.id === trimmedSessionId);
     const existing = sessionViews[trimmedSessionId];
+    const shouldLoadBridgeSnapshot = options.bridgeConnected && existing?.run.status !== "running";
+    const initialMessages = shouldLoadBridgeSnapshot ? [] : existing?.messages ?? stored?.messages ?? [];
+    const initialReply = shouldLoadBridgeSnapshot ? undefined : existing?.reply;
+    const initialRun = shouldLoadBridgeSnapshot
+      ? createRunningRunState(undefined, undefined, SESSION_MESSAGES_LOADING_STATUS_TEXT)
+      : existing?.run ?? createIdleRunState(stored ? SESSION_MESSAGES_LOADED_STATUS_TEXT : SESSION_MESSAGES_LOADING_STATUS_TEXT);
     activeSessionIdRef.current = trimmedSessionId;
     setActiveSessionId(trimmedSessionId);
     setHomeReply(undefined);
@@ -545,14 +558,15 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     setSessionViews((current) =>
       trimSessionViewsForState(
         upsertSessionView(current, trimmedSessionId, {
-          messages: existing?.messages ?? stored?.messages ?? [],
-          run: existing?.run ?? createIdleRunState(stored ? "历史会话已加载" : "正在加载历史会话"),
+          messages: initialMessages,
+          reply: initialReply,
+          run: initialRun,
           title: existing?.title || stored?.title || sessionFallbackTitle(trimmedSessionId),
           unread: false,
-          bridgeOwned: existing?.bridgeOwned ?? false,
-          hasOlderHistory: existing?.hasOlderHistory ?? false,
+          bridgeOwned: shouldLoadBridgeSnapshot || Boolean(existing?.bridgeOwned),
+          hasOlderHistory: shouldLoadBridgeSnapshot ? false : existing?.hasOlderHistory ?? false,
           loadingOlderHistory: false,
-          nextHistoryBefore: existing?.nextHistoryBefore ?? null,
+          nextHistoryBefore: shouldLoadBridgeSnapshot ? null : existing?.nextHistoryBefore ?? null,
         }),
       ),
     );
@@ -568,12 +582,12 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       return;
     }
 
-    applyRunStatus(trimmedSessionId, { tone: "loading", text: "正在加载历史会话" });
+    applyRunStatus(trimmedSessionId, { tone: "loading", text: SESSION_MESSAGES_LOADING_STATUS_TEXT });
     try {
       const detail = await options.getSession(trimmedSessionId);
       applySessionRuntimeSelection(detail.last_runtime_selection ?? null);
       commitSessionDetail(detail, {
-        run: createSuccessRunState("历史会话已加载"),
+        run: createSuccessRunState(SESSION_MESSAGES_LOADED_STATUS_TEXT),
         unread: false,
       });
     } catch (error) {
@@ -1209,6 +1223,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     historyItems,
     loadOlderHistory,
     loadingOlderHistory,
+    loadingSessionMessages,
     postSendFocusRequest,
     selectSession,
     sendMessage,

@@ -124,7 +124,32 @@ describe("useChatFeedScroll", () => {
       />,
     );
 
-    expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 300, behavior: "auto" });
+    expect(metrics.scrollTop).toBe(300);
+  });
+
+  it("resets bottom focus when switching sessions", () => {
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 0 });
+    const { rerender } = render(
+      <ScrollHarness
+        messages={[message("session-1:1:user", "user")]}
+        metrics={metrics}
+        sessionId="session-1"
+      />,
+    );
+    vi.mocked(feedElement().scrollTo).mockClear();
+    metrics.scrollTop = 0;
+    fireEvent.scroll(feedElement());
+
+    metrics.scrollHeight = 1200;
+    rerender(
+      <ScrollHarness
+        messages={[message("session-2:1:user", "user")]}
+        metrics={metrics}
+        sessionId="session-2"
+      />,
+    );
+
+    expect(metrics.scrollTop).toBe(1200);
   });
 
   it("focuses requested user messages without depending on id shape", () => {
@@ -386,6 +411,7 @@ function ScrollHarness(props: {
   mountedRowIds?: string[];
   reply?: AgentPayload;
   rowTops?: Record<string, number>;
+  sessionId?: string;
   statusTone?: StatusMessage["tone"];
 }) {
   const scroll = useChatFeedScroll({
@@ -395,6 +421,7 @@ function ScrollHarness(props: {
     onLoadOlderHistory: props.onLoadOlderHistory,
     postSendFocusRequest: props.postSendFocusRequest,
     reply: props.reply,
+    sessionId: props.sessionId,
     statusTone: props.statusTone ?? "idle",
   });
   hookSnapshots.push({

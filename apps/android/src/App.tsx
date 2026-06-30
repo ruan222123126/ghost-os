@@ -199,6 +199,8 @@ function App() {
   );
   const isModalOpen = isSidebarOpen || isSearchOpen || isConnectionOpen || isSettingsOpen || isMoreMenuOpen;
   const hasLocalConversation = mobileSessions.hasConversation;
+  const showEmptyIntro = !hasLocalConversation && !mobileSessions.loadingSessionMessages;
+  const showTopLoadingBar = mobileSessions.loadingSessionMessages || mobileSessions.loadingOlderHistory;
   const {
     handleScroll,
     registerUserMessageRow,
@@ -214,6 +216,7 @@ function App() {
     onLoadOlderHistory: mobileSessions.loadOlderHistory,
     postSendFocusRequest: mobileSessions.postSendFocusRequest,
     reply: mobileSessions.activeReply,
+    sessionId: mobileSessions.activeSessionId,
     statusTone: mobileSessions.activeStatus.tone,
   });
   const selectSessionRef = useRef(mobileSessions.selectSession);
@@ -415,12 +418,14 @@ function App() {
           onNewSession={startNewSession}
         />
 
+        {showTopLoadingBar ? <MobileTopLoadingBar label="消息加载中" /> : null}
+
         <main
           ref={setChatFeedRef}
           onScroll={handleScroll}
-          className={`chat-feed ${hasLocalConversation ? "" : "is-empty"}`}
+          className={`chat-feed ${showEmptyIntro ? "is-empty" : ""}`}
         >
-          {!hasLocalConversation ? (
+          {showEmptyIntro ? (
             <AssistantIntro onSelectSuggestion={setMessage} />
           ) : null}
 
@@ -510,6 +515,14 @@ function App() {
         onTogglePin={toggleActiveHistoryPin}
         onClearConversation={clearLocalConversation}
       />
+    </div>
+  );
+}
+
+function MobileTopLoadingBar(props: { label: string }) {
+  return (
+    <div className="mobile-top-loading-bar" role="status" aria-label={props.label}>
+      <div className="mobile-top-loading-bar-fill" aria-hidden="true" />
     </div>
   );
 }

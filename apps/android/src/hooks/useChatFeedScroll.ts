@@ -12,6 +12,7 @@ interface UseChatFeedScrollOptions {
   onLoadOlderHistory?: () => Promise<void>;
   postSendFocusRequest?: PostSendFocusRequest | null;
   reply: AgentPayload | undefined;
+  sessionId?: string;
   statusTone: StatusMessage["tone"];
 }
 
@@ -38,6 +39,8 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   const autoFollowRef = useRef(true);
   const olderLoadPendingRef = useRef(false);
   const olderLoadAnchorRef = useRef<OlderLoadAnchor | null>(null);
+  const previousSessionIdRef = useRef<string | undefined>(undefined);
+  const forceBottomOnNextContentRef = useRef(false);
   const trailingSpacerPxRef = useRef(0);
   const animationFrameRef = useRef<number | null>(null);
   const [showScrollDown, setShowScrollDown] = useState(false);
@@ -64,6 +67,28 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
       userMessageRowsRef.current.delete(messageId);
     };
   }, []);
+
+  useLayoutEffect(() => {
+    const currentSessionId = options.sessionId?.trim() || "";
+    if (previousSessionIdRef.current === currentSessionId) {
+      return;
+    }
+
+    previousSessionIdRef.current = currentSessionId;
+    cancelScheduledScroll();
+    pendingPostSendRequestRef.current = null;
+    postSendLockRef.current = null;
+    postSendLockJustStartedRef.current = false;
+    olderLoadPendingRef.current = false;
+    olderLoadAnchorRef.current = null;
+    autoFollowRef.current = true;
+    forceBottomOnNextContentRef.current = !options.postSendFocusRequest;
+    setTrailingSpacerPx(0);
+    setShowScrollDown(false);
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = 0;
+    }
+  }, [options.postSendFocusRequest, options.sessionId, setTrailingSpacerPx]);
 
   useLayoutEffect(() => {
     if (restoreOlderLoadAnchor()) {
@@ -99,7 +124,8 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
       return;
     }
     if (autoFollowRef.current && (options.messages.length > 0 || hasReply)) {
-      scrollToBottom("smooth");
+      scrollToBottom(forceBottomOnNextContentRef.current ? "auto" : "smooth");
+      forceBottomOnNextContentRef.current = false;
     }
   }, [hasReply, options.messages, options.statusTone, reply]);
 
@@ -153,6 +179,11 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     const lock = postSendLockRef.current;
     if (!lock) {
       maybeLoadOlderHistory(element);
+      if (olderLoadAnchorRef.current || options.loadingOlderHistory) {
+        autoFollowRef.current = false;
+        setShowScrollDown(false);
+        return;
+      }
       const shouldShow = shouldShowScrollDown(element);
       autoFollowRef.current = !shouldShow;
       setShowScrollDown(shouldShow);
@@ -229,6 +260,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
       messageId,
     };
     postSendLockJustStartedRef.current = true;
+    forceBottomOnNextContentRef.current = false;
     setTrailingSpacerPx(requiredTrailingSpacerPx(element, anchorTop, realContentHeightPx));
     setShowScrollDown(false);
     scheduleScroll(() => scrollToAnchor(anchorTop, behavior));

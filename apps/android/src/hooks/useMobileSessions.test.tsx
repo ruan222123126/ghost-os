@@ -134,6 +134,45 @@ describe("useMobileSessions", () => {
     });
   });
 
+  it("shows a loading state and waits for the latest Bridge page when selecting cached history", async () => {
+    saveStored([storedConversation("session-1", "Cached title", [
+      message("session-1", "user", "cached older"),
+      message("session-1", "assistant", "cached latest"),
+    ])]);
+    let resolveDetail: ((detail: SessionDetail) => void) | undefined;
+    const getSession = vi.fn((_sessionId: string) =>
+      new Promise<SessionDetail>((resolve) => {
+        resolveDetail = resolve;
+      }),
+    );
+    const { result } = renderMobileSessions({
+      getSession,
+      sessions: [session("session-1", "Bridge title")],
+      sessionsLoaded: true,
+    });
+
+    act(() => {
+      void result.current.selectSession("session-1");
+    });
+
+    await waitFor(() => expect(result.current.loadingSessionMessages).toBe(true));
+    expect(result.current.activeMessages).toEqual([]);
+
+    await act(async () => {
+      resolveDetail?.(sessionDetailWithMessages("session-1", [
+        { index: 19, role: "user", text: "latest page only" },
+      ], {
+        hasMoreBefore: true,
+        messageCount: 20,
+        nextBefore: 19,
+      }));
+    });
+
+    await waitFor(() => expect(result.current.loadingSessionMessages).toBe(false));
+    expect(result.current.activeMessages.map((item) => item.text)).toEqual(["latest page only"]);
+    expect(result.current.hasOlderHistory).toBe(true);
+  });
+
   it("limits hot-loaded session detail views on mobile", async () => {
     const getSession = vi.fn(async (sessionId: string) => {
       const index = Number(sessionId.replace("session-", ""));
