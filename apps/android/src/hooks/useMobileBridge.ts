@@ -56,7 +56,7 @@ import type {
 } from "../mobileTypes";
 import { buildAgentMessageWithSelectedSkill } from "../lib/selectedSkillMessage";
 
-const SESSION_DETAIL_PAGE_LIMIT = 100;
+const SESSION_DETAIL_PAGE_LIMIT = 20;
 const SESSION_FULL_PAGE_LIMIT = 200;
 const EXTERNAL_AGENT_STREAM_PATH = "api/external-agent/stream";
 const UNSUPPORTED_SKILL_MANAGEMENT_TEXT = "电脑端不支持技能管理";

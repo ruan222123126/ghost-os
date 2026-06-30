@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import {
   AssistantIntro,
@@ -35,6 +35,8 @@ import "./App.overlays.css";
 function isNonEmptyMessage(value: string): boolean {
   return value.trim().length > 0;
 }
+
+const SIDEBAR_CLOSE_DEFER_MS = 320;
 
 function displayRuntime(
   agentRuntime: AgentRuntimeType,
@@ -126,6 +128,8 @@ function App() {
   const [isRuntimeMenuOpen, setIsRuntimeMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [pinnedHistoryIds, setPinnedHistoryIds] = useState<string[]>([]);
+  const [chatFeedElement, setChatFeedElement] = useState<HTMLElement | null>(null);
+  const pendingSelectHistoryTimeoutRef = useRef<number | null>(null);
   const localRuntimeConfig = useMemo(() => buildLocalRuntimeConfig(providerList, settings), [providerList, settings]);
   const chatConfig = settings.remoteExecutionEnabled ? config : localRuntimeConfig;
   const chatProviderList = providerList;
@@ -190,12 +194,23 @@ function App() {
     reply: mobileSessions.activeReply,
     statusTone: mobileSessions.activeStatus.tone,
   });
+  const selectSessionRef = useRef(mobileSessions.selectSession);
   const activeHistoryItem = useMemo(
     () => mobileSessions.historyItems.find((item) => item.id === mobileSessions.activeSessionId),
     [mobileSessions.activeSessionId, mobileSessions.historyItems],
   );
 
   useBodyScrollLock(isModalOpen);
+
+  useEffect(() => {
+    selectSessionRef.current = mobileSessions.selectSession;
+  }, [mobileSessions.selectSession]);
+
+  useEffect(() => {
+    return () => {
+      clearPendingSelectHistory();
+    };
+  }, []);
 
   useEffect(() => {
     if (!supportsComposerSkills && selectedSkill !== null) {
@@ -221,12 +236,40 @@ function App() {
     }
   }
 
-  async function selectHistory(sessionId: string): Promise<void> {
+  function selectHistory(sessionId: string): void {
     setMessage("");
     setSelectedSkill(null);
+    const shouldDeferSelection = isSidebarOpen;
     setIsSidebarOpen(false);
-    await mobileSessions.selectSession(sessionId);
+    clearPendingSelectHistory();
+    if (shouldDeferSelection) {
+      pendingSelectHistoryTimeoutRef.current = window.setTimeout(() => {
+        pendingSelectHistoryTimeoutRef.current = null;
+        startHistorySelection(sessionId);
+      }, SIDEBAR_CLOSE_DEFER_MS);
+      return;
+    }
+    startHistorySelection(sessionId);
   }
+
+  function startHistorySelection(sessionId: string): void {
+    startTransition(() => {
+      void selectSessionRef.current(sessionId);
+    });
+  }
+
+  function clearPendingSelectHistory(): void {
+    if (pendingSelectHistoryTimeoutRef.current === null) {
+      return;
+    }
+    window.clearTimeout(pendingSelectHistoryTimeoutRef.current);
+    pendingSelectHistoryTimeoutRef.current = null;
+  }
+
+  const setChatFeedRef = useCallback((node: HTMLElement | null) => {
+    scrollRef.current = node;
+    setChatFeedElement(node);
+  }, [scrollRef]);
 
   function openSidebar(): void {
     setIsSearchOpen(false);
@@ -307,7 +350,7 @@ function App() {
         onClose={() => setIsSidebarOpen(false)}
         onNewSession={startNewSession}
         onOpenSearch={openSearch}
-        onSelectHistory={(sessionId) => void selectHistory(sessionId)}
+        onSelectHistory={selectHistory}
         onConnect={connectBridge}
         onOpenSettings={openSettings}
       />
@@ -317,7 +360,7 @@ function App() {
         bridgeConnected={Boolean(config)}
         historyItems={mobileSessions.historyItems}
         onClose={() => setIsSearchOpen(false)}
-        onSelectHistory={(sessionId) => void selectHistory(sessionId)}
+        onSelectHistory={selectHistory}
         onSearchSessions={searchSessions}
       />
 
@@ -351,7 +394,7 @@ function App() {
         />
 
         <main
-          ref={scrollRef}
+          ref={setChatFeedRef}
           onScroll={handleScroll}
           className={`chat-feed ${hasLocalConversation ? "" : "is-empty"}`}
         >
@@ -364,6 +407,7 @@ function App() {
             messages={mobileSessions.activeMessages}
             onApproveExternalAgent={approveExternalAgent}
             registerUserMessageRow={registerUserMessageRow}
+            scrollParent={chatFeedElement}
           />
           <AssistantReply
             reply={mobileSessions.activeReply}

@@ -1,4 +1,5 @@
 import { forwardRef, memo, useEffect, useRef, useState, type ReactNode } from "react";
+import { Virtuoso } from "react-virtuoso";
 import type {
   AgentPayload,
   ChatSelectedSkill,
@@ -8,6 +9,7 @@ import type {
   MobileToolCard,
   StatusMessage,
 } from "../../mobileTypes";
+import { areMobileConversationMessagesEqual } from "../../lib/mobileConversationMessageEquality";
 import { buildMobileToolCardViewModel, type MobileToolTone } from "../../lib/mobileToolCardViewModel";
 import { EMPTY_STATE_SUGGESTIONS } from "./data";
 import { AssistantMarkdownContent } from "./AssistantMarkdownContent";
@@ -17,6 +19,9 @@ import type { UiIconName } from "./types";
 
 const THINKING_ELAPSED_UPDATE_MS = 1000;
 const THINKING_ELAPSED_NEXT_TICK_BUFFER_MS = 16;
+const VIRTUAL_LIST_OVERSCAN_PX = 320;
+const VIRTUAL_LIST_VIEWPORT_TOP_PX = 640;
+const VIRTUAL_LIST_VIEWPORT_BOTTOM_PX = 960;
 
 interface AssistantIntroProps {
   onSelectSuggestion: (value: string) => void;
@@ -140,6 +145,7 @@ export const ConversationMessageList = memo(function ConversationMessageList(pro
   messages: MobileConversationMessage[];
   onApproveExternalAgent?: (input: ExternalApprovalActionInput) => Promise<boolean>;
   registerUserMessageRow: (messageId: string) => (node: HTMLDivElement | null) => void;
+  scrollParent: HTMLElement | null;
 }) {
   if (props.messages.length === 0 && !props.loadingOlderHistory) {
     return null;
@@ -152,14 +158,25 @@ export const ConversationMessageList = memo(function ConversationMessageList(pro
           正在加载更早消息
         </div>
       ) : null}
-      {props.messages.map((message) => (
-        <ConversationMessageRow
-          key={message.id}
-          message={message}
-          onApproveExternalAgent={props.onApproveExternalAgent}
-          registerUserMessageRow={props.registerUserMessageRow}
+      {props.scrollParent ? (
+        <Virtuoso
+          customScrollParent={props.scrollParent}
+          data={props.messages}
+          computeItemKey={(_, message) => message.id}
+          increaseViewportBy={{
+            bottom: VIRTUAL_LIST_VIEWPORT_BOTTOM_PX,
+            top: VIRTUAL_LIST_VIEWPORT_TOP_PX,
+          }}
+          itemContent={(_, message) => (
+            <ConversationMessageRow
+              message={message}
+              onApproveExternalAgent={props.onApproveExternalAgent}
+              registerUserMessageRow={props.registerUserMessageRow}
+            />
+          )}
+          overscan={VIRTUAL_LIST_OVERSCAN_PX}
         />
-      ))}
+      ) : null}
     </>
   );
 });
@@ -184,7 +201,24 @@ const ConversationMessageRow = memo(function ConversationMessageRow(props: {
       onApproveExternalAgent={props.onApproveExternalAgent}
     />
   );
-});
+}, areConversationMessageRowPropsEqual);
+
+function areConversationMessageRowPropsEqual(
+  previous: {
+    message: MobileConversationMessage;
+    onApproveExternalAgent?: (input: ExternalApprovalActionInput) => Promise<boolean>;
+    registerUserMessageRow: (messageId: string) => (node: HTMLDivElement | null) => void;
+  },
+  next: {
+    message: MobileConversationMessage;
+    onApproveExternalAgent?: (input: ExternalApprovalActionInput) => Promise<boolean>;
+    registerUserMessageRow: (messageId: string) => (node: HTMLDivElement | null) => void;
+  },
+): boolean {
+  return previous.onApproveExternalAgent === next.onApproveExternalAgent
+    && previous.registerUserMessageRow === next.registerUserMessageRow
+    && areMobileConversationMessagesEqual(previous.message, next.message);
+}
 
 function AssistantReplyParts(props: {
   final: boolean;

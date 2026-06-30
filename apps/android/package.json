@@ -16,7 +16,8 @@
     "lucide-react": "^1.18.0",
     "markstream-react": "^0.0.53",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "react-virtuoso": "^4.18.10"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
