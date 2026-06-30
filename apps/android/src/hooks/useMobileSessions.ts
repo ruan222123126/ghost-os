@@ -532,9 +532,20 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     const stored = storedConversations.find((conversation) => conversation.id === trimmedSessionId);
     const existing = sessionViews[trimmedSessionId];
     const shouldLoadBridgeSnapshot = options.bridgeConnected;
-    const initialMessages = shouldLoadBridgeSnapshot ? [] : existing?.messages ?? stored?.messages ?? [];
-    const initialReply = shouldLoadBridgeSnapshot ? undefined : existing?.reply;
-    const initialRun = shouldLoadBridgeSnapshot
+    const shouldPreserveRunningView = Boolean(shouldLoadBridgeSnapshot && existing?.run.status === "running");
+    const initialMessages = shouldLoadBridgeSnapshot
+      ? shouldPreserveRunningView
+        ? existing?.messages ?? []
+        : []
+      : existing?.messages ?? stored?.messages ?? [];
+    const initialReply = shouldLoadBridgeSnapshot
+      ? shouldPreserveRunningView
+        ? existing?.reply
+        : undefined
+      : existing?.reply;
+    const initialRun = shouldLoadBridgeSnapshot && shouldPreserveRunningView
+      ? existing?.run ?? createRunningRunState()
+      : shouldLoadBridgeSnapshot
       ? createRunningRunState(undefined, undefined, SESSION_MESSAGES_LOADING_STATUS_TEXT)
       : existing?.run ?? createIdleRunState(stored ? SESSION_MESSAGES_LOADED_STATUS_TEXT : SESSION_MESSAGES_LOADING_STATUS_TEXT);
     activeSessionIdRef.current = trimmedSessionId;
@@ -563,7 +574,9 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       }
       return;
     }
-    applyRunStatus(trimmedSessionId, { tone: "loading", text: SESSION_MESSAGES_LOADING_STATUS_TEXT });
+    if (!shouldPreserveRunningView) {
+      applyRunStatus(trimmedSessionId, { tone: "loading", text: SESSION_MESSAGES_LOADING_STATUS_TEXT });
+    }
     try {
       const detail = await options.getSession(trimmedSessionId);
       if (!isActiveSession(trimmedSessionId)) {
@@ -688,7 +701,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       setHomeReply(reply);
       return;
     }
-    if (!isActiveSession(sessionId)) {
+    if (!isActiveSession(sessionId) && !sessionViewsRef.current[sessionId]) {
       return;
     }
 
@@ -716,7 +729,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       setHomeRun(run);
       return;
     }
-    if (!isActiveSession(sessionId)) {
+    if (!isActiveSession(sessionId) && !sessionViewsRef.current[sessionId]) {
       return;
     }
 
@@ -724,7 +737,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       trimSessionViewsForState(
         upsertSessionView(current, sessionId, {
           run,
-          unread: activeSessionIdRef.current !== sessionId && status.tone !== "loading",
+          unread: activeSessionIdRef.current === sessionId ? false : current[sessionId]?.unread ?? false,
           updatedAt: new Date().toISOString(),
         }),
       ),
@@ -780,15 +793,12 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     }
     setSessionViews((current) => {
       const existing = current[trimmedSessionId];
-      if (!existing || existing.run.status !== "running") {
+      if (!existing?.loadingOlderHistory) {
         return current;
       }
       return trimSessionViewsForState(
         upsertSessionView(current, trimmedSessionId, {
           loadingOlderHistory: false,
-          reply: undefined,
-          run: createIdleRunState(),
-          unread: false,
         }),
       );
     });

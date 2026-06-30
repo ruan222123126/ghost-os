@@ -2,7 +2,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AssistantReply, ChatBubble, ConversationMessageList } from "./Messages";
-import type { ReactNode } from "react";
 import type { AgentPayload, MobileConversationMessage, StatusMessage } from "../../mobileTypes";
 
 const successStatus: StatusMessage = { tone: "success", text: "回复已返回" };
@@ -17,22 +16,6 @@ vi.mock("./AssistantMarkdownContent", () => ({
       {markdownMock(props)}
       <div data-testid="assistant-markdown-content">{props.content}</div>
     </>
-  ),
-}));
-
-vi.mock("react-virtuoso", () => ({
-  Virtuoso: (props: {
-    computeItemKey: (index: number, item: unknown) => string;
-    data: unknown[];
-    itemContent: (index: number, item: unknown) => ReactNode;
-  }) => (
-    <div data-testid="virtuoso">
-      {props.data.map((item, index) => (
-        <div data-testid="virtuoso-item" key={props.computeItemKey(index, item)}>
-          {props.itemContent(index, item)}
-        </div>
-      ))}
-    </div>
   ),
 }));
 
@@ -221,18 +204,16 @@ describe("ConversationMessageList", () => {
   });
 
   it("renders the active reply after the optimistic user message", () => {
-    const scrollParent = document.createElement("main");
-    render(
+    const { container } = render(
       <ConversationMessageList
         messages={[conversationMessage("pending:user:1", "user", "先执行")]}
         registerUserMessageRow={() => () => undefined}
         reply={agentReply({ message: "正在处理" })}
-        scrollParent={scrollParent}
         status={{ tone: "loading", text: "正在回复" }}
       />,
     );
 
-    const rows = screen.getAllByTestId("virtuoso-item");
+    const rows = [...container.querySelectorAll(".conversation-list > .message-row")];
     expect(rows).toHaveLength(2);
     expect(rows[0]?.textContent).toBe("先执行");
     expect(rows[1]?.textContent).toContain("正在处理");

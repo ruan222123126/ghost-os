@@ -572,21 +572,27 @@ describe("useMobileSessions", () => {
     });
   });
 
-  it("loads one snapshot when selecting a background running session", async () => {
+  it("preserves a background running session stream while reloading its Bridge snapshot", async () => {
     saveStored([
       storedConversation("session-1", "One", [message("session-1", "user", "one")]),
       storedConversation("session-2", "Two", [message("session-2", "user", "two")]),
     ]);
-    let runStarted = false;
+    let session1Loads = 0;
+    let resolveSession1Reload: ((detail: SessionDetail) => void) | undefined;
     let finishRun: (() => void) | undefined;
     const getSession = vi.fn(async (sessionId: string) => {
       if (sessionId === "session-1") {
+        session1Loads += 1;
+        if (session1Loads > 1) {
+          return new Promise<SessionDetail>((resolve) => {
+            resolveSession1Reload = resolve;
+          });
+        }
         return sessionDetailWithMessages(sessionId, [
           { index: 0, role: "user", text: "one" },
-          ...(runStarted ? [{ index: 1, role: "user" as const, text: "run one" }] : []),
         ], {
           hasMoreBefore: false,
-          messageCount: runStarted ? 2 : 1,
+          messageCount: 1,
           nextBefore: null,
         });
       }
@@ -599,7 +605,6 @@ describe("useMobileSessions", () => {
       });
     });
     const sendAgentMessage = vi.fn((options: SendOptions) => {
-      runStarted = true;
       options.onStatus({ tone: "loading", text: "运行中" });
       return new Promise<SendResult>((resolve) => {
         finishRun = () => {
@@ -626,13 +631,20 @@ describe("useMobileSessions", () => {
       const streamOptions = sendAgentMessage.mock.calls[0]?.[0];
       streamOptions?.onReply(agentReply("session-1", "partial"));
     });
-    await act(async () => {
-      await result.current.selectSession("session-1");
+    act(() => {
+      void result.current.selectSession("session-1");
     });
 
-    expect(result.current.activeReply).toBeUndefined();
+    await waitFor(() => expect(result.current.activeSessionId).toBe("session-1"));
+    expect(result.current.activeReply?.message).toBe("partial");
+    expect(result.current.activeStatus).toEqual({ tone: "loading", text: "运行中" });
     expect(result.current.activeMessages.map((item) => item.text)).toEqual(["one", "run one"]);
     expect(getSession.mock.calls.filter(([sessionId]) => sessionId === "session-1")).toHaveLength(2);
+
+    await act(async () => {
+      resolveSession1Reload?.(runningDraftSessionDetail("session-1", "partial from bridge"));
+    });
+    await waitFor(() => expect(result.current.activeReply?.message).toBe("partial from bridge"));
 
     await act(async () => {
       finishRun?.();
@@ -1211,6 +1223,46 @@ function codexDraftSessionDetail(id: string): SessionDetail {
       item_order: [
         "assistant:stream-segment:assistant:1",
         "question:approval-1",
+      ],
+    },
+  };
+}
+
+function runningDraftSessionDetail(id: string, partial: string): SessionDetail {
+  return {
+    ...session(id, `Bridge ${id}`),
+    message_count: 2,
+    messages: [
+      {
+        index: 0,
+        role: "user",
+        text: "one",
+      },
+      {
+        index: 1,
+        role: "user",
+        text: "run one",
+      },
+    ],
+    page: {
+      has_more_before: false,
+      limit: 100,
+    },
+    turn_draft: {
+      trace_id: "trace-running",
+      turn: 2,
+      status: "streaming",
+      pending_questions: [],
+      assistant_segments: [
+        {
+          id: "stream-segment:assistant:1",
+          content: partial,
+        },
+      ],
+      thinking_segments: [],
+      tools: [],
+      item_order: [
+        "assistant:stream-segment:assistant:1",
       ],
     },
   };

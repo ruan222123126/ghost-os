@@ -129,7 +129,6 @@ function App() {
   const [isRuntimeMenuOpen, setIsRuntimeMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [pinnedHistoryIds, setPinnedHistoryIds] = useState<string[]>([]);
-  const [chatFeedElement, setChatFeedElement] = useState<HTMLElement | null>(null);
   const pendingSelectHistoryTimeoutRef = useRef<number | null>(null);
   const localRuntimeConfig = useMemo(() => buildLocalRuntimeConfig(providerList, settings), [providerList, settings]);
   const chatConfig = settings.remoteExecutionEnabled ? config : localRuntimeConfig;
@@ -293,7 +292,6 @@ function App() {
 
   const setChatFeedRef = useCallback((node: HTMLElement | null) => {
     scrollRef.current = node;
-    setChatFeedElement(node);
   }, [scrollRef]);
 
   function openSidebar(): void {
@@ -434,7 +432,6 @@ function App() {
             onApproveExternalAgent={approveExternalAgent}
             registerUserMessageRow={registerUserMessageRow}
             reply={mobileSessions.activeReply}
-            scrollParent={chatFeedElement}
             status={displayStatus}
           />
           <div aria-hidden="true" style={{ height: trailingSpacerPx }} />

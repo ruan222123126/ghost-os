@@ -1,5 +1,4 @@
 import { forwardRef, memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Virtuoso } from "react-virtuoso";
 import type {
   AgentPayload,
   ChatSelectedSkill,
@@ -19,9 +18,6 @@ import type { UiIconName } from "./types";
 
 const THINKING_ELAPSED_UPDATE_MS = 1000;
 const THINKING_ELAPSED_NEXT_TICK_BUFFER_MS = 16;
-const VIRTUAL_LIST_OVERSCAN_PX = 320;
-const VIRTUAL_LIST_VIEWPORT_TOP_PX = 640;
-const VIRTUAL_LIST_VIEWPORT_BOTTOM_PX = 960;
 
 interface AssistantIntroProps {
   onSelectSuggestion: (value: string) => void;
@@ -145,7 +141,6 @@ export const ConversationMessageList = memo(function ConversationMessageList(pro
   onApproveExternalAgent?: (input: ExternalApprovalActionInput) => Promise<boolean>;
   registerUserMessageRow: (messageId: string) => (node: HTMLDivElement | null) => void;
   reply: AgentPayload | undefined;
-  scrollParent: HTMLElement | null;
   status: StatusMessage;
 }) {
   const listItems = useMemo(
@@ -158,34 +153,16 @@ export const ConversationMessageList = memo(function ConversationMessageList(pro
   }
 
   return (
-    <>
-      {props.scrollParent ? (
-        <Virtuoso
-          customScrollParent={props.scrollParent}
-          data={listItems}
-          computeItemKey={(_, item) => conversationListItemKey(item)}
-          increaseViewportBy={{
-            bottom: VIRTUAL_LIST_VIEWPORT_BOTTOM_PX,
-            top: VIRTUAL_LIST_VIEWPORT_TOP_PX,
-          }}
-          itemContent={(_, item) =>
-            item.kind === "reply" ? (
-              <AssistantReply
-                reply={item.reply}
-                status={item.status}
-                onApproveExternalAgent={props.onApproveExternalAgent}
-              />
-            ) : (
-              <ConversationMessageRow
-                message={item.message}
-                onApproveExternalAgent={props.onApproveExternalAgent}
-                registerUserMessageRow={props.registerUserMessageRow}
-              />
-            )}
-          overscan={VIRTUAL_LIST_OVERSCAN_PX}
+    <div className="conversation-list">
+      {listItems.map((item) => (
+        <ConversationListItemRow
+          key={conversationListItemKey(item)}
+          item={item}
+          onApproveExternalAgent={props.onApproveExternalAgent}
+          registerUserMessageRow={props.registerUserMessageRow}
         />
-      ) : null}
-    </>
+      ))}
+    </div>
   );
 });
 
@@ -210,6 +187,30 @@ function conversationListItemKey(item: ConversationListItem): string {
     return item.message.id;
   }
   return `active-reply:${item.reply?.session_id ?? "status"}`;
+}
+
+function ConversationListItemRow(props: {
+  item: ConversationListItem;
+  onApproveExternalAgent?: (input: ExternalApprovalActionInput) => Promise<boolean>;
+  registerUserMessageRow: (messageId: string) => (node: HTMLDivElement | null) => void;
+}) {
+  if (props.item.kind === "reply") {
+    return (
+      <AssistantReply
+        reply={props.item.reply}
+        status={props.item.status}
+        onApproveExternalAgent={props.onApproveExternalAgent}
+      />
+    );
+  }
+
+  return (
+    <ConversationMessageRow
+      message={props.item.message}
+      onApproveExternalAgent={props.onApproveExternalAgent}
+      registerUserMessageRow={props.registerUserMessageRow}
+    />
+  );
 }
 
 const ConversationMessageRow = memo(function ConversationMessageRow(props: {
