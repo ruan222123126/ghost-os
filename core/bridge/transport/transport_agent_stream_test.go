@@ -352,9 +352,10 @@ func TestHandleAgentStreamInflightSessionReturnsEnvelope(t *testing.T) {
 	}
 }
 
-func TestHandleAgentStreamClientDisconnectCancelsExecution(t *testing.T) {
+func TestHandleAgentStreamClientDisconnectKeepsExecutionRunning(t *testing.T) {
 	started := make(chan struct{})
 	done := make(chan struct{})
+	release := make(chan struct{})
 	streamExecutor := func(
 		ctx context.Context,
 		_ string,
@@ -365,11 +366,23 @@ func TestHandleAgentStreamClientDisconnectCancelsExecution(t *testing.T) {
 		_ streaming.Sink,
 	) (string, string, error) {
 		close(started)
-		<-ctx.Done()
-		close(done)
-		return "", "", ctx.Err()
+		select {
+		case <-ctx.Done():
+			close(done)
+			return "", "", ctx.Err()
+		case <-release:
+			close(done)
+			return "ok", "session-background", nil
+		}
 	}
-	handler, _ := newTestHandlerWithStreamExecutor(t, nil, streamExecutor)
+	_, service, _ := newTestHandlerWithService(t, nil, streamExecutor)
+	runCtx, stopRunContext := context.WithCancel(context.Background())
+	defer stopRunContext()
+	options, err := newServerOptionsFromEnv(8080)
+	if err != nil {
+		t.Fatalf("new server options: %v", err)
+	}
+	handler := newHTTPHandlerWithContext(runCtx, service, options)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	request := httptest.NewRequest(http.MethodPost, "/api/agent/stream", strings.NewReader(`{"message":"hello"}`)).WithContext(ctx)
@@ -391,13 +404,20 @@ func TestHandleAgentStreamClientDisconnectCancelsExecution(t *testing.T) {
 	cancel()
 
 	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("context cancellation did not reach executor")
-	}
-	select {
 	case <-handlerDone:
 	case <-time.After(time.Second):
 		t.Fatal("handler did not return after cancellation")
+	}
+	select {
+	case <-done:
+		t.Fatal("stream executor stopped after client disconnect")
+	default:
+	}
+
+	close(release)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("stream executor did not finish after release")
 	}
 }

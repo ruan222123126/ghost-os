@@ -19,6 +19,7 @@ type sseEventSink struct {
 	flusher  http.Flusher
 	traceID  string
 	sequence int
+	detached bool
 	mu       sync.Mutex
 }
 
@@ -40,6 +41,39 @@ func (s *sseEventSink) Emit(ctx context.Context, event streaming.Event) (streami
 	default:
 	}
 
+	event, data, err := s.prepareEvent(event)
+	if err != nil {
+		return event, err
+	}
+	if s.detached {
+		return event, nil
+	}
+
+	if _, err := fmt.Fprintf(s.w, "id: %s\n", event.ID); err != nil {
+		s.detached = true
+		return event, nil
+	}
+	if _, err := fmt.Fprintf(s.w, "event: %s\n", event.Type); err != nil {
+		s.detached = true
+		return event, nil
+	}
+	if _, err := fmt.Fprintf(s.w, "data: %s\n\n", data); err != nil {
+		s.detached = true
+		return event, nil
+	}
+
+	s.flusher.Flush()
+	return event, nil
+}
+
+// Detach stops client writes while still canonicalizing events for downstream sinks.
+func (s *sseEventSink) Detach() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.detached = true
+}
+
+func (s *sseEventSink) prepareEvent(event streaming.Event) (streaming.Event, []byte, error) {
 	if strings.TrimSpace(event.TraceID) == "" {
 		event.TraceID = s.traceID
 	}
@@ -50,27 +84,15 @@ func (s *sseEventSink) Emit(ctx context.Context, event streaming.Event) (streami
 	s.sequence++
 	eventID, err := streaming.FormatEventID(event.TraceID, s.sequence)
 	if err != nil {
-		return event, err
+		return event, nil, err
 	}
 	event.ID = eventID
 
 	data, err := json.Marshal(event)
 	if err != nil {
-		return event, err
+		return event, nil, err
 	}
-
-	if _, err := fmt.Fprintf(s.w, "id: %s\n", event.ID); err != nil {
-		return event, err
-	}
-	if _, err := fmt.Fprintf(s.w, "event: %s\n", event.Type); err != nil {
-		return event, err
-	}
-	if _, err := fmt.Fprintf(s.w, "data: %s\n\n", data); err != nil {
-		return event, err
-	}
-
-	s.flusher.Flush()
-	return event, nil
+	return event, data, nil
 }
 
 type observedSSEStreamSink struct {

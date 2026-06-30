@@ -76,6 +76,26 @@ func TestSSEEventSinkHonorsContextCancellation(t *testing.T) {
 	}
 }
 
+func TestSSEEventSinkDetachKeepsCanonicalEventWithoutWriting(t *testing.T) {
+	recorder := &flushRecorder{ResponseRecorder: httptest.NewRecorder()}
+	sink := newSSEEventSink(recorder, recorder, "trace-detached")
+	sink.Detach()
+
+	event, err := sink.Emit(context.Background(), mustAppEvent(t, "", "session-1", 0, "", streaming.EventDone, map[string]any{"ok": true}))
+	if err != nil {
+		t.Fatalf("Emit returned error: %v", err)
+	}
+	if event.TraceID != "trace-detached" {
+		t.Fatalf("unexpected canonical trace_id: got %q want %q", event.TraceID, "trace-detached")
+	}
+	if event.ID != "trace-detached:000001" {
+		t.Fatalf("unexpected event id: got %q want %q", event.ID, "trace-detached:000001")
+	}
+	if recorder.Body.Len() != 0 {
+		t.Fatalf("expected empty body, got %q", recorder.Body.String())
+	}
+}
+
 func TestSSEEventSinkSerializesConcurrentEmitCalls(t *testing.T) {
 	recorder := &flushRecorder{ResponseRecorder: httptest.NewRecorder()}
 	sink := newSSEEventSink(recorder, recorder, "trace-123")

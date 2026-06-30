@@ -3,11 +3,17 @@
 package transport
 
 import (
+	"context"
 	"encoding/json"
 	bridgeorchestration "ghost-os/bridge/orchestration"
 	"net/http"
 	"strings"
 )
+
+type streamRunResult struct {
+	sessionID string
+	err       error
+}
 
 func (t *transport) handleBus(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodPost) {
@@ -91,9 +97,11 @@ func (t *transport) handleQuestionAnswerStream(w http.ResponseWriter, r *http.Re
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.Header().Set("X-Trace-ID", traceID)
 
-	sink := newObservedSSEStreamSink(newSSEEventSink(w, flusher, traceID))
-	_, sessionID, err := t.usecases.agent.AnswerStream(r.Context(), req, traceID, sink)
-	emitUnhandledStreamError(r.Context(), sink, traceID, firstNonEmpty(sessionID, req.SessionID), err)
+	sseSink := newSSEEventSink(w, flusher, traceID)
+	sink := newObservedSSEStreamSink(sseSink)
+	t.runDetachedStream(r.Context(), sseSink, sink, traceID, req.SessionID, func(ctx context.Context, sink bridgeorchestration.StreamSink) (string, string, error) {
+		return t.usecases.agent.AnswerStream(ctx, req, traceID, sink)
+	})
 }
 
 func (t *transport) handleAgentStream(w http.ResponseWriter, r *http.Request) {
@@ -121,7 +129,7 @@ func (t *transport) handleAgentStream(w http.ResponseWriter, r *http.Request) {
 		ProjectRoot:      req.ProjectRoot,
 		RuntimeOverrides: req.RuntimeOverrides,
 	}
-	prepared, result, err := t.usecases.agent.PrepareStream(r.Context(), params, traceID)
+	prepared, result, err := t.usecases.agent.PrepareStream(t.streamRunContext(), params, traceID)
 	if err != nil {
 		respondServiceContractActionResult(w, traceID, bridgeorchestration.BusActionAgentSend, result, err)
 		return
@@ -133,9 +141,9 @@ func (t *transport) handleAgentStream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.Header().Set("X-Trace-ID", traceID)
 
-	sink := newObservedSSEStreamSink(newSSEEventSink(w, flusher, traceID))
-	_, sessionID, err := prepared.Run(r.Context(), sink)
-	emitUnhandledStreamError(r.Context(), sink, traceID, firstNonEmpty(sessionID, req.SessionID), err)
+	sseSink := newSSEEventSink(w, flusher, traceID)
+	sink := newObservedSSEStreamSink(sseSink)
+	t.runDetachedStream(r.Context(), sseSink, sink, traceID, req.SessionID, prepared.Run)
 }
 
 func (t *transport) handleExternalAgentStream(w http.ResponseWriter, r *http.Request) {
@@ -167,13 +175,55 @@ func (t *transport) handleExternalAgentStream(w http.ResponseWriter, r *http.Req
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.Header().Set("X-Trace-ID", traceID)
 
-	sink := newObservedSSEStreamSink(newSSEEventSink(w, flusher, traceID))
-	_, sessionID, err := prepared.Run(r.Context(), sink)
-	emitUnhandledStreamError(r.Context(), sink, traceID, firstNonEmpty(sessionID, req.SessionID), err)
+	sseSink := newSSEEventSink(w, flusher, traceID)
+	sink := newObservedSSEStreamSink(sseSink)
+	t.runDetachedStream(r.Context(), sseSink, sink, traceID, req.SessionID, prepared.Run)
 }
 
 // dispatchAction 统一调用 service 并按 action 语义输出响应 envelope。
 func (t *transport) dispatchAction(w http.ResponseWriter, r *http.Request, action string, params json.RawMessage, traceID string) {
 	result, err := t.usecases.bus.Dispatch(r.Context(), action, params, traceID)
 	respondServiceContractActionResult(w, traceID, action, result, err)
+}
+
+func (t *transport) runDetachedStream(
+	requestCtx context.Context,
+	sseSink *sseEventSink,
+	sink *observedSSEStreamSink,
+	traceID string,
+	inputSessionID string,
+	run func(context.Context, bridgeorchestration.StreamSink) (string, string, error),
+) {
+	runCtx := t.streamRunContext()
+	resultCh := make(chan streamRunResult, 1)
+	go func() {
+		_, sessionID, err := run(runCtx, sink)
+		resultCh <- streamRunResult{sessionID: sessionID, err: err}
+	}()
+
+	select {
+	case result := <-resultCh:
+		emitUnhandledStreamError(runCtx, sink, traceID, firstNonEmpty(result.sessionID, inputSessionID), result.err)
+	case <-requestCtx.Done():
+		sseSink.Detach()
+		go t.finishDetachedStream(runCtx, resultCh, sink, traceID, inputSessionID)
+	}
+}
+
+func (t *transport) finishDetachedStream(
+	runCtx context.Context,
+	resultCh <-chan streamRunResult,
+	sink *observedSSEStreamSink,
+	traceID string,
+	inputSessionID string,
+) {
+	result := <-resultCh
+	emitUnhandledStreamError(runCtx, sink, traceID, firstNonEmpty(result.sessionID, inputSessionID), result.err)
+}
+
+func (t *transport) streamRunContext() context.Context {
+	if t != nil && t.runContext != nil {
+		return t.runContext
+	}
+	return context.Background()
 }
