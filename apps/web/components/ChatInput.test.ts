@@ -1,5 +1,6 @@
 import React from 'react';
 import TestRenderer, { act, type ReactTestInstance } from 'react-test-renderer';
+import { DEFAULT_CODEX_MODEL } from '@/lib/codexModels';
 import { WebLocaleProvider } from '@/lib/i18n/provider';
 import type { ChatSendInput, ProviderModelOption } from '@/lib/types';
 import { ChatInput } from './ChatInput';
@@ -33,9 +34,9 @@ describe('components/ChatInput', () => {
       codexMode: 'default',
       images: [],
       message: 'ship release',
+      model: DEFAULT_CODEX_MODEL,
     }));
     expect(harness.sentInputs[0].mode).toBeUndefined();
-    expect(harness.sentInputs[0].model).toBeUndefined();
   });
 
   it('keeps plan mode on the codex runtime and sends a codex provider model only', async () => {

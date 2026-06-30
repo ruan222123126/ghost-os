@@ -1,5 +1,8 @@
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
+import { getSession } from '@/lib/api/sessions/api';
+import { CODEX_MODEL_IDS, DEFAULT_CODEX_MODEL } from '@/lib/codexModels';
+import type { ProviderModelOption } from '@/lib/types';
 import { useHomePageController } from './useHomePageController';
 
 let mockRouter = buildRouter();
@@ -23,12 +26,17 @@ jest.mock('@/hooks/useBridgeConfig', () => ({
   useBridgeConfig: () => mockConfig,
 }));
 
+jest.mock('@/lib/api/sessions/api', () => ({
+  getSession: jest.fn(),
+}));
+
 describe('hooks/useHomePageController', () => {
   beforeEach(() => {
     mockRouter = buildRouter();
     mockSessions = buildSessionsController();
     mockChat = buildChatController();
     mockConfig = buildConfigController();
+    jest.mocked(getSession).mockReset();
     installWindowSearch('');
   });
 
@@ -58,6 +66,84 @@ describe('hooks/useHomePageController', () => {
     expect(mockSessions.setCurrentSessionId).toHaveBeenCalledWith('session-2');
     expect(mockChat.clearBackgroundCompletion).toHaveBeenCalledWith('session-2');
     expect(mockChat.loadSessionHistory).toHaveBeenCalledWith('session-2');
+  });
+
+  it('restores runtime selection from loaded session history detail', async () => {
+    mockChat.shouldLoadSessionHistory.mockReturnValue(true);
+    mockChat.loadSessionHistory.mockResolvedValue({
+      last_runtime_selection: {
+        runtime: 'codex',
+        provider: 'codex',
+        provider_type: 'codex',
+        model: 'gpt-5.4',
+        mode: 'plan',
+      },
+    } as Awaited<ReturnType<typeof getSession>>);
+    const latest = renderController();
+
+    await act(async () => {
+      latest.current.selectSession('session-2');
+      await Promise.resolve();
+    });
+
+    expect(latest.current.agentMode).toBe('plan');
+    expect(mockConfig.selectActiveModel).toHaveBeenCalledWith({
+      providerName: 'codex',
+      providerType: 'codex',
+      model: 'gpt-5.4',
+    });
+  });
+
+  it('loads lightweight session detail to restore runtime selection when history is cached', async () => {
+    mockChat.shouldLoadSessionHistory.mockReturnValue(false);
+    jest.mocked(getSession).mockResolvedValue({
+      last_runtime_selection: {
+        runtime: 'ghost',
+        provider: 'openai-main',
+        provider_type: 'openai',
+        model: 'gpt-5.4',
+        mode: 'plan',
+      },
+    } as Awaited<ReturnType<typeof getSession>>);
+    const latest = renderController();
+
+    await act(async () => {
+      latest.current.selectSession('session-2');
+      await Promise.resolve();
+    });
+
+    expect(getSession).toHaveBeenCalledWith('session-2', { limit: 1 });
+    expect(latest.current.agentMode).toBeNull();
+    expect(mockConfig.selectActiveModel).toHaveBeenCalledWith({
+      providerName: 'openai-main',
+      providerType: 'openai',
+      model: 'gpt-5.4',
+    });
+  });
+
+  it('uses codex model options while codex mode is active', () => {
+    mockConfig.activeModelOption = {
+      providerName: 'openai-main',
+      providerType: 'openai',
+      model: 'gpt-ghost',
+    };
+    mockConfig.modelOptions = [mockConfig.activeModelOption];
+    const latest = renderController();
+
+    act(() => {
+      latest.current.setAgentMode('normal');
+    });
+
+    expect(latest.current.activeModelOption).toEqual({
+      providerName: 'codex',
+      providerType: 'codex',
+      model: DEFAULT_CODEX_MODEL,
+    });
+    expect(latest.current.modelOptions).toEqual(CODEX_MODEL_IDS.map((model) => ({
+      providerName: 'codex',
+      providerType: 'codex',
+      model,
+    })));
   });
 
   it('drops chat state and clears current messages after deleting the active session', async () => {
@@ -166,13 +252,26 @@ function buildChatController() {
     sendChatMessage: jest.fn().mockResolvedValue(undefined),
     clearBackgroundCompletion: jest.fn(),
     shouldLoadSessionHistory: jest.fn().mockReturnValue(false),
-    loadSessionHistory: jest.fn().mockResolvedValue(undefined),
+    loadSessionHistory: jest.fn().mockResolvedValue(null),
     dropSessionState: jest.fn(),
     clearMessages: jest.fn(),
   };
 }
 
-function buildConfigController() {
+function buildConfigController(): {
+  activeModelOption: ProviderModelOption | null;
+  config: {
+    session_system_prompt_visible_enabled: boolean;
+  };
+  configError: string;
+  configLoading: boolean;
+  modelOptions: ProviderModelOption[];
+  modelOptionsLoading: boolean;
+  refreshConfig: jest.Mock;
+  saveConfig: jest.Mock;
+  savingConfig: boolean;
+  selectActiveModel: jest.Mock;
+} {
   return {
     config: {
       session_system_prompt_visible_enabled: true,

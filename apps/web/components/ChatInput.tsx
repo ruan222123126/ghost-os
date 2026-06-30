@@ -9,6 +9,7 @@ import { ComposerImageStrip } from '@/components/ComposerImageStrip';
 import { ModelSelector } from '@/components/ModelSelector';
 import { useComposerSkills } from '@/hooks/useComposerSkills';
 import { createChatImageDrafts } from '@/lib/chatImageDrafts';
+import { DEFAULT_CODEX_MODEL } from '@/lib/codexModels';
 import { toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { AgentModeSelection, ChatImageDraft, ChatSelectedSkill, ChatSendInput, ProviderModelOption } from '@/lib/types';
@@ -20,10 +21,12 @@ interface ChatInputProps {
   disabled: boolean;
   awaitingQuestion?: boolean;
   modelLoading?: boolean;
+  agentMode?: AgentModeSelection;
   activeModel?: ProviderModelOption | null;
   availableModels?: ProviderModelOption[];
   onSend: (input: ChatSendInput) => Promise<void>;
   onStop?: () => Promise<void>;
+  onChangeAgentMode?: (mode: AgentModeSelection) => void;
   onSelectModel?: (option: ProviderModelOption) => Promise<boolean>;
 }
 
@@ -34,15 +37,19 @@ export const ChatInput: FC<ChatInputProps> = ({
   disabled,
   awaitingQuestion = false,
   modelLoading = false,
+  agentMode: controlledAgentMode,
   activeModel = null,
   availableModels = [],
   onSend,
   onStop,
+  onChangeAgentMode,
   onSelectModel,
 }) => {
   const { copy } = useWebLocale();
   const [draft, setDraft] = useState('');
-  const [agentMode, setAgentMode] = useState<AgentModeSelection>(null);
+  const [uncontrolledAgentMode, setUncontrolledAgentMode] = useState<AgentModeSelection>(null);
+  const agentMode = controlledAgentMode ?? uncontrolledAgentMode;
+  const setAgentMode = onChangeAgentMode ?? setUncontrolledAgentMode;
   const [pendingImages, setPendingImages] = useState<ChatImageDraft[]>([]);
   const [imageError, setImageError] = useState('');
   const [selectedSkill, setSelectedSkill] = useState<ChatSelectedSkill | null>(null);
@@ -180,11 +187,15 @@ function resolveCodexModel(
   agentMode: AgentModeSelection,
   activeModel: ProviderModelOption | null,
 ): string | undefined {
-  if (agentMode === null || activeModel?.providerType !== 'codex') {
+  if (agentMode === null) {
     return undefined;
   }
 
-  return activeModel.model.trim() || undefined;
+  if (activeModel?.providerType === 'codex') {
+    return activeModel.model.trim() || DEFAULT_CODEX_MODEL;
+  }
+
+  return DEFAULT_CODEX_MODEL;
 }
 
 function canSubmitChatInput(input: ChatSendInput): boolean {
