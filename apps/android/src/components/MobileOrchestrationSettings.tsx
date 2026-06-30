@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Play, Power, RefreshCw, Trash2 } from "lucide-react";
 import type { OrchestrationTaskPayload } from "../mobileTypes";
+import { formatSchedule } from "../lib/taskSchedule";
 import "./MobileTaskSettings.css";
 
 interface MobileOrchestrationSettingsProps {
@@ -196,11 +197,4 @@ function orchestrationNodeCounts(orchestration: OrchestrationTaskPayload): { age
     }),
     { agents: 0, groups: 0 },
   );
-}
-
-function formatSchedule(task: OrchestrationTaskPayload): string {
-  if (task.schedule_type === "interval") {
-    return `每 ${task.interval_seconds ?? 0} 秒`;
-  }
-  return `Cron ${task.cron_expr ?? ""}`;
 }

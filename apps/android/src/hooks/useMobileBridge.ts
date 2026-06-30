@@ -22,6 +22,7 @@ import {
 import { parseSessionDetail, parseSessionMetadataList } from "../lib/sessionPayloadParser";
 import { MobileWebRTCBridge } from "../lib/mobileWebRTC";
 import { loadSettings, normalizeBridgeUrl, saveSettings } from "../lib/settingsStorage";
+import { stringsEqualIgnoreCase } from "../lib/textCompare";
 import {
   cancelAllStreamReplyCommitters,
   cancelStreamReplyCommit,
@@ -211,10 +212,6 @@ function resolveConnectedWebRTCClient(client: MobileWebRTCBridge | undefined): M
 
 function connectedStatusText(mode: StoredSettings["connectionMode"]): string {
   return mode === "webrtc" ? "WebRTC 已连接" : "HTTP fallback 已连接";
-}
-
-function stringsEqualIgnoreCase(left: string, right: string): boolean {
-  return left.trim().toLowerCase() === right.trim().toLowerCase();
 }
 
 function withLocalProviderSelection(

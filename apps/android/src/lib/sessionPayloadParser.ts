@@ -17,6 +17,16 @@ import type {
   SessionTurnDraftStatus,
   SessionTurnDraftTool,
 } from "../mobileTypes";
+import {
+  parseArray,
+  parseOptionalString,
+  requireArray,
+  requireBoolean,
+  requireInteger,
+  requireNullableInteger,
+  requireRecord,
+  requireString,
+} from "./payloadValidators";
 
 const SESSION_MESSAGE_ROLES = new Set<SessionMessageRole>(["system", "internal", "user", "assistant", "tool"]);
 const SESSION_TOOL_RESULT_STATUSES = new Set<SessionToolResultStatus>(["success", "error"]);
@@ -267,63 +277,6 @@ function parseAskHumanOption(payload: unknown, path: string): AskHumanOption {
     option.allow_custom = requireBoolean(object.allow_custom, `${path}.allow_custom`);
   }
   return option;
-}
-
-function requireRecord(value: unknown, path: string): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${path} must be an object`);
-  }
-  return value as Record<string, unknown>;
-}
-
-function requireArray(value: unknown, path: string): unknown[] {
-  if (!Array.isArray(value)) {
-    throw new Error(`${path} must be an array`);
-  }
-  return value;
-}
-
-function parseArray<T>(
-  value: unknown,
-  path: string,
-  parser: (item: unknown, path: string) => T,
-): T[] {
-  return requireArray(value, path).map((item, index) => parser(item, `${path}[${index}]`));
-}
-
-function requireString(value: unknown, path: string): string {
-  if (typeof value !== "string") {
-    throw new Error(`${path} must be a string`);
-  }
-  return value;
-}
-
-function parseOptionalString(value: unknown, path: string): string | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  return requireString(value, path);
-}
-
-function requireInteger(value: unknown, path: string): number {
-  if (typeof value !== "number" || !Number.isInteger(value)) {
-    throw new Error(`${path} must be an integer`);
-  }
-  return value;
-}
-
-function requireNullableInteger(value: unknown, path: string): number | null {
-  if (value === null) {
-    return null;
-  }
-  return requireInteger(value, path);
-}
-
-function requireBoolean(value: unknown, path: string): boolean {
-  if (typeof value !== "boolean") {
-    throw new Error(`${path} must be a boolean`);
-  }
-  return value;
 }
 
 function requireSessionMessageRole(value: unknown, path: string): SessionMessageRole {

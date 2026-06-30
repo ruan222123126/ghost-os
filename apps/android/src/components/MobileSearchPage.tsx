@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import type { SidebarHistoryItem } from "./MobileChatHome";
 import type { SessionMetadata } from "../mobileTypes";
 import { errorMessage } from "../lib/bridgeBus";
+import { compareHistoryItems } from "./mobileChat/historyItems";
 import { UiIcon } from "./mobileChat/icons";
 import "./MobileSearchPage.css";
 
@@ -180,17 +181,6 @@ function sessionMetadataToHistoryItem(
 function fallbackSessionTitle(sessionId: string): string {
   const shortId = sessionId.trim().slice(0, 8);
   return shortId ? `会话 ${shortId}` : "新会话";
-}
-
-function compareHistoryItems(a: SidebarHistoryItem, b: SidebarHistoryItem): number {
-  if (a.pinned !== b.pinned) {
-    return a.pinned ? -1 : 1;
-  }
-  const updatedOrder = b.updatedAt.localeCompare(a.updatedAt);
-  if (updatedOrder !== 0) {
-    return updatedOrder;
-  }
-  return a.title.localeCompare(b.title, "zh-Hans");
 }
 
 function formatHistoryDate(value: string): string {

@@ -1,5 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import {
+  parseOptionalBoolean,
+  parseOptionalNumber,
+  parseOptionalString,
+  requireNumber as expectNumber,
+  requireRecord as expectRecord,
+  requireString as expectString,
+  requireStringEnum as expectStringEnum,
+} from "./payloadValidators";
 
 const BRIDGE_AGENT_STREAM_CHUNK_EVENT = "bridge-agent-stream-chunk";
 const SSE_BLOCK_SEPARATOR = "\n\n";
@@ -396,59 +405,6 @@ async function flushPendingEventCallbacks(): Promise<void> {
   await new Promise<void>((resolve) => {
     window.setTimeout(resolve, 0);
   });
-}
-
-function expectRecord(value: unknown, label: string): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${label} must be an object`);
-  }
-  return value as Record<string, unknown>;
-}
-
-function expectString(value: unknown, label: string): string {
-  if (typeof value !== "string") {
-    throw new Error(`${label} must be a string`);
-  }
-  return value;
-}
-
-function expectNumber(value: unknown, label: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new Error(`${label} must be a number`);
-  }
-  return value;
-}
-
-function expectStringEnum<T extends string>(value: unknown, options: Record<T, true>, label: string): T {
-  const text = expectString(value, label);
-  if (!Object.prototype.hasOwnProperty.call(options, text)) {
-    throw new Error(`${label} has unsupported value: ${text}`);
-  }
-  return text as T;
-}
-
-function parseOptionalString(value: unknown, label: string): string | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  return expectString(value, label);
-}
-
-function parseOptionalNumber(value: unknown, label: string): number | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  return expectNumber(value, label);
-}
-
-function parseOptionalBoolean(value: unknown, label: string): boolean | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (typeof value !== "boolean") {
-    throw new Error(`${label} must be a boolean`);
-  }
-  return value;
 }
 
 function toError(error: unknown): Error {

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { ConfigPayload, HostProfile, StoredSettings } from "../../mobileTypes";
+import { compareHistoryItems } from "./historyItems";
 import { UiIcon } from "./icons";
 import type { SidebarHistoryItem, UiIconName } from "./types";
 
@@ -125,17 +126,6 @@ function historyStatusLabel(status: NonNullable<SidebarHistoryItem["status"]>): 
     default:
       return "";
   }
-}
-
-function compareHistoryItems(a: SidebarHistoryItem, b: SidebarHistoryItem): number {
-  if (a.pinned !== b.pinned) {
-    return a.pinned ? -1 : 1;
-  }
-  const updatedOrder = b.updatedAt.localeCompare(a.updatedAt);
-  if (updatedOrder !== 0) {
-    return updatedOrder;
-  }
-  return a.title.localeCompare(b.title, "zh-Hans");
 }
 
 function SidebarSection(props: { title: string; children: ReactNode }) {
