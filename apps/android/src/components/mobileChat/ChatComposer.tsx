@@ -40,6 +40,7 @@ type ComposerMenuView = "attachment" | "features" | "skills" | null;
 export function ChatComposer(props: ChatComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lineMeasureRef = useRef<HTMLTextAreaElement>(null);
+  const heightMeasureRef = useRef<HTMLTextAreaElement>(null);
   const composerRef = useRef<HTMLFormElement>(null);
   const [focused, setFocused] = useState(false);
   const [menuView, setMenuView] = useState<ComposerMenuView>(null);
@@ -69,7 +70,7 @@ export function ChatComposer(props: ChatComposerProps) {
     "--composer-keyboard-inset": `${keyboardInset}px`,
   };
 
-  useAutosizeTextarea(textareaRef, props.value, isMultiLine);
+  useAutosizeTextarea(textareaRef, heightMeasureRef, props.value, isMultiLine);
   useCloseComposerMenu(composerRef, menuView !== null, () => setMenuView(null));
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -263,13 +264,24 @@ export function ChatComposer(props: ChatComposerProps) {
             onChange={(event) => props.onChange(event.currentTarget.value)}
             onBlur={() => setFocused(false)}
             onFocus={() => setFocused(true)}
-            onInput={() => syncTextareaHeight(textareaRef.current, isMultiLine)}
+            onInput={(event) =>
+              syncTextareaHeight(textareaRef.current, heightMeasureRef.current, isMultiLine, event.currentTarget.value)
+            }
             onKeyDown={handleKeyDown}
           />
           <textarea
             ref={lineMeasureRef}
             aria-hidden="true"
             className="composer-input composer-single-line-measure"
+            readOnly
+            rows={1}
+            tabIndex={-1}
+            value={props.value}
+          />
+          <textarea
+            ref={heightMeasureRef}
+            aria-hidden="true"
+            className="composer-input composer-height-measure"
             readOnly
             rows={1}
             tabIndex={-1}
@@ -402,26 +414,40 @@ function useSingleLineOverflow(textareaRef: RefObject<HTMLTextAreaElement | null
 
 function useAutosizeTextarea(
   textareaRef: RefObject<HTMLTextAreaElement | null>,
+  measureRef: RefObject<HTMLTextAreaElement | null>,
   value: string,
   isMultiLine: boolean,
 ) {
   useLayoutEffect(() => {
-    syncTextareaHeight(textareaRef.current, isMultiLine);
-  }, [isMultiLine, textareaRef, value]);
+    syncTextareaHeight(textareaRef.current, measureRef.current, isMultiLine, value);
+  }, [isMultiLine, measureRef, textareaRef, value]);
 }
 
-function syncTextareaHeight(textarea: HTMLTextAreaElement | null, isMultiLine: boolean) {
+function syncTextareaHeight(
+  textarea: HTMLTextAreaElement | null,
+  measureTextarea: HTMLTextAreaElement | null,
+  isMultiLine: boolean,
+  value?: string,
+) {
   if (!textarea) {
     return;
   }
 
-  textarea.style.height = "auto";
   if (!isMultiLine) {
     textarea.style.height = `${COMPOSER_TEXTAREA_COLLAPSED_HEIGHT_PX}px`;
     return;
   }
 
-  const nextHeight = Math.min(textarea.scrollHeight, COMPOSER_TEXTAREA_MAX_HEIGHT_PX);
+  if (!measureTextarea) {
+    return;
+  }
+
+  if (value !== undefined && measureTextarea.value !== value) {
+    measureTextarea.value = value;
+  }
+
+  textarea.style.height = "auto";
+  const nextHeight = Math.min(measureTextarea.scrollHeight, COMPOSER_TEXTAREA_MAX_HEIGHT_PX);
   textarea.style.height = `${Math.max(COMPOSER_TEXTAREA_COLLAPSED_HEIGHT_PX, nextHeight)}px`;
 }
 

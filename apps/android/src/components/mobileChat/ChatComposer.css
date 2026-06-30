@@ -106,9 +106,7 @@
   line-height: 24px;
   overflow-y: auto;
   resize: none;
-  transition:
-    height 220ms cubic-bezier(0.25, 0.1, 0.25, 1),
-    padding 220ms cubic-bezier(0.25, 0.1, 0.25, 1);
+  transition: height 220ms cubic-bezier(0.25, 0.1, 0.25, 1);
   scrollbar-width: none;
 }
 
@@ -116,13 +114,15 @@
   display: none;
 }
 
-.composer-single-line-measure {
+.composer-single-line-measure,
+.composer-height-measure {
   position: absolute;
   inset: 0;
   z-index: -1;
   height: 52px;
   visibility: hidden;
   pointer-events: none;
+  transition: none;
 }
 
 .composer-shell.is-multiline .composer-input {

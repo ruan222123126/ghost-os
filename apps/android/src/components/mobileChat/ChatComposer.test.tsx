@@ -5,7 +5,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentModeSelection, ChatSelectedSkill, SkillPayload } from "../../mobileTypes";
 import { ChatComposer } from "./ChatComposer";
 
-let measuredScrollHeight = 52;
+let measuredSingleLineScrollHeight = 52;
+let measuredMultilineScrollHeight = 52;
+let measuredVisibleScrollHeight = 52;
 const originalInnerHeightDescriptor = Object.getOwnPropertyDescriptor(window, "innerHeight");
 const originalVisualViewportDescriptor = Object.getOwnPropertyDescriptor(window, "visualViewport");
 
@@ -18,13 +20,15 @@ describe("ChatComposer", () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
-    measuredScrollHeight = 52;
+    measuredSingleLineScrollHeight = 52;
+    measuredMultilineScrollHeight = 52;
+    measuredVisibleScrollHeight = 52;
     restoreWindowViewportProperties();
   });
 
   it("switches to multiline when single-line layout overflows", () => {
     mockTextareaScrollHeight();
-    measuredScrollHeight = 76;
+    measuredSingleLineScrollHeight = 76;
 
     renderComposerHarness({ initialValue: "这是十一位中文输入" });
 
@@ -33,11 +37,22 @@ describe("ChatComposer", () => {
 
   it("keeps long text single-line when measured layout still fits", () => {
     mockTextareaScrollHeight();
-    measuredScrollHeight = 52;
+    measuredSingleLineScrollHeight = 52;
 
     renderComposerHarness({ initialValue: "abcdefghijklmnopqrstuvwxyzabcdefghi" });
 
     expect(composerShell().classList.contains("is-multiline")).toBe(false);
+  });
+
+  it("sizes multiline input from the stable measure instead of the visible textarea", () => {
+    mockTextareaScrollHeight();
+    measuredSingleLineScrollHeight = 76;
+    measuredMultilineScrollHeight = 76;
+    measuredVisibleScrollHeight = 100;
+
+    renderComposerHarness({ initialValue: "这是刚刚换行的输入内容" });
+
+    expect(screen.getByRole<HTMLTextAreaElement>("textbox").style.height).toBe("76px");
   });
 
   it("shows a stop button while loading without input text", () => {
@@ -195,7 +210,13 @@ function mockTextareaScrollHeight(): void {
   vi.spyOn(HTMLTextAreaElement.prototype, "scrollHeight", "get").mockImplementation(function scrollHeight(
     this: HTMLTextAreaElement,
   ) {
-    return this.classList.contains("composer-single-line-measure") ? measuredScrollHeight : 52;
+    if (this.classList.contains("composer-single-line-measure")) {
+      return measuredSingleLineScrollHeight;
+    }
+    if (this.classList.contains("composer-height-measure")) {
+      return measuredMultilineScrollHeight;
+    }
+    return measuredVisibleScrollHeight;
   });
 }
 
