@@ -145,6 +145,39 @@ describe("useChatFeedScroll", () => {
     expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 120, behavior: "smooth" });
   });
 
+  it("retries post-send focus when the virtualized user row registers after the request", () => {
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 300 });
+    const userMessage = message("pending:user:1710000000000", "user");
+    const request = postSendRequest(userMessage.id);
+    const { rerender } = render(<ScrollHarness messages={[]} metrics={metrics} />);
+
+    rerender(
+      <ScrollHarness
+        messages={[userMessage]}
+        metrics={metrics}
+        mountedRowIds={[]}
+        postSendFocusRequest={request}
+        rowTops={{ [userMessage.id]: 120 }}
+      />,
+    );
+    flushRaf();
+    expect(feedElement().scrollTo).not.toHaveBeenCalledWith({ top: 120, behavior: "smooth" });
+
+    rerender(
+      <ScrollHarness
+        messages={[userMessage]}
+        metrics={metrics}
+        mountedRowIds={[userMessage.id]}
+        postSendFocusRequest={request}
+        rowTops={{ [userMessage.id]: 120 }}
+      />,
+    );
+    flushRaf();
+
+    expect(latestSnapshot().trailingSpacerPx).toBe(320);
+    expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 120, behavior: "smooth" });
+  });
+
   it("does not focus the same post-send token more than once", () => {
     const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 300 });
     const userMessage = message("pending:user:1710000000000", "user");
@@ -350,6 +383,7 @@ function ScrollHarness(props: {
   metrics: FeedMetrics;
   onLoadOlderHistory?: () => Promise<void>;
   postSendFocusRequest?: PostSendFocusRequest | null;
+  mountedRowIds?: string[];
   reply?: AgentPayload;
   rowTops?: Record<string, number>;
   statusTone?: StatusMessage["tone"];
@@ -381,7 +415,7 @@ function ScrollHarness(props: {
       onScroll={scroll.handleScroll}
     >
       {props.messages.map((item) =>
-        item.role === "user" ? (
+        item.role === "user" && shouldMountRow(item.id, props.mountedRowIds) ? (
           <div
             key={item.id}
             ref={(node) => {
@@ -399,6 +433,10 @@ function ScrollHarness(props: {
       <div data-testid="trailing-spacer" aria-hidden="true" style={{ height: scroll.trailingSpacerPx }} />
     </main>
   );
+}
+
+function shouldMountRow(messageId: string, mountedRowIds: string[] | undefined): boolean {
+  return !mountedRowIds || mountedRowIds.includes(messageId);
 }
 
 function feedMetrics(overrides: Partial<FeedMetrics> = {}): FeedMetrics {

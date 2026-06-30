@@ -32,6 +32,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   const scrollRef = useRef<HTMLElement>(null);
   const userMessageRowsRef = useRef(new Map<string, HTMLDivElement>());
   const handledPostSendTokenRef = useRef<number | null>(null);
+  const pendingPostSendRequestRef = useRef<PostSendFocusRequest | null>(null);
   const postSendLockRef = useRef<PostSendLock | null>(null);
   const postSendLockJustStartedRef = useRef(false);
   const autoFollowRef = useRef(true);
@@ -41,6 +42,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   const animationFrameRef = useRef<number | null>(null);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const [trailingSpacerPx, setTrailingSpacerPxState] = useState(0);
+  const [registeredUserRowVersion, setRegisteredUserRowVersion] = useState(0);
   const reply = options.reply;
   const hasReply = Boolean(reply);
 
@@ -54,6 +56,9 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     return (node: HTMLDivElement | null) => {
       if (node) {
         userMessageRowsRef.current.set(messageId, node);
+        if (pendingPostSendRequestRef.current?.messageId === messageId) {
+          setRegisteredUserRowVersion((version) => version + 1);
+        }
         return;
       }
       userMessageRowsRef.current.delete(messageId);
@@ -66,15 +71,20 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     }
     const request = options.postSendFocusRequest;
     if (!request || handledPostSendTokenRef.current === request.token) {
+      pendingPostSendRequestRef.current = null;
       return;
     }
     if (!hasUserMessage(options.messages, request.messageId)) {
+      pendingPostSendRequestRef.current = null;
       return;
     }
     if (focusUserMessage(request.messageId, "smooth")) {
       handledPostSendTokenRef.current = request.token;
+      pendingPostSendRequestRef.current = null;
+      return;
     }
-  }, [options.messages, options.postSendFocusRequest]);
+    pendingPostSendRequestRef.current = request;
+  }, [options.messages, options.postSendFocusRequest, registeredUserRowVersion]);
 
   useLayoutEffect(() => {
     if (restoreOlderLoadAnchor()) {
