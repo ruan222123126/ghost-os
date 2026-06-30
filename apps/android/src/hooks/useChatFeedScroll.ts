@@ -3,6 +3,7 @@ import type { AgentPayload, MobileConversationMessage, StatusMessage } from "../
 
 const SCROLL_DOWN_THRESHOLD_PX = 50;
 const LOAD_OLDER_THRESHOLD_PX = 32;
+const CHAT_FEED_ITEM_SELECTOR = "[data-chat-feed-item]";
 
 interface UseChatFeedScrollOptions {
   hasOlderHistory?: boolean;
@@ -20,6 +21,8 @@ interface PostSendScrollRequest {
 }
 
 interface OlderLoadAnchor {
+  element: HTMLElement | null;
+  elementTop: number | null;
   scrollHeight: number;
   scrollTop: number;
 }
@@ -155,6 +158,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
 
     olderLoadPendingRef.current = true;
     olderLoadAnchorRef.current = {
+      ...captureVisibleAnchor(element),
       scrollHeight: element.scrollHeight,
       scrollTop: element.scrollTop,
     };
@@ -168,7 +172,21 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   function restoreOlderLoadAnchor(): boolean {
     const anchor = olderLoadAnchorRef.current;
     const element = scrollRef.current;
-    if (!anchor || !element || element.scrollHeight <= anchor.scrollHeight) {
+    if (!anchor || !element) {
+      return false;
+    }
+
+    if (anchor.element && anchor.element.isConnected && anchor.elementTop !== null) {
+      const topDelta = anchor.element.getBoundingClientRect().top - anchor.elementTop;
+      olderLoadAnchorRef.current = null;
+      autoFollowRef.current = false;
+      if (Math.abs(topDelta) > 0.5) {
+        scrollToAnchor(element.scrollTop + topDelta, "auto");
+      }
+      setShowScrollDown(shouldShowScrollDown(element));
+      return true;
+    }
+    if (element.scrollHeight <= anchor.scrollHeight) {
       return false;
     }
 
@@ -186,6 +204,24 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     scrollRef,
     scrollToBottom,
     showScrollDown,
+  };
+}
+
+function captureVisibleAnchor(element: HTMLElement): Pick<OlderLoadAnchor, "element" | "elementTop"> {
+  const feedTop = element.getBoundingClientRect().top;
+  const items = element.querySelectorAll<HTMLElement>(CHAT_FEED_ITEM_SELECTOR);
+  for (const item of items) {
+    const rect = item.getBoundingClientRect();
+    if (rect.bottom > feedTop) {
+      return {
+        element: item,
+        elementTop: rect.top,
+      };
+    }
+  }
+  return {
+    element: null,
+    elementTop: null,
   };
 }
 

@@ -390,7 +390,7 @@ export const ChatBubble = forwardRef<HTMLDivElement, ChatBubbleProps>(function C
     : props.children !== null && props.children !== undefined;
 
   return (
-    <div ref={ref} className="message-row user-row">
+    <div ref={ref} className="message-row user-row" data-chat-feed-item="">
       <div className="user-bubble">
         {props.selectedSkill ? <div className="user-bubble-selected-skill">{props.selectedSkill.name}</div> : null}
         {hasText ? props.children : null}
@@ -401,7 +401,7 @@ export const ChatBubble = forwardRef<HTMLDivElement, ChatBubbleProps>(function C
 
 function AssistantPanel(props: { children: ReactNode; ariaLive?: "polite" }) {
   return (
-    <div className="message-row assistant-row">
+    <div className="message-row assistant-row" data-chat-feed-item="">
       <section className="assistant-panel" aria-live={props.ariaLive}>
         {props.children}
       </section>
