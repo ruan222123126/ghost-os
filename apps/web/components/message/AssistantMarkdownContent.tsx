@@ -1,7 +1,7 @@
-import nextDynamic from 'next/dynamic';
 import type { FC } from 'react';
 import { memo, useMemo } from 'react';
 import { isMarkdownFenceLine, shouldRenderAssistantMarkdown } from './assistantMarkdown';
+import { AssistantMarkdownRenderer } from './AssistantMarkdownRenderer';
 
 interface AssistantMarkdownContentProps {
   content: string;
@@ -14,11 +14,6 @@ interface StreamingMarkdownBlock {
   content: string;
   key: string;
 }
-
-const AssistantMarkdownRenderer = nextDynamic(
-  () => import('./AssistantMarkdownRenderer').then((mod) => mod.AssistantMarkdownRenderer),
-  { ssr: false },
-);
 
 const AssistantMarkdownBlock = memo((props: {
   content: string;

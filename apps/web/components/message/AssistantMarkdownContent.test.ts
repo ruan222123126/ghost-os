@@ -1,15 +1,12 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-jest.mock('next/dynamic', () => ({
-  __esModule: true,
-  default: () => {
-    return ({ content, final }: { content: string; final?: boolean }) => React.createElement(
-      'div',
-      { className: 'mock-dynamic-markdown', 'data-final': String(final) },
-      content,
-    );
-  },
+jest.mock('./AssistantMarkdownRenderer', () => ({
+  AssistantMarkdownRenderer: ({ content, final }: { content: string; final?: boolean }) => React.createElement(
+    'div',
+    { className: 'mock-markdown-renderer', 'data-final': String(final) },
+    content,
+  ),
 }));
 
 import { AssistantMarkdownContent } from './AssistantMarkdownContent';
@@ -37,7 +34,7 @@ describe('components/message/AssistantMarkdownContent', () => {
     );
 
     expect(html).toContain('assistant-markdown');
-    expect(html).toContain('mock-dynamic-markdown');
+    expect(html).toContain('mock-markdown-renderer');
     expect(html).toContain('data-final="true"');
   });
 
@@ -50,7 +47,7 @@ describe('components/message/AssistantMarkdownContent', () => {
       }),
     );
 
-    expect(html).toContain('mock-dynamic-markdown');
+    expect(html).toContain('mock-markdown-renderer');
     expect(html).toContain('data-final="true"');
     expect(html).toContain('data-final="false"');
     expect(html).toContain('# Heading');
@@ -80,7 +77,7 @@ describe('components/message/AssistantMarkdownContent', () => {
     );
 
     expect(html).not.toContain('assistant-markdown');
-    expect(html).not.toContain('mock-dynamic-markdown');
+    expect(html).not.toContain('mock-markdown-renderer');
     expect(html).toContain('&lt;strong&gt;Safe&lt;/strong&gt;');
   });
 });
