@@ -131,8 +131,7 @@ interface SyncComputerSessionsResult {
   totalCount: number;
 }
 
-interface PostSendFocusRequest {
-  messageId: string;
+interface PostSendScrollRequest {
   token: number;
 }
 
@@ -150,11 +149,11 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
   const [sessionViews, setSessionViews] = useState<Record<string, MobileSessionView>>({});
   const [storedConversations, setStoredConversations] = useState<StoredMobileConversation[]>(() => initialStoredConversations());
   const [storageLoaded, setStorageLoaded] = useState(() => !hasTauriRuntime());
-  const [postSendFocusRequest, setPostSendFocusRequest] = useState<PostSendFocusRequest | null>(null);
+  const [postSendScrollRequest, setPostSendScrollRequest] = useState<PostSendScrollRequest | null>(null);
   const [computerSessionPersistStatus, setComputerSessionPersistStatus] =
     useState<StatusMessage>(PERSIST_DISABLED_STATUS);
   const activeSessionIdRef = useRef<string | undefined>(undefined);
-  const postSendFocusTokenRef = useRef(0);
+  const postSendScrollTokenRef = useRef(0);
   const stoppingRunKeysRef = useRef<Set<string>>(new Set());
   const sessionViewsRef = useRef<Record<string, MobileSessionView>>(sessionViews);
   const storedConversationsRef = useRef<StoredMobileConversation[]>(storedConversations);
@@ -399,10 +398,9 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     const displayTitle = trimmed || resolvedSelectedSkill?.name || sessionFallbackTitle(initialSessionId);
     const userMessage = createUserConversationMessage(trimmed, initialSessionId, resolvedSelectedSkill);
     const optimisticMessages = [...activeMessages, userMessage];
-    postSendFocusTokenRef.current += 1;
-    setPostSendFocusRequest({
-      messageId: userMessage.id,
-      token: postSendFocusTokenRef.current,
+    postSendScrollTokenRef.current += 1;
+    setPostSendScrollRequest({
+      token: postSendScrollTokenRef.current,
     });
 
     if (initialSessionId) {
@@ -528,7 +526,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     if (previousSessionId && previousSessionId !== trimmedSessionId) {
       deactivateSessionView(previousSessionId);
     }
-    setPostSendFocusRequest(null);
+    setPostSendScrollRequest(null);
     const stored = storedConversations.find((conversation) => conversation.id === trimmedSessionId);
     const existing = sessionViews[trimmedSessionId];
     const shouldLoadBridgeSnapshot = options.bridgeConnected;
@@ -680,7 +678,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     setHomeMessages([]);
     setHomeReply(undefined);
     setHomeRun(createIdleRunState("新会话"));
-    setPostSendFocusRequest(null);
+    setPostSendScrollRequest(null);
   }
 
   function clearCurrentConversation(): void {
@@ -690,7 +688,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     setHomeMessages([]);
     setHomeReply(undefined);
     setHomeRun(createIdleRunState("本地消息已清空"));
-    setPostSendFocusRequest(null);
+    setPostSendScrollRequest(null);
   }
 
   function applyReply(sessionId: string, reply: AgentPayload): void {
@@ -1218,7 +1216,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     loadOlderHistory,
     loadingOlderHistory,
     loadingSessionMessages,
-    postSendFocusRequest,
+    postSendScrollRequest,
     selectSession,
     sendMessage,
     startNewSession,

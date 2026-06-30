@@ -139,7 +139,6 @@ export function AssistantReply(props: AssistantReplyProps) {
 export const ConversationMessageList = memo(function ConversationMessageList(props: {
   messages: MobileConversationMessage[];
   onApproveExternalAgent?: (input: ExternalApprovalActionInput) => Promise<boolean>;
-  registerUserMessageRow: (messageId: string) => (node: HTMLDivElement | null) => void;
   reply: AgentPayload | undefined;
   status: StatusMessage;
 }) {
@@ -159,7 +158,6 @@ export const ConversationMessageList = memo(function ConversationMessageList(pro
           key={conversationListItemKey(item)}
           item={item}
           onApproveExternalAgent={props.onApproveExternalAgent}
-          registerUserMessageRow={props.registerUserMessageRow}
         />
       ))}
     </div>
@@ -192,7 +190,6 @@ function conversationListItemKey(item: ConversationListItem): string {
 function ConversationListItemRow(props: {
   item: ConversationListItem;
   onApproveExternalAgent?: (input: ExternalApprovalActionInput) => Promise<boolean>;
-  registerUserMessageRow: (messageId: string) => (node: HTMLDivElement | null) => void;
 }) {
   if (props.item.kind === "reply") {
     return (
@@ -208,7 +205,6 @@ function ConversationListItemRow(props: {
     <ConversationMessageRow
       message={props.item.message}
       onApproveExternalAgent={props.onApproveExternalAgent}
-      registerUserMessageRow={props.registerUserMessageRow}
     />
   );
 }
@@ -216,11 +212,10 @@ function ConversationListItemRow(props: {
 const ConversationMessageRow = memo(function ConversationMessageRow(props: {
   message: MobileConversationMessage;
   onApproveExternalAgent?: (input: ExternalApprovalActionInput) => Promise<boolean>;
-  registerUserMessageRow: (messageId: string) => (node: HTMLDivElement | null) => void;
 }) {
   if (props.message.role === "user") {
     return (
-      <ChatBubble ref={props.registerUserMessageRow(props.message.id)} selectedSkill={props.message.selectedSkill}>
+      <ChatBubble selectedSkill={props.message.selectedSkill}>
         {props.message.text}
       </ChatBubble>
     );
@@ -239,16 +234,13 @@ function areConversationMessageRowPropsEqual(
   previous: {
     message: MobileConversationMessage;
     onApproveExternalAgent?: (input: ExternalApprovalActionInput) => Promise<boolean>;
-    registerUserMessageRow: (messageId: string) => (node: HTMLDivElement | null) => void;
   },
   next: {
     message: MobileConversationMessage;
     onApproveExternalAgent?: (input: ExternalApprovalActionInput) => Promise<boolean>;
-    registerUserMessageRow: (messageId: string) => (node: HTMLDivElement | null) => void;
   },
 ): boolean {
   return previous.onApproveExternalAgent === next.onApproveExternalAgent
-    && previous.registerUserMessageRow === next.registerUserMessageRow
     && areMobileConversationMessagesEqual(previous.message, next.message);
 }
 

@@ -207,7 +207,6 @@ describe("ConversationMessageList", () => {
     const { container } = render(
       <ConversationMessageList
         messages={[conversationMessage("pending:user:1", "user", "先执行")]}
-        registerUserMessageRow={() => () => undefined}
         reply={agentReply({ message: "正在处理" })}
         status={{ tone: "loading", text: "正在回复" }}
       />,

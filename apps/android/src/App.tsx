@@ -202,18 +202,16 @@ function App() {
   const showTopLoadingBar = mobileSessions.loadingSessionMessages || mobileSessions.loadingOlderHistory;
   const {
     handleScroll,
-    registerUserMessageRow,
     resetScrollDown,
     scrollRef,
     scrollToBottom,
     showScrollDown,
-    trailingSpacerPx,
   } = useChatFeedScroll({
     hasOlderHistory: mobileSessions.hasOlderHistory,
     loadingOlderHistory: mobileSessions.loadingOlderHistory,
     messages: mobileSessions.activeMessages,
     onLoadOlderHistory: mobileSessions.loadOlderHistory,
-    postSendFocusRequest: mobileSessions.postSendFocusRequest,
+    postSendScrollRequest: mobileSessions.postSendScrollRequest,
     reply: mobileSessions.activeReply,
     sessionId: mobileSessions.activeSessionId,
     statusTone: mobileSessions.activeStatus.tone,
@@ -430,11 +428,9 @@ function App() {
           <ConversationMessageList
             messages={mobileSessions.activeMessages}
             onApproveExternalAgent={approveExternalAgent}
-            registerUserMessageRow={registerUserMessageRow}
             reply={mobileSessions.activeReply}
             status={displayStatus}
           />
-          <div aria-hidden="true" style={{ height: trailingSpacerPx }} />
         </main>
 
         {showScrollDown ? <ScrollDownButton onClick={() => scrollToBottom()} /> : null}
