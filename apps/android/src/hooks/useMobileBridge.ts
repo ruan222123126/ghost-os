@@ -47,6 +47,7 @@ import type {
   SessionDetail,
   SessionGetOptions,
   SessionMetadata,
+  SessionRuntimeSelection,
   SkillPayload,
   StatusMessage,
   StoredConnectionSnapshot,
@@ -58,6 +59,7 @@ import { buildAgentMessageWithSelectedSkill } from "../lib/selectedSkillMessage"
 
 const SESSION_DETAIL_PAGE_LIMIT = 20;
 const SESSION_FULL_PAGE_LIMIT = 200;
+const SESSION_LIST_REFRESH_INTERVAL_MS = 5000;
 const EXTERNAL_AGENT_STREAM_PATH = "api/external-agent/stream";
 const UNSUPPORTED_SKILL_MANAGEMENT_TEXT = "电脑端不支持技能管理";
 
@@ -282,6 +284,37 @@ function escapeRegExp(value: string): string {
 function isUnsupportedActionError(error: unknown, action: string): boolean {
   const pattern = new RegExp(`unsupported action\\s*:?[\\s"']+${escapeRegExp(action)}(?:\\b|["'])`, "iu");
   return pattern.test(errorMessage(error));
+}
+
+function runtimeSelectionConfigUpdate(
+  selection: SessionRuntimeSelection,
+  config: ConfigPayload | undefined,
+): Record<string, string> {
+  const provider = selection.provider?.trim() || "";
+  const model = selection.model?.trim() || "";
+  const update: Record<string, string> = {};
+  if (provider && !stringsEqualIgnoreCase(config?.provider ?? "", provider)) {
+    update.provider = provider;
+  }
+  if (model && (config?.model ?? "").trim() !== model) {
+    update.model = model;
+  }
+  return update;
+}
+
+function hasRuntimeSelectionConfigUpdate(update: Record<string, string>): boolean {
+  return Object.keys(update).length > 0;
+}
+
+function providerForRuntimeSelection(
+  providers: ProviderListPayload | undefined,
+  selection: SessionRuntimeSelection,
+): ProviderConfigPayload | undefined {
+  const providerName = selection.provider?.trim() || "";
+  if (!providerName) {
+    return undefined;
+  }
+  return providers?.providers.find((provider) => stringsEqualIgnoreCase(provider.name, providerName));
 }
 
 function codexPermissionMode(config: ConfigPayload | undefined): ExternalCodexPermissionMode {
@@ -975,6 +1008,17 @@ export function useMobileBridge() {
     });
   }, [refreshSessions]);
 
+  useEffect(() => {
+    if (connectionStatus.tone !== "success" || !config) {
+      return;
+    }
+
+    const timer = window.setInterval(refreshSessionsInBackground, SESSION_LIST_REFRESH_INTERVAL_MS);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [config, connectionStatus.tone, refreshSessionsInBackground]);
+
   const getSession = useCallback(
     async (sessionId: string, options: SessionGetOptions = {}): Promise<SessionDetail> => {
       return parseSessionDetail(
@@ -1177,6 +1221,48 @@ export function useMobileBridge() {
       }
     },
     [config?.model, loadProviders, requestBridge, settings.remoteExecutionEnabled],
+  );
+
+  const switchRuntimeSelection = useCallback(
+    async (selection: SessionRuntimeSelection | null | undefined): Promise<boolean> => {
+      if (!selection || selection.runtime === "codex") {
+        return true;
+      }
+      const model = selection.model?.trim() || "";
+      const provider = providerForRuntimeSelection(mergedProviderList, selection);
+      if (!settings.remoteExecutionEnabled) {
+        setSettings((current) => ({
+          ...current,
+          localModel: model || current.localModel?.trim() || provider?.models?.[0]?.trim() || "",
+          localProviderId: provider?.provider_id ?? current.localProviderId,
+        }));
+        setStatus({ tone: "success", text: "会话模型已切换" });
+        return true;
+      }
+
+      const update = runtimeSelectionConfigUpdate(selection, config);
+      if (!hasRuntimeSelectionConfigUpdate(update)) {
+        return true;
+      }
+      setStatus({ tone: "loading", text: "会话模型切换中" });
+      try {
+        const payload = await requestBridge<ConfigPayload>("CONFIG_UPDATE", update);
+        setConfig(payload);
+        await loadProviders();
+        setStatus({ tone: "success", text: "会话模型已切换" });
+        return true;
+      } catch (error) {
+        setStatus({ tone: "error", text: errorMessage(error) });
+        return false;
+      }
+    },
+    [
+      config,
+      loadProviders,
+      mergedProviderList,
+      requestBridge,
+      settings.remoteExecutionEnabled,
+    ],
   );
 
   const updateExternalCodexPermissionMode = useCallback(
@@ -1497,6 +1583,7 @@ export function useMobileBridge() {
     skillListError,
     stopAgentRun,
     switchModel,
+    switchRuntimeSelection,
     taskList,
     taskListError,
     status,

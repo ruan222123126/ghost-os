@@ -210,6 +210,137 @@ describe("useMobileSessions", () => {
     });
   });
 
+  it("notifies runtime selection after loading Bridge session detail", async () => {
+    const detail: SessionDetail = {
+      ...sessionDetail("session-1"),
+      last_runtime_selection: {
+        runtime: "ghost",
+        provider: "openai-main",
+        provider_type: "openai",
+        model: "gpt-5.4",
+        mode: "plan",
+      },
+    };
+    const getSession = vi.fn(async () => detail);
+    const onSessionRuntimeSelection = vi.fn();
+    const { result } = renderMobileSessions({
+      getSession,
+      onSessionRuntimeSelection,
+      sessions: [session("session-1", "Bridge title")],
+      sessionsLoaded: true,
+    });
+
+    await act(async () => {
+      await result.current.selectSession("session-1");
+    });
+
+    expect(onSessionRuntimeSelection).toHaveBeenCalledWith(detail.last_runtime_selection);
+  });
+
+  it("hydrates a web-started Codex turn draft as running and polls until it completes", async () => {
+    let getSessionCalls = 0;
+    let resolvePoll: ((detail: SessionDetail) => void) | undefined;
+    const getSession = vi.fn((sessionId: string) => {
+      getSessionCalls += 1;
+      if (getSessionCalls === 1) {
+        return Promise.resolve(codexDraftSessionDetail(sessionId));
+      }
+      return new Promise<SessionDetail>((resolve) => {
+        resolvePoll = resolve;
+      });
+    });
+    const onSessionRuntimeSelection = vi.fn();
+    const { result } = renderMobileSessions({
+      getSession,
+      onSessionRuntimeSelection,
+      sessions: [session("session-1", "Bridge title")],
+      sessionsLoaded: true,
+    });
+
+    await act(async () => {
+      await result.current.selectSession("session-1");
+    });
+
+    expect(result.current.activeStatus).toEqual({ tone: "loading", text: "等待用户输入" });
+    expect(result.current.canSend).toBe(false);
+    expect(result.current.historyItems.find((item) => item.id === "session-1")?.status).toBe("running");
+    expect(result.current.activeReply).toMatchObject({
+      message: "partial answer",
+      parts: [
+        { kind: "text", text: "partial answer" },
+        {
+          kind: "tool",
+          tool: expect.objectContaining({
+            approvalId: "approval-1",
+            status: "pending",
+            toolName: "codex_approval",
+          }),
+        },
+      ],
+      thinking: "thinking",
+    });
+    expect(onSessionRuntimeSelection).toHaveBeenCalledWith(
+      expect.objectContaining({ runtime: "codex", model: "gpt-5-codex" }),
+    );
+
+    await waitFor(() => expect(getSession).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      resolvePoll?.(completedCodexSessionDetail("session-1"));
+    });
+
+    await waitFor(() => expect(result.current.activeStatus).toEqual({ tone: "success", text: "回复已返回" }));
+    expect(result.current.activeMessages.map((item) => item.text)).toEqual(["run codex", "done from bridge"]);
+    expect(result.current.activeReply).toBeUndefined();
+  });
+
+  it("reloads an active Bridge-owned session when the Bridge session list version advances", async () => {
+    let getSessionCalls = 0;
+    let resolveExternalPoll: ((detail: SessionDetail) => void) | undefined;
+    const getSession = vi.fn((sessionId: string) => {
+      getSessionCalls += 1;
+      if (getSessionCalls === 1) {
+        return Promise.resolve(sessionDetail(sessionId));
+      }
+      if (getSessionCalls === 2) {
+        return Promise.resolve(codexDraftSessionDetail(sessionId));
+      }
+      return new Promise<SessionDetail>((resolve) => {
+        resolveExternalPoll = resolve;
+      });
+    });
+    const baseProps: UseMobileSessionsOptionsForTest = {
+      bridgeConnected: true,
+      getFullSession: vi.fn(async (sessionId: string) => sessionDetail(sessionId)),
+      getSession,
+      pinnedHistoryIds: [],
+      persistComputerSessionsEnabled: false,
+      sendAgentMessage: vi.fn(async () => ({ ok: false })),
+      sessions: [session("session-1", "Bridge title")],
+      sessionsLoaded: true,
+      stopAgentRun: vi.fn(async () => ({ ok: true, status: "stopped" as const })),
+    };
+    const { result, rerender } = renderHook((props: UseMobileSessionsOptionsForTest) => useMobileSessions(props), {
+      initialProps: baseProps,
+    });
+
+    await act(async () => {
+      await result.current.selectSession("session-1");
+    });
+    expect(result.current.activeStatus).toEqual({ tone: "success", text: "历史会话已加载" });
+
+    rerender({
+      ...baseProps,
+      sessions: [sessionWithUpdatedAt("session-1", "Bridge title", "2026-01-03T00:00:00.000Z")],
+    });
+
+    await waitFor(() => expect(result.current.activeStatus).toEqual({ tone: "loading", text: "等待用户输入" }));
+    await waitFor(() => expect(getSession).toHaveBeenCalledTimes(3));
+
+    await act(async () => {
+      resolveExternalPoll?.(completedCodexSessionDetail("session-1"));
+    });
+  });
+
   it("restores selected skill metadata from wrapped Bridge user messages", async () => {
     const getSession = vi.fn(async (sessionId: string) => selectedSkillSessionDetail(sessionId));
     const { result } = renderMobileSessions({
@@ -826,6 +957,7 @@ function renderMobileSessions(overrides: Partial<UseMobileSessionsOptionsForTest
     computerSessionSyncScope: overrides.computerSessionSyncScope,
     getFullSession: overrides.getFullSession ?? defaultGetSession,
     getSession: overrides.getSession ?? defaultGetSession,
+    onSessionRuntimeSelection: overrides.onSessionRuntimeSelection,
     pinnedHistoryIds: overrides.pinnedHistoryIds ?? [],
     persistComputerSessionsEnabled: overrides.persistComputerSessionsEnabled ?? false,
     sendAgentMessage: overrides.sendAgentMessage ?? defaultSendAgentMessage,
@@ -987,6 +1119,90 @@ function selectedSkillSessionDetail(id: string): SessionDetail {
       has_more_before: false,
       limit: 100,
     },
+  };
+}
+
+function codexDraftSessionDetail(id: string): SessionDetail {
+  return {
+    ...session(id, `Bridge ${id}`),
+    last_runtime_selection: {
+      runtime: "codex",
+      provider: "codex",
+      provider_type: "codex",
+      model: "gpt-5-codex",
+      mode: "default",
+    },
+    messages: [
+      {
+        index: 0,
+        role: "user",
+        text: "run codex",
+      },
+    ],
+    page: {
+      has_more_before: false,
+      limit: 100,
+    },
+    turn_draft: {
+      trace_id: "trace-codex",
+      turn: 2,
+      status: "awaiting_human",
+      pending_questions: [
+        {
+          question_id: "approval-1",
+          prompt: "Approve command execution",
+          selection_mode: "single",
+        },
+      ],
+      assistant_segments: [
+        {
+          id: "stream-segment:assistant:1",
+          content: "partial answer",
+        },
+      ],
+      thinking_segments: [
+        {
+          id: "stream-segment:thinking:1",
+          content: "thinking",
+        },
+      ],
+      tools: [],
+      item_order: [
+        "assistant:stream-segment:assistant:1",
+        "question:approval-1",
+      ],
+    },
+  };
+}
+
+function completedCodexSessionDetail(id: string): SessionDetail {
+  return {
+    ...session(id, `Bridge ${id}`),
+    last_runtime_selection: {
+      runtime: "codex",
+      provider: "codex",
+      provider_type: "codex",
+      model: "gpt-5-codex",
+      mode: "default",
+    },
+    message_count: 2,
+    messages: [
+      {
+        index: 0,
+        role: "user",
+        text: "run codex",
+      },
+      {
+        index: 1,
+        role: "assistant",
+        text: "done from bridge",
+      },
+    ],
+    page: {
+      has_more_before: false,
+      limit: 100,
+    },
+    turn_draft: null,
   };
 }
 

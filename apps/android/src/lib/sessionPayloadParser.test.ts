@@ -49,6 +49,44 @@ describe("session payload parser", () => {
         limit: 100,
         next_before: null,
       },
+      turn_draft: {
+        trace_id: "trace-draft",
+        turn: 2,
+        status: "awaiting_human",
+        pending_questions: [
+          {
+            question_id: "approval-1",
+            prompt: "Approve command?",
+            selection_mode: "single",
+            options: [{ label: "Approve", allow_custom: false }],
+          },
+        ],
+        assistant_segments: [{ id: "stream-segment:assistant:1", content: "partial" }],
+        thinking_segments: [{ id: "stream-segment:thinking:1", content: "thinking" }],
+        tools: [
+          {
+            id: "stream-tool:trace-draft:call-1",
+            content: "/repo",
+            tool_input: "{\"cmd\":\"pwd\"}",
+            tool_name: "bash_exec",
+            tool_status: "success",
+            tool_call_id: "call-1",
+            trace_id: "trace-draft",
+          },
+        ],
+        item_order: [
+          "assistant:stream-segment:assistant:1",
+          "tool:stream-tool:trace-draft:call-1",
+          "question:approval-1",
+        ],
+      },
+      last_runtime_selection: {
+        runtime: "ghost",
+        provider: "OpenAI Main",
+        provider_type: "openai",
+        model: "gpt-5.4",
+        mode: "plan",
+      },
     });
 
     expect(detail.id).toBe("session-1");
@@ -62,6 +100,44 @@ describe("session payload parser", () => {
       status: "success",
       tool: "bash_exec",
       trace_id: "trace-1",
+    });
+    expect(detail.last_runtime_selection).toEqual({
+      runtime: "ghost",
+      provider: "OpenAI Main",
+      provider_type: "openai",
+      model: "gpt-5.4",
+      mode: "plan",
+    });
+    expect(detail.turn_draft).toEqual({
+      trace_id: "trace-draft",
+      turn: 2,
+      status: "awaiting_human",
+      pending_questions: [
+        {
+          question_id: "approval-1",
+          prompt: "Approve command?",
+          selection_mode: "single",
+          options: [{ label: "Approve", allow_custom: false }],
+        },
+      ],
+      assistant_segments: [{ id: "stream-segment:assistant:1", content: "partial" }],
+      thinking_segments: [{ id: "stream-segment:thinking:1", content: "thinking" }],
+      tools: [
+        {
+          id: "stream-tool:trace-draft:call-1",
+          content: "/repo",
+          tool_input: "{\"cmd\":\"pwd\"}",
+          tool_name: "bash_exec",
+          tool_status: "success",
+          tool_call_id: "call-1",
+          trace_id: "trace-draft",
+        },
+      ],
+      item_order: [
+        "assistant:stream-segment:assistant:1",
+        "tool:stream-tool:trace-draft:call-1",
+        "question:approval-1",
+      ],
     });
     expect(detail.page.limit).toBe(100);
   });
@@ -122,6 +198,26 @@ describe("session payload parser", () => {
         page: { has_more_before: false, limit: 100 },
       }),
     ).toThrow("SESSION_GET payload.messages[0].tool_result.status must be one of success, error");
+  });
+
+  it("rejects errored turn drafts without an error message", () => {
+    expect(() =>
+      parseSessionDetail({
+        ...sessionMetadata("session-1"),
+        messages: [],
+        page: { has_more_before: false, limit: 100 },
+        turn_draft: {
+          trace_id: "trace-draft",
+          turn: 1,
+          status: "error",
+          pending_questions: [],
+          assistant_segments: [],
+          thinking_segments: [],
+          tools: [],
+          item_order: [],
+        },
+      }),
+    ).toThrow("SESSION_GET payload.turn_draft.error must be a string when status=error");
   });
 });
 

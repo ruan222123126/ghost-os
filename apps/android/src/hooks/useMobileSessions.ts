@@ -24,11 +24,14 @@ import {
   emptyStoredConversation,
   errorMessage,
   findStoredTitle,
+  isActiveSessionTurnDraft,
   isAgentRunCancellationMessage,
   mergeHistoryItems,
   normalizeConversationSessionIds,
   reconcileStoredConversationsWithBridge,
   runStateToStatus,
+  sessionTurnDraftToAgentPayload,
+  sessionTurnDraftToRunState,
   sessionDetailToConversationMessages,
   sessionFallbackTitle,
   statusToRunState,
@@ -44,6 +47,7 @@ import type {
   SessionDetail,
   SessionGetOptions,
   SessionMetadata,
+  SessionRuntimeSelection,
   StatusMessage,
   StoredMobileConversation,
 } from "../mobileTypes";
@@ -100,6 +104,7 @@ interface UseMobileSessionsOptions {
   computerSessionSyncScope?: string;
   getFullSession: (sessionId: string) => Promise<SessionDetail>;
   getSession: (sessionId: string, options?: SessionGetOptions) => Promise<SessionDetail>;
+  onSessionRuntimeSelection?: (selection: SessionRuntimeSelection | null | undefined) => Promise<void> | void;
   pinnedHistoryIds: string[];
   persistComputerSessionsEnabled: boolean;
   sendAvailable?: boolean;
@@ -133,6 +138,7 @@ interface PostSendFocusRequest {
 
 const HOME_IDLE_STATUS: StatusMessage = { tone: "idle", text: "首页" };
 const PERSIST_DISABLED_STATUS: StatusMessage = { tone: "idle", text: "未开启" };
+const EXTERNAL_RUNNING_SESSION_POLL_INTERVAL_MS = 1500;
 
 export function useMobileSessions(options: UseMobileSessionsOptions) {
   const [activeSessionId, setActiveSessionId] = useState<string>();
@@ -296,6 +302,88 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       storedConversations,
     ],
   );
+  const externalRunningSessionIdsKey = useMemo(
+    () =>
+      Object.values(sessionViews)
+        .filter((view) => shouldPollExternalRunningSession(view))
+        .map((view) => view.id)
+        .sort()
+        .join("\n"),
+    [sessionViews],
+  );
+  const activeSessionBridgeVersion = useMemo(() => {
+    if (!activeSessionId) {
+      return "";
+    }
+    const metadata = options.sessions.find((session) => session.id === activeSessionId);
+    return metadata ? `${metadata.id}:${metadata.updated_at}:${metadata.message_count}` : "";
+  }, [activeSessionId, options.sessions]);
+
+  useEffect(() => {
+    if (!options.bridgeConnected || !storageLoaded || !externalRunningSessionIdsKey) {
+      return;
+    }
+
+    let cancelled = false;
+    const inFlight = new Set<string>();
+    const sessionIds = externalRunningSessionIdsKey.split("\n").filter(Boolean);
+    const poll = () => {
+      for (const sessionId of sessionIds) {
+        void pollExternalRunningSession(sessionId, inFlight, () => cancelled);
+      }
+    };
+
+    poll();
+    const timer = window.setInterval(poll, EXTERNAL_RUNNING_SESSION_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [externalRunningSessionIdsKey, options.bridgeConnected, options.getSession, storageLoaded]);
+
+  useEffect(() => {
+    if (
+      !activeSessionId
+      || !activeSessionBridgeVersion
+      || !options.bridgeConnected
+      || !options.sessionsLoaded
+      || !storageLoaded
+    ) {
+      return;
+    }
+
+    const metadata = options.sessions.find((session) => session.id === activeSessionId);
+    const view = sessionViewsRef.current[activeSessionId];
+    const stored = storedConversationsRef.current.find((conversation) => conversation.id === activeSessionId);
+    const metadataAlreadyLoaded = Boolean(
+      metadata
+        && view
+        && view.updatedAt >= metadata.updated_at
+        && stored?.source_message_count === metadata.message_count,
+    );
+    if (
+      !metadata
+      || !view?.bridgeOwned
+      || view.run.status === "running"
+      || metadataAlreadyLoaded
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    void syncActiveSessionUpdateFromBridge(metadata.id, () => cancelled);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeSessionBridgeVersion,
+    activeSessionId,
+    options.bridgeConnected,
+    options.getSession,
+    options.sessions,
+    options.sessionsLoaded,
+    storageLoaded,
+  ]);
 
   async function sendMessage(text: string, selectedSkill?: ChatSelectedSkill | null): Promise<boolean> {
     const trimmed = text.trim();
@@ -355,6 +443,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
           targetSessionId = resolvedSessionId;
           commitCreatedSession(resolvedSessionId, displayTitle, optimisticMessages, {
             activate: shouldActivateResolvedSession(initialSessionId),
+            run: createRunningRunState(requestId, traceId, "发送中"),
           });
         },
         onStatus: (status) => {
@@ -387,6 +476,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       targetSessionId = resolvedSessionId;
       commitCreatedSession(resolvedSessionId, displayTitle, optimisticMessages, {
         activate: shouldActivateResolvedSession(initialSessionId),
+        run: createRunningRunState(requestId, traceId, "发送中"),
       });
     }
     const terminalStatusText = result.reply?.session_ended ? "会话已结束" : "回复已返回";
@@ -481,31 +571,10 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     applyRunStatus(trimmedSessionId, { tone: "loading", text: "正在加载历史会话" });
     try {
       const detail = await options.getSession(trimmedSessionId);
-      const messages = sessionDetailToConversationMessages(detail);
-      const title = detail.title.trim() || stored?.title || sessionFallbackTitle(detail.id);
-      setSessionViews((current) =>
-        trimSessionViewsForState(
-          upsertSessionView(current, detail.id, {
-            messages,
-            run: createSuccessRunState("历史会话已加载"),
-            title,
-            unread: false,
-            bridgeOwned: true,
-            updatedAt: detail.updated_at,
-            hasOlderHistory: detail.page.has_more_before,
-            loadingOlderHistory: false,
-            nextHistoryBefore: detail.page.next_before ?? null,
-          }),
-        ),
-      );
-      persistConversation({
-        createdAt: detail.created_at,
-        id: detail.id,
-        messages,
-        sourceMessageCount: detail.message_count,
-        syncedMessageCount: messages.length,
-        title,
-        updatedAt: detail.updated_at,
+      applySessionRuntimeSelection(detail.last_runtime_selection ?? null);
+      commitSessionDetail(detail, {
+        run: createSuccessRunState("历史会话已加载"),
+        unread: false,
       });
     } catch (error) {
       applyRunStatus(trimmedSessionId, { tone: "error", text: errorMessage(error) });
@@ -656,8 +725,12 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       : createRunningRunState(undefined, undefined, "后台运行中");
     try {
       const detail = await options.getSession(sessionId);
+      applySessionRuntimeSelection(detail.last_runtime_selection ?? null);
+      const resolvedRun = !run.requestId && !isActiveSessionTurnDraft(detail.turn_draft)
+        ? createSuccessRunState("回复已返回")
+        : run;
       commitSessionDetail(detail, {
-        run,
+        run: resolvedRun,
         unread: false,
       });
     } catch (error) {
@@ -691,6 +764,10 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     },
   ): void {
     const messages = sessionDetailToConversationMessages(detail);
+    const draftRun = detail.turn_draft ? sessionTurnDraftToRunState(detail.turn_draft) : undefined;
+    const draftReply = detail.turn_draft
+      ? sessionTurnDraftToAgentPayload(detail.turn_draft, detail.id, detail.last_runtime_selection)
+      : undefined;
     const title = detail.title.trim()
       || findStoredTitle(storedConversationsRef.current, detail.id)
       || sessionFallbackTitle(detail.id);
@@ -702,8 +779,8 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
           loadingOlderHistory: false,
           messages,
           nextHistoryBefore: detail.page.next_before ?? null,
-          reply: undefined,
-          run: input.run,
+          reply: draftReply,
+          run: draftRun ?? input.run,
           title,
           unread: input.unread,
           updatedAt: detail.updated_at,
@@ -820,7 +897,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     sessionId: string,
     title: string,
     messages: MobileConversationMessage[],
-    input: { activate: boolean },
+    input: { activate: boolean; run?: MobileSessionRunState },
   ): void {
     const normalizedMessages = normalizeConversationSessionIds(messages, sessionId);
     if (input.activate) {
@@ -837,7 +914,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
         upsertSessionView(current, sessionId, {
           messages: normalizedMessages,
           reply: input.activate ? homeReply : undefined,
-          run: homeRun.status === "running" ? homeRun : createRunningRunState(),
+          run: input.run ?? (homeRun.status === "running" ? homeRun : createRunningRunState()),
           title,
           unread: !input.activate,
           bridgeOwned: true,
@@ -961,6 +1038,60 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     });
   }
 
+  async function pollExternalRunningSession(
+    sessionId: string,
+    inFlight: Set<string>,
+    isCancelled: () => boolean,
+  ): Promise<void> {
+    if (inFlight.has(sessionId)) {
+      return;
+    }
+    inFlight.add(sessionId);
+    try {
+      const detail = await options.getSession(sessionId);
+      if (isCancelled()) {
+        return;
+      }
+      applySessionRuntimeSelection(detail.last_runtime_selection ?? null);
+      commitSessionDetail(detail, {
+        run: isActiveSessionTurnDraft(detail.turn_draft)
+          ? sessionTurnDraftToRunState(detail.turn_draft)
+          : createSuccessRunState("回复已返回"),
+        unread: activeSessionIdRef.current !== detail.id,
+      });
+      if (!isActiveSessionTurnDraft(detail.turn_draft)) {
+        clearBackgroundRun(detail.id);
+      }
+    } catch (error) {
+      if (!isCancelled()) {
+        applyRunStatus(sessionId, { tone: "error", text: `运行会话同步失败：${errorMessage(error)}` });
+      }
+    } finally {
+      inFlight.delete(sessionId);
+    }
+  }
+
+  async function syncActiveSessionUpdateFromBridge(
+    sessionId: string,
+    isCancelled: () => boolean,
+  ): Promise<void> {
+    try {
+      const detail = await options.getSession(sessionId);
+      if (isCancelled()) {
+        return;
+      }
+      applySessionRuntimeSelection(detail.last_runtime_selection ?? null);
+      commitSessionDetail(detail, {
+        run: createSuccessRunState("历史会话已更新"),
+        unread: false,
+      });
+    } catch (error) {
+      if (!isCancelled()) {
+        applyRunStatus(sessionId, { tone: "error", text: `会话更新同步失败：${errorMessage(error)}` });
+      }
+    }
+  }
+
   function trimSessionViewsForState(views: Record<string, MobileSessionView>): Record<string, MobileSessionView> {
     return trimMobileSessionViews(views, {
       activeSessionId: activeSessionIdRef.current,
@@ -984,6 +1115,15 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     }
     void savePersistedMobileConversations(conversations).catch((error: unknown) => {
       console.error("[useMobileSessions] save conversations failed", error);
+    });
+  }
+
+  function applySessionRuntimeSelection(selection: SessionRuntimeSelection | null | undefined): void {
+    if (!options.onSessionRuntimeSelection) {
+      return;
+    }
+    void Promise.resolve(options.onSessionRuntimeSelection(selection)).catch((error: unknown) => {
+      console.error("[useMobileSessions] session runtime selection failed", error);
     });
   }
 
@@ -1124,6 +1264,10 @@ function isStoredConversationCurrent(conversation: StoredMobileConversation, ses
   return conversation.updated_at === session.updated_at
     && conversation.source_message_count === session.message_count
     && conversation.synced_message_count === conversation.messages.length;
+}
+
+function shouldPollExternalRunningSession(view: MobileSessionView): boolean {
+  return view.bridgeOwned && view.run.status === "running" && !view.run.requestId && Boolean(view.run.traceId);
 }
 
 function storedConversationFromSessionDetail(detail: SessionDetail): StoredMobileConversation {

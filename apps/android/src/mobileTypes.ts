@@ -333,9 +333,60 @@ export interface SessionMetadata {
   token_count: number;
 }
 
+export interface AskHumanOption {
+  label: string;
+  allow_custom?: boolean;
+}
+
+export interface SessionRuntimeSelection {
+  runtime: AgentRuntimeType;
+  provider?: string;
+  provider_type?: ProviderType;
+  model?: string;
+  mode?: "default" | "plan";
+}
+
+export type SessionTurnDraftStatus = "streaming" | "awaiting_human" | "error";
+
+export interface SessionTurnDraftSegment {
+  id: string;
+  content: string;
+}
+
+export interface SessionTurnDraftTool {
+  id: string;
+  content: string;
+  tool_input?: string;
+  tool_name?: string;
+  tool_status?: string;
+  tool_call_id?: string;
+  trace_id?: string;
+}
+
+export interface SessionTurnDraftPendingQuestion {
+  question_id: string;
+  prompt: string;
+  selection_mode?: string;
+  options?: AskHumanOption[];
+}
+
+export interface SessionTurnDraft {
+  trace_id: string;
+  turn: number;
+  status: SessionTurnDraftStatus;
+  error?: string;
+  pending_questions: SessionTurnDraftPendingQuestion[];
+  assistant_segments: SessionTurnDraftSegment[];
+  thinking_segments: SessionTurnDraftSegment[];
+  tools: SessionTurnDraftTool[];
+  item_order: string[];
+}
+
 export interface SessionDetail extends SessionMetadata {
+  last_runtime_selection?: SessionRuntimeSelection | null;
   messages: SessionMessage[];
   page: SessionMessagePage;
+  turn_draft?: SessionTurnDraft | null;
 }
 
 export interface ChatSelectedSkill {

@@ -4,6 +4,7 @@ import type {
   MobileAssistantPart,
   ChatSelectedSkill,
   MobileToolCard,
+  MobileToolCardStatus,
   MobileConversationMessage,
   MobileSessionRunState,
   MobileSessionRunStatus,
@@ -11,6 +12,10 @@ import type {
   SessionDetail,
   SessionMessage,
   SessionMetadata,
+  SessionRuntimeSelection,
+  SessionTurnDraft,
+  SessionTurnDraftPendingQuestion,
+  SessionTurnDraftTool,
   SessionToolCall,
   SessionToolResult,
   StatusMessage,
@@ -164,6 +169,49 @@ export function createSuccessRunState(statusText: string, sessionEnded = false):
     sessionEnded,
     status: "success",
     statusText,
+  };
+}
+
+export function isActiveSessionTurnDraft(
+  draft: SessionTurnDraft | null | undefined,
+): draft is SessionTurnDraft {
+  return draft?.status === "streaming" || draft?.status === "awaiting_human";
+}
+
+export function sessionTurnDraftToRunState(draft: SessionTurnDraft): MobileSessionRunState {
+  if (draft.status === "error") {
+    return {
+      sessionEnded: false,
+      status: "error",
+      statusText: draft.error?.trim() || "运行失败",
+      traceId: draft.trace_id,
+    };
+  }
+
+  return createRunningRunState(
+    undefined,
+    draft.trace_id,
+    draft.status === "awaiting_human" ? "等待用户输入" : "生成中",
+  );
+}
+
+export function sessionTurnDraftToAgentPayload(
+  draft: SessionTurnDraft,
+  sessionId: string,
+  runtimeSelection?: SessionRuntimeSelection | null,
+): AgentPayload {
+  const parts = buildSessionTurnDraftParts(draft, runtimeSelection);
+  const message = draft.assistant_segments.map((segment) => segment.content).join("");
+  const thinking = draft.thinking_segments.map((segment) => segment.content).join("");
+  const tools = parts.flatMap((part) => part.kind === "tool" ? [part.tool] : []);
+
+  return {
+    message,
+    parts: parts.length > 0 ? parts : undefined,
+    session_ended: false,
+    session_id: sessionId,
+    thinking: thinking || undefined,
+    tools: tools.length > 0 ? tools : undefined,
   };
 }
 
@@ -352,6 +400,137 @@ function statusToneToRunStatus(tone: StatusMessage["tone"]): MobileSessionRunSta
     default:
       return "idle";
   }
+}
+
+function buildSessionTurnDraftParts(
+  draft: SessionTurnDraft,
+  runtimeSelection?: SessionRuntimeSelection | null,
+): MobileAssistantPart[] {
+  const textParts = new Map(
+    draft.assistant_segments.map((segment): [string, MobileAssistantPart] => [
+      segment.id,
+      { id: segment.id, kind: "text", text: segment.content },
+    ]),
+  );
+  const toolParts = new Map(
+    draft.tools.map((tool): [string, MobileAssistantPart] => [
+      tool.id,
+      { id: tool.id, kind: "tool", tool: sessionTurnDraftToolToCard(draft, tool) },
+    ]),
+  );
+  const questionParts = new Map(
+    draft.pending_questions.map((question): [string, MobileAssistantPart] => {
+      const card = pendingQuestionToToolCard(draft, question, runtimeSelection);
+      return [question.question_id, { id: card.id, kind: "tool", tool: card }];
+    }),
+  );
+
+  const parts: MobileAssistantPart[] = [];
+  const usedTextIds = new Set<string>();
+  const usedToolIds = new Set<string>();
+  const usedQuestionIds = new Set<string>();
+
+  for (const item of draft.item_order) {
+    const [kind, id] = splitDraftOrderItem(item);
+    if (kind === "assistant" && id) {
+      appendDraftPart(parts, textParts.get(id));
+      usedTextIds.add(id);
+      continue;
+    }
+    if (kind === "tool" && id) {
+      appendDraftPart(parts, toolParts.get(id));
+      usedToolIds.add(id);
+      continue;
+    }
+    if (kind === "question" && id) {
+      appendDraftPart(parts, questionParts.get(id));
+      usedQuestionIds.add(id);
+    }
+  }
+
+  for (const segment of draft.assistant_segments) {
+    if (!usedTextIds.has(segment.id)) {
+      appendDraftPart(parts, textParts.get(segment.id));
+    }
+  }
+  for (const tool of draft.tools) {
+    if (!usedToolIds.has(tool.id)) {
+      appendDraftPart(parts, toolParts.get(tool.id));
+    }
+  }
+  for (const question of draft.pending_questions) {
+    if (!usedQuestionIds.has(question.question_id)) {
+      appendDraftPart(parts, questionParts.get(question.question_id));
+    }
+  }
+  return parts;
+}
+
+function appendDraftPart(parts: MobileAssistantPart[], part: MobileAssistantPart | undefined): void {
+  if (part) {
+    parts.push(part);
+  }
+}
+
+function splitDraftOrderItem(item: string): [string, string] {
+  const separatorIndex = item.indexOf(":");
+  if (separatorIndex < 0) {
+    return ["", ""];
+  }
+  return [item.slice(0, separatorIndex), item.slice(separatorIndex + 1)];
+}
+
+function sessionTurnDraftToolToCard(
+  draft: SessionTurnDraft,
+  tool: SessionTurnDraftTool,
+): MobileToolCard {
+  const status = normalizeDraftToolStatus(draft.status, tool.tool_status);
+  return {
+    id: tool.id,
+    input: tool.tool_input || (status === "pending" || status === "running" ? tool.content || undefined : undefined),
+    output: status === "success" ? tool.content || undefined : undefined,
+    error: status === "error" ? tool.content || draft.error || undefined : undefined,
+    status,
+    toolCallId: tool.tool_call_id,
+    toolName: tool.tool_name,
+    traceId: tool.trace_id || draft.trace_id,
+  };
+}
+
+function pendingQuestionToToolCard(
+  draft: SessionTurnDraft,
+  question: SessionTurnDraftPendingQuestion,
+  runtimeSelection?: SessionRuntimeSelection | null,
+): MobileToolCard {
+  const isCodex = runtimeSelection?.runtime === "codex";
+  const approvalFields = isCodex
+    ? {
+      approvalId: question.question_id,
+      approvalPrompt: question.prompt,
+    }
+    : {};
+  return {
+    ...approvalFields,
+    id: `stream-question:${draft.trace_id}:${question.question_id}`,
+    input: question.prompt,
+    status: "pending",
+    toolCallId: isCodex ? `approval:${question.question_id}` : question.question_id,
+    toolName: isCodex ? "codex_approval" : "ask_human",
+    traceId: draft.trace_id,
+  };
+}
+
+function normalizeDraftToolStatus(
+  draftStatus: SessionTurnDraft["status"],
+  rawStatus: string | undefined,
+): MobileToolCardStatus {
+  const status = rawStatus === "running" || rawStatus === "success" || rawStatus === "error"
+    ? rawStatus
+    : "pending";
+  if (draftStatus === "error" && (status === "pending" || status === "running")) {
+    return "error";
+  }
+  return status;
 }
 
 function sessionMessageToConversationMessage(

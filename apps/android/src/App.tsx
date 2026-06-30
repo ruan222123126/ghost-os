@@ -24,6 +24,7 @@ import type {
   ChatSelectedSkill,
   ConfigPayload,
   ProviderListPayload,
+  SessionRuntimeSelection,
   StoredSettings,
 } from "./mobileTypes";
 import "markstream-react/index.css";
@@ -109,6 +110,7 @@ function App() {
     skillListError,
     stopAgentRun,
     switchModel,
+    switchRuntimeSelection,
     taskList,
     taskListError,
     status,
@@ -148,12 +150,33 @@ function App() {
     (input: Parameters<typeof stopAgentRun>[0]) => stopAgentRun({ ...input, agentRuntime: effectiveAgentRuntime }),
     [effectiveAgentRuntime, stopAgentRun],
   );
+  const applySessionRuntimeSelection = useCallback(
+    async (selection: SessionRuntimeSelection | null | undefined): Promise<void> => {
+      if (!selection) {
+        return;
+      }
+      if (selection.runtime === "codex") {
+        setAgentRuntime("codex");
+        setAgentMode("normal");
+        if (selection.model?.trim()) {
+          setCodexModel(normalizeCodexModel(selection.model));
+        }
+        return;
+      }
+
+      setAgentRuntime("ghost");
+      setAgentMode(selection.mode === "plan" ? "plan" : null);
+      await switchRuntimeSelection(selection);
+    },
+    [switchRuntimeSelection],
+  );
   const mobileSessions = useMobileSessions({
     bridgeConnected: Boolean(config),
     appendSessionMessages,
     computerSessionSyncScope: `${settings.connectionMode}:${bridgeUrl}:${settings.pairing?.deviceId ?? ""}:${settings.pairing?.pcId ?? ""}:${settings.pairing?.signalingUrl ?? ""}`,
     getFullSession,
     getSession,
+    onSessionRuntimeSelection: applySessionRuntimeSelection,
     pinnedHistoryIds,
     persistComputerSessionsEnabled: settings.persistComputerSessionsEnabled,
     sendAvailable: agentMode === "plan"
