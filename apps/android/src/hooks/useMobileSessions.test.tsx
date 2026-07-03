@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { invoke } from "@tauri-apps/api/core";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useMobileSessions, mergeHistoryItems, reconcileStoredConversationsWithBridge } from "./useMobileSessions";
@@ -21,9 +22,15 @@ import type {
 
 const STORAGE_KEY = "ghost-os-mobile.conversations.v1";
 
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn(),
+}));
+
 describe("useMobileSessions", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    vi.clearAllMocks();
+    Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
     vi.useRealTimers();
   });
 
@@ -885,6 +892,71 @@ describe("useMobileSessions", () => {
     expect(loadStored()[0]).toMatchObject({ source_message_count: 1 });
   });
 
+  it("persists computer sessions in batches and reloads compacted Tauri history on demand", async () => {
+    Reflect.set(window, "__TAURI_INTERNALS__", {});
+    const persistedById = new Map<string, StoredMobileConversation>();
+    const upsertBatches: string[][] = [];
+    vi.mocked(invoke).mockImplementation(async (command: string, args?: unknown) => {
+      if (command === "mobile_conversations_load_index") {
+        return [];
+      }
+      if (command === "mobile_conversations_upsert") {
+        const conversations = tauriConversationsArg(args);
+        upsertBatches.push(conversations.map((conversation) => conversation.id));
+        for (const conversation of conversations) {
+          persistedById.set(conversation.id, conversation);
+        }
+        return [...persistedById.values()].map((conversation) => ({ ...conversation, messages: [] }));
+      }
+      if (command === "mobile_conversation_get") {
+        return persistedById.get(tauriSessionIdArg(args));
+      }
+      return undefined;
+    });
+
+    const sessions = Array.from({ length: 7 }, (_, index) =>
+      sessionWithUpdatedAt(`session-${index}`, `Session ${index}`, `2026-01-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`),
+    );
+    const getSession = vi.fn(async (sessionId: string, options?: { limit?: number }) => {
+      expect(options).toEqual({ limit: MOBILE_PERSISTED_SESSION_PAGE_LIMIT });
+      return sessionDetail(sessionId);
+    });
+    const baseProps: UseMobileSessionsOptionsForTest = {
+      bridgeConnected: true,
+      getFullSession: vi.fn(async (sessionId: string) => sessionDetail(sessionId)),
+      getSession,
+      pinnedHistoryIds: [],
+      persistComputerSessionsEnabled: true,
+      sendAgentMessage: vi.fn(async () => ({ ok: false })),
+      sessions,
+      sessionsLoaded: true,
+      stopAgentRun: vi.fn(async () => ({ ok: true, status: "stopped" as const })),
+    };
+    const { result, rerender } = renderHook((props: UseMobileSessionsOptionsForTest) => useMobileSessions(props), {
+      initialProps: baseProps,
+    });
+
+    await waitFor(() => expect(result.current.computerSessionPersistStatus.text).toBe("已同步 7 个"));
+
+    expect(upsertBatches.map((batch) => batch.length)).toEqual([3, 3, 1]);
+    expect(getSession).toHaveBeenCalledTimes(7);
+    expect([...persistedById.values()].every((conversation) => conversation.messages.length > 0)).toBe(true);
+
+    rerender({
+      ...baseProps,
+      bridgeConnected: false,
+      persistComputerSessionsEnabled: false,
+      sessions: [],
+      sessionsLoaded: false,
+    });
+    await act(async () => {
+      await result.current.selectSession("session-6");
+    });
+
+    expect(invoke).toHaveBeenCalledWith("mobile_conversation_get", { sessionId: "session-6" });
+    expect(result.current.activeMessages.map((message) => message.text)).toEqual(["loaded"]);
+  });
+
   it("limits computer session persistence to the most recent Bridge sessions", async () => {
     const sessions = Array.from({ length: MOBILE_PERSISTED_CONVERSATION_LIMIT + 2 }, (_, index) =>
       sessionWithUpdatedAt(`session-${index}`, `Session ${index}`, `2026-01-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`),
@@ -1371,4 +1443,19 @@ function saveStored(conversations: StoredMobileConversation[]): void {
 
 function loadStored(): StoredMobileConversation[] {
   return JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "[]") as StoredMobileConversation[];
+}
+
+function tauriConversationsArg(args: unknown): StoredMobileConversation[] {
+  if (!args || typeof args !== "object" || Array.isArray(args)) {
+    return [];
+  }
+  const conversations = (args as { conversations?: unknown }).conversations;
+  return Array.isArray(conversations) ? conversations as StoredMobileConversation[] : [];
+}
+
+function tauriSessionIdArg(args: unknown): string {
+  if (!args || typeof args !== "object" || Array.isArray(args)) {
+    return "";
+  }
+  return String((args as { sessionId?: unknown }).sessionId ?? "");
 }

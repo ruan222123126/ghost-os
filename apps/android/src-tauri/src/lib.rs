@@ -332,6 +332,55 @@ async fn mobile_conversations_load(app: tauri::AppHandle) -> Result<Vec<Value>, 
 }
 
 #[tauri::command]
+async fn mobile_conversations_load_index(app: tauri::AppHandle) -> Result<Vec<Value>, String> {
+    let path = mobile_conversations_path(&app)?;
+    run_blocking_file_task("load mobile conversation index", move || {
+        Ok(compact_mobile_conversations(read_mobile_conversations(
+            &path,
+        )?))
+    })
+    .await
+}
+
+#[tauri::command]
+async fn mobile_conversation_get(
+    app: tauri::AppHandle,
+    session_id: String,
+) -> Result<Option<Value>, String> {
+    let path = mobile_conversations_path(&app)?;
+    run_blocking_file_task("load mobile conversation", move || {
+        let id = session_id.trim().to_string();
+        if id.is_empty() {
+            return Ok(None);
+        }
+        Ok(read_mobile_conversations(&path)?
+            .into_iter()
+            .find(|conversation| mobile_conversation_id(conversation) == Some(id.as_str())))
+    })
+    .await
+}
+
+#[tauri::command]
+async fn mobile_conversations_upsert(
+    app: tauri::AppHandle,
+    conversations: Vec<Value>,
+    limit: Option<usize>,
+) -> Result<Vec<Value>, String> {
+    let path = mobile_conversations_path(&app)?;
+    run_blocking_file_task("upsert mobile conversations", move || {
+        let mut current = read_mobile_conversations(&path)?;
+        upsert_mobile_conversations(&mut current, conversations);
+        sort_mobile_conversations(&mut current);
+        if let Some(limit) = limit.filter(|value| *value > 0) {
+            current.truncate(limit);
+        }
+        write_mobile_conversations(&path, &current)?;
+        Ok(compact_mobile_conversations(current))
+    })
+    .await
+}
+
+#[tauri::command]
 async fn mobile_conversations_save(
     app: tauri::AppHandle,
     conversations: Vec<Value>,
@@ -785,6 +834,69 @@ fn write_mobile_conversations(path: &Path, conversations: &[Value]) -> Result<()
     set_private_file_permissions(path, "mobile conversations")
 }
 
+fn upsert_mobile_conversations(current: &mut Vec<Value>, incoming: Vec<Value>) {
+    for conversation in incoming {
+        let Some(id) = mobile_conversation_id(&conversation).map(str::to_string) else {
+            continue;
+        };
+        match current
+            .iter()
+            .position(|item| mobile_conversation_id(item) == Some(id.as_str()))
+        {
+            Some(index) => current[index] = conversation,
+            None => current.push(conversation),
+        }
+    }
+}
+
+fn compact_mobile_conversations(conversations: Vec<Value>) -> Vec<Value> {
+    conversations
+        .into_iter()
+        .map(|mut conversation| {
+            if let Value::Object(ref mut object) = conversation {
+                object.insert("messages".to_string(), Value::Array(Vec::new()));
+            }
+            conversation
+        })
+        .collect()
+}
+
+fn sort_mobile_conversations(conversations: &mut [Value]) {
+    conversations.sort_by(|left, right| {
+        let updated_order =
+            mobile_conversation_updated_at(right).cmp(mobile_conversation_updated_at(left));
+        if !updated_order.is_eq() {
+            return updated_order;
+        }
+        mobile_conversation_title(left).cmp(mobile_conversation_title(right))
+    });
+}
+
+fn mobile_conversation_id(conversation: &Value) -> Option<&str> {
+    conversation
+        .as_object()
+        .and_then(|object| object.get("id"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
+
+fn mobile_conversation_updated_at(conversation: &Value) -> &str {
+    conversation
+        .as_object()
+        .and_then(|object| object.get("updated_at"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+}
+
+fn mobile_conversation_title(conversation: &Value) -> &str {
+    conversation
+        .as_object()
+        .and_then(|object| object.get("title"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+}
+
 fn read_mobile_local_provider_state(path: &Path) -> Result<MobileLocalProviderState, String> {
     match fs::read_to_string(path) {
         Ok(raw) => {
@@ -1209,6 +1321,9 @@ pub fn run() {
             mobile_credential_load,
             mobile_credential_delete,
             mobile_conversations_load,
+            mobile_conversations_load_index,
+            mobile_conversation_get,
+            mobile_conversations_upsert,
             mobile_conversations_save,
             mobile_local_provider_list,
             mobile_local_provider_upsert,
