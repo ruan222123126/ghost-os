@@ -1,3 +1,6 @@
+import type { ApiEnvelope } from "./envelope.generated";
+import { createTraceId as createSharedTraceId } from "../../../shared/trace";
+
 export interface BridgeBusCommand {
   baseUrl: string;
   apiToken?: string;
@@ -6,16 +9,10 @@ export interface BridgeBusCommand {
   traceId: string;
 }
 
-export interface BridgeEnvelope<TPayload> {
-  status: "success" | "error";
-  payload: TPayload;
-  error: string;
-}
+export type BridgeEnvelope<TPayload> = ApiEnvelope<TPayload>;
 
 export function createTraceId(prefix: string): string {
-  const normalizedPrefix = prefix.trim() || "mobile";
-  const random = crypto.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-  return `${normalizedPrefix}-${random}`;
+  return createSharedTraceId(prefix);
 }
 
 export function errorMessage(error: unknown): string {

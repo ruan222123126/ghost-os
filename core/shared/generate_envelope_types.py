@@ -14,7 +14,7 @@ SCHEMA_PATH = ROOT / "core" / "shared" / "schema.json"
 GO_OUTPUT = ROOT / "core" / "bridge" / "orchestration" / "envelope_generated.go"
 GO_PACKAGE = GO_OUTPUT.parent.name
 RUST_OUTPUT = ROOT / "apps" / "cli" / "src" / "envelope_generated.rs"
-TS_OUTPUT = ROOT / "apps" / "web" / "lib" / "envelope.generated.ts"
+TS_OUTPUT = ROOT / "apps" / "shared" / "envelope.generated.ts"
 
 
 def _write_file(path: Path, content: str) -> None:

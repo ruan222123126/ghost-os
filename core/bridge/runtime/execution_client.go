@@ -48,13 +48,18 @@ func executionRuntimeValue(value string, fallback string) string {
 }
 
 func executionClientConfigFromConfig(cfg Config) executionClientConfig {
+	allowedReadPaths, allowedWritePaths := defaultExecutionAllowedPaths(
+		cfg.NativeAllowedReadPaths,
+		cfg.NativeAllowedWritePaths,
+		cfg.ProjectRoot,
+	)
 	return executionClientConfig{
 		Persistent:             cfg.NativePersistent,
 		NativeBinaryPath:       cfg.NativeBinaryPath,
 		NativeBinaryRoots:      append([]string(nil), cfg.NativeBinaryRoots...),
 		NativeBinaryCandidates: append([]string(nil), cfg.NativeBinaryCandidates...),
-		AllowedReadPaths:       append([]string(nil), cfg.NativeAllowedReadPaths...),
-		AllowedWritePaths:      append([]string(nil), cfg.NativeAllowedWritePaths...),
+		AllowedReadPaths:       allowedReadPaths,
+		AllowedWritePaths:      allowedWritePaths,
 		WorkingDir:             cfg.ProjectRoot,
 	}
 }
@@ -70,15 +75,40 @@ func executionClientConfigFromEnv() (executionClientConfig, error) {
 	if err != nil {
 		return executionClientConfig{}, err
 	}
+	allowedReadPaths, allowedWritePaths := defaultExecutionAllowedPaths(
+		cfg.AllowedReadPaths,
+		cfg.AllowedWritePaths,
+		cfg.ProjectRoot,
+	)
 	return executionClientConfig{
 		Persistent:             cfg.Persistent,
 		NativeBinaryPath:       cfg.NativeBinaryPath,
 		NativeBinaryRoots:      append([]string(nil), cfg.NativeBinaryRoots...),
 		NativeBinaryCandidates: append([]string(nil), cfg.NativeBinaryCandidates...),
-		AllowedReadPaths:       append([]string(nil), cfg.AllowedReadPaths...),
-		AllowedWritePaths:      append([]string(nil), cfg.AllowedWritePaths...),
+		AllowedReadPaths:       allowedReadPaths,
+		AllowedWritePaths:      allowedWritePaths,
 		WorkingDir:             cfg.ProjectRoot,
 	}, nil
+}
+
+func defaultExecutionAllowedPaths(
+	readPaths []string,
+	writePaths []string,
+	projectRoot string,
+) ([]string, []string) {
+	resolvedRead := append([]string(nil), readPaths...)
+	resolvedWrite := append([]string(nil), writePaths...)
+	trimmedRoot := strings.TrimSpace(projectRoot)
+	if trimmedRoot == "" {
+		return resolvedRead, resolvedWrite
+	}
+	if len(resolvedRead) == 0 {
+		resolvedRead = []string{trimmedRoot}
+	}
+	if len(resolvedWrite) == 0 {
+		resolvedWrite = []string{trimmedRoot}
+	}
+	return resolvedRead, resolvedWrite
 }
 
 func closeExecutionClient(client Client) error {

@@ -25,7 +25,7 @@ mod web_security;
 
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SandboxConfig {
@@ -83,8 +83,8 @@ impl Default for SandboxConfig {
             max_file_write_bytes: 1_048_576,
             max_web_requests: 10,
             max_webpage_bytes: 50 * 1024,
-            allowed_read_paths: default_allowed_paths(),
-            allowed_write_paths: default_allowed_paths(),
+            allowed_read_paths: Vec::new(),
+            allowed_write_paths: Vec::new(),
             blocked_patterns: vec![
                 "*.env".to_string(),
                 "*id_rsa*".to_string(),
@@ -94,41 +94,6 @@ impl Default for SandboxConfig {
         merge_allowed_paths_from_env(&mut config);
         config
     }
-}
-
-fn default_allowed_paths() -> Vec<String> {
-    let mut candidates = Vec::new();
-
-    if let Ok(cwd) = std::env::current_dir() {
-        candidates.push(cwd);
-    }
-
-    if let Some(home) = user_home_dir() {
-        candidates.push(home.clone());
-        candidates.extend(default_media_mounts(&home));
-    }
-
-    normalize_existing_dirs(candidates)
-}
-
-fn user_home_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .filter(|path| path.is_dir())
-}
-
-fn default_media_mounts(home_dir: &Path) -> Vec<PathBuf> {
-    let Some(user_name) = home_dir.file_name().and_then(|name| name.to_str()) else {
-        return Vec::new();
-    };
-
-    let media_root = PathBuf::from("/media").join(user_name);
-    ["Files", "Apps", "App"]
-        .into_iter()
-        .map(|name| media_root.join(name))
-        .filter(|path| path.is_dir())
-        .collect()
 }
 
 fn normalize_existing_dirs(paths: Vec<PathBuf>) -> Vec<String> {
@@ -213,11 +178,7 @@ fn merge_path_lists(mut base: Vec<String>, extra: Vec<String>) -> Vec<String> {
             base.push(value);
         }
     }
-    if base.is_empty() {
-        vec![".".to_string()]
-    } else {
-        base
-    }
+    base
 }
 
 #[derive(Debug, Deserialize, Serialize)]

@@ -261,7 +261,7 @@ function parseSessionTurnDraftPendingQuestion(
   return {
     question_id: requireString(object.question_id, `${path}.question_id`),
     prompt: requireString(object.prompt, `${path}.prompt`),
-    selection_mode: parseOptionalString(object.selection_mode, `${path}.selection_mode`),
+    selection_mode: parseOptionalSelectionMode(object.selection_mode, `${path}.selection_mode`),
     options: object.options === undefined
       ? undefined
       : parseArray(object.options, `${path}.options`, parseAskHumanOption),
@@ -312,6 +312,19 @@ function requireRuntimeSelectionMode(value: unknown, path: string): NonNullable<
     throw new Error(`${path} must be one of ${Array.from(SESSION_RUNTIME_SELECTION_MODES).join(", ")}`);
   }
   return value as NonNullable<SessionRuntimeSelection["mode"]>;
+}
+
+function parseOptionalSelectionMode(
+  value: unknown,
+  path: string,
+): SessionTurnDraftPendingQuestion["selection_mode"] {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "string" || (value !== "single" && value !== "multiple")) {
+    throw new Error(`${path} must be "single" or "multiple"`);
+  }
+  return value;
 }
 
 function requireSessionTurnDraftStatus(value: unknown, path: string): SessionTurnDraftStatus {

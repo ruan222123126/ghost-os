@@ -1,10 +1,10 @@
 package sessionturn
 
 import (
+	"strings"
 	"time"
 
 	"ghost-os/bridge/llm"
-	"ghost-os/bridge/session"
 )
 
 const (
@@ -48,13 +48,7 @@ func buildSessionRuntimeSelectionPayload(selection *SessionRuntimeSelectionInput
 	if selection == nil {
 		return nil
 	}
-	normalized, ok := session.NormalizeRuntimeSelection(session.RuntimeSelection{
-		Runtime:      selection.Runtime,
-		Provider:     selection.Provider,
-		ProviderType: selection.ProviderType,
-		Model:        selection.Model,
-		Mode:         selection.Mode,
-	})
+	normalized, ok := normalizeSessionRuntimeSelectionInput(*selection)
 	if !ok {
 		return nil
 	}
@@ -65,6 +59,31 @@ func buildSessionRuntimeSelectionPayload(selection *SessionRuntimeSelectionInput
 		Model:        normalized.Model,
 		Mode:         normalized.Mode,
 	}
+}
+
+func normalizeSessionRuntimeSelectionInput(
+	input SessionRuntimeSelectionInput,
+) (SessionRuntimeSelectionInput, bool) {
+	selection := SessionRuntimeSelectionInput{
+		Runtime:      strings.ToLower(strings.TrimSpace(input.Runtime)),
+		Provider:     strings.TrimSpace(input.Provider),
+		ProviderType: strings.ToLower(strings.TrimSpace(input.ProviderType)),
+		Model:        strings.TrimSpace(input.Model),
+		Mode:         strings.ToLower(strings.TrimSpace(input.Mode)),
+	}
+	if selection.Runtime == "" {
+		return SessionRuntimeSelectionInput{}, false
+	}
+	if selection.Mode == "" {
+		selection.Mode = "default"
+	}
+	if selection.Provider == "" {
+		selection.Provider = selection.ProviderType
+	}
+	if selection.ProviderType == "" && selection.Runtime == "codex" {
+		selection.ProviderType = "codex"
+	}
+	return selection, true
 }
 
 type IndexedSessionMessageInput struct {

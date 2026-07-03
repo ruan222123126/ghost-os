@@ -1,3 +1,20 @@
+import type {
+  AskHumanOption as SharedAskHumanOption,
+  SessionContentPart as SharedSessionContentPart,
+  SessionDetail as SharedSessionDetail,
+  SessionMessage as SharedSessionMessage,
+  SessionMessagePage as SharedSessionMessagePage,
+  SessionMetadata as SharedSessionMetadata,
+  SessionRuntimeSelection as SharedSessionRuntimeSelection,
+  SessionToolCall as SharedSessionToolCall,
+  SessionToolResult as SharedSessionToolResult,
+  SessionTurnDraft as SharedSessionTurnDraft,
+  SessionTurnDraftPendingQuestion as SharedSessionTurnDraftPendingQuestion,
+  SessionTurnDraftSegment as SharedSessionTurnDraftSegment,
+  SessionTurnDraftTool as SharedSessionTurnDraftTool,
+  TaskRuntimeOverrides as SharedTaskRuntimeOverrides,
+} from "./lib/envelope.generated";
+
 export interface HostProfile {
   productName: string;
   version: string;
@@ -145,6 +162,8 @@ export interface TaskRuntimeOverridesPayload {
   max_turns?: number;
 }
 
+export type TaskRuntimeOverridesContract = SharedTaskRuntimeOverrides;
+
 export interface AgentMessageTaskPayload {
   id: string;
   message: string;
@@ -275,119 +294,30 @@ export interface AgentPayload {
   tools?: MobileToolCard[];
 }
 
-export type SessionMessageRole = "system" | "internal" | "user" | "assistant" | "tool";
-
-export interface SessionContentPart {
-  type: string;
-  text?: string;
-}
-
-export interface SessionToolCall {
-  id: string;
-  name: string;
-  arguments: Record<string, unknown>;
-}
-
-export type SessionToolResultStatus = "success" | "error";
-
-export interface SessionToolResult {
-  status: SessionToolResultStatus;
-  tool: string;
-  trace_id?: string;
-  output?: string;
-  error?: string;
-}
-
-export interface SessionMessage {
-  index: number;
-  role: SessionMessageRole;
-  text?: string;
-  content?: SessionContentPart[];
-  tool_calls?: SessionToolCall[];
-  tool_result?: SessionToolResult | null;
-  tool_call_id?: string;
-  in_progress?: boolean;
-  thinking?: string;
-}
-
-export interface SessionMessagePage {
-  limit: number;
-  before?: number | null;
-  start_index?: number | null;
-  end_index?: number | null;
-  has_more_before: boolean;
-  next_before?: number | null;
-}
+export type SessionMessageRole = SharedSessionMessage["role"];
+export type SessionContentPart = SharedSessionContentPart;
+export type SessionToolCall = SharedSessionToolCall;
+export type SessionToolResultStatus = SharedSessionToolResult["status"];
+export type SessionToolResult = SharedSessionToolResult;
+export type SessionMessage = SharedSessionMessage;
+export type SessionMessagePage = SharedSessionMessagePage;
 
 export interface SessionGetOptions {
   before?: number;
   limit?: number;
 }
 
-export interface SessionMetadata {
-  id: string;
-  title: string;
-  created_at: string;
-  updated_at: string;
-  message_count: number;
-  token_count: number;
-}
-
-export interface AskHumanOption {
-  label: string;
-  allow_custom?: boolean;
-}
-
-export interface SessionRuntimeSelection {
-  runtime: AgentRuntimeType;
-  provider?: string;
-  provider_type?: ProviderType;
-  model?: string;
-  mode?: "default" | "plan";
-}
+export type SessionMetadata = SharedSessionMetadata;
+export type AskHumanOption = SharedAskHumanOption;
+export type SessionRuntimeSelection = SharedSessionRuntimeSelection;
 
 export type SessionTurnDraftStatus = "streaming" | "awaiting_human" | "error";
 
-export interface SessionTurnDraftSegment {
-  id: string;
-  content: string;
-}
-
-export interface SessionTurnDraftTool {
-  id: string;
-  content: string;
-  tool_input?: string;
-  tool_name?: string;
-  tool_status?: string;
-  tool_call_id?: string;
-  trace_id?: string;
-}
-
-export interface SessionTurnDraftPendingQuestion {
-  question_id: string;
-  prompt: string;
-  selection_mode?: string;
-  options?: AskHumanOption[];
-}
-
-export interface SessionTurnDraft {
-  trace_id: string;
-  turn: number;
-  status: SessionTurnDraftStatus;
-  error?: string;
-  pending_questions: SessionTurnDraftPendingQuestion[];
-  assistant_segments: SessionTurnDraftSegment[];
-  thinking_segments: SessionTurnDraftSegment[];
-  tools: SessionTurnDraftTool[];
-  item_order: string[];
-}
-
-export interface SessionDetail extends SessionMetadata {
-  last_runtime_selection?: SessionRuntimeSelection | null;
-  messages: SessionMessage[];
-  page: SessionMessagePage;
-  turn_draft?: SessionTurnDraft | null;
-}
+export type SessionTurnDraftSegment = SharedSessionTurnDraftSegment;
+export type SessionTurnDraftTool = SharedSessionTurnDraftTool;
+export type SessionTurnDraftPendingQuestion = SharedSessionTurnDraftPendingQuestion;
+export type SessionTurnDraft = SharedSessionTurnDraft;
+export type SessionDetail = SharedSessionDetail;
 
 export interface ChatSelectedSkill {
   id: string;
