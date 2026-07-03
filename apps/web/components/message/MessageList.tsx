@@ -1,7 +1,7 @@
 'use client';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { FC } from 'react';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { MessageListRow } from '@/lib/chat-view/types';
 import { useWebLocale } from '@/lib/i18n/provider';
 import { TopLoadingBar } from '@/components/TopLoadingBar';
@@ -67,6 +67,7 @@ export const MessageList: FC<MessageListProps> = ({
   });
   const virtualItems = rowVirtualizer.getVirtualItems();
   const measureMessageRow = rowVirtualizer.measureElement;
+  const rowKeys = useMemo(() => rows.map((row) => row.key), [rows]);
   const layoutSignature = buildMessageListLayoutSignature({
     committedMessages: visibleCommittedMessages,
     latestStreamingThinkingId,
@@ -79,8 +80,14 @@ export const MessageList: FC<MessageListProps> = ({
     visibleMessagesForPostSendOverflow,
     postSendAnchorIndex,
   );
-  const { scrollElementRef, trailingSpacerPx } = useMessageListScroll({
+  const {
+    scrollElementRef,
+    scrollToBottom,
+    showScrollToBottom,
+    trailingSpacerPx,
+  } = useMessageListScroll({
     rowVirtualizer,
+    rowKeys,
     firstVirtualItemIndex: virtualItems[0]?.index ?? null,
     firstVisibleCommittedMessageId: visibleCommittedMessages[0]?.id ?? null,
     hasOlderHistory,
@@ -162,48 +169,64 @@ export const MessageList: FC<MessageListProps> = ({
   }, [hasAssistantText, latestStreamingThinkingId, shouldAutoCollapseLatestThinkingPanel]);
 
   if (rowCount === 0) {
-    return <div ref={scrollElementRef} className="messages is-empty" aria-live="polite" />;
+    return (
+      <div className="messages-shell">
+        <div ref={scrollElementRef} className="messages is-empty" aria-live="polite" />
+      </div>
+    );
   }
   return (
-    <div ref={scrollElementRef} className="messages ui-scroll" aria-live="polite">
-      <div
-        className="messages-viewport"
-        style={{ height: rowVirtualizer.getTotalSize() + trailingSpacerPx }}
-      >
-        {virtualItems.map((virtualItem) => {
-          const row = rows[virtualItem.index];
-          const hasTrailingTool = shouldPlaceAssistantCopyInline({
-            currentRow: row,
-            currentIndex: virtualItem.index,
-            rowCount,
-            getRowAtIndex: (index) => rows[index],
-          });
+    <div className="messages-shell">
+      <div ref={scrollElementRef} className="messages ui-scroll" aria-live="polite">
+        <div
+          className="messages-viewport"
+          style={{ height: rowVirtualizer.getTotalSize() + trailingSpacerPx }}
+        >
+          {virtualItems.map((virtualItem) => {
+            const row = rows[virtualItem.index];
+            const hasTrailingTool = shouldPlaceAssistantCopyInline({
+              currentRow: row,
+              currentIndex: virtualItem.index,
+              rowCount,
+              getRowAtIndex: (index) => rows[index],
+            });
 
-          return (
-            <div
-              key={row.key}
-              data-index={virtualItem.index}
-              ref={measureMessageRow}
-              className="messages-virtual-row"
-              style={{ transform: `translateY(${virtualItem.start}px)` }}
-            >
-              {renderRow(row, {
-                copy,
-                assistantMarkdownEnabled,
-                hasTrailingTool,
-                loading,
-                thinkingStartedAtMs,
-                openToolCards,
-                onAnswerQuestion,
-                onCancelQuestion,
-                onToggleThinkingPanel: handleToggleThinkingPanel,
-                onToggleToolCard: handleToggleToolCard,
-                openThinkingPanels,
-              })}
-            </div>
-          );
-        })}
+            return (
+              <div
+                key={row.key}
+                data-index={virtualItem.index}
+                ref={measureMessageRow}
+                className="messages-virtual-row"
+                style={{ transform: `translateY(${virtualItem.start}px)` }}
+              >
+                {renderRow(row, {
+                  copy,
+                  assistantMarkdownEnabled,
+                  hasTrailingTool,
+                  loading,
+                  thinkingStartedAtMs,
+                  openToolCards,
+                  onAnswerQuestion,
+                  onCancelQuestion,
+                  onToggleThinkingPanel: handleToggleThinkingPanel,
+                  onToggleToolCard: handleToggleToolCard,
+                  openThinkingPanels,
+                })}
+              </div>
+            );
+          })}
+        </div>
       </div>
+      {showScrollToBottom ? (
+        <button
+          type="button"
+          className="messages-scroll-bottom-button"
+          aria-label={copy.chat.scrollToBottom}
+          onClick={scrollToBottom}
+        >
+          <span className="messages-scroll-bottom-icon" aria-hidden="true" />
+        </button>
+      ) : null}
     </div>
   );
 };

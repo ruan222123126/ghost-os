@@ -287,11 +287,21 @@ describe('components/message/messageListScroll', () => {
     expect(historyChanged).not.toBe(base);
   });
 
-  it('disables virtualizer scroll adjustment when auto-follow is off', () => {
+  it('limits virtualizer scroll adjustment to bottom follow or active prepend anchoring', () => {
     expect(shouldAdjustScrollPositionOnItemSizeChange(false)).toBe(false);
     expect(shouldAdjustScrollPositionOnItemSizeChange(true)).toBe(true);
     expect(shouldAdjustScrollPositionOnItemSizeChange(true, 'anchoring')).toBe(false);
     expect(shouldAdjustScrollPositionOnItemSizeChange(true, 'waiting_overflow')).toBe(false);
+    expect(shouldAdjustScrollPositionOnItemSizeChange(false, 'idle', {
+      active: true,
+      itemStartPx: 80,
+      scrollTopPx: 120,
+    })).toBe(true);
+    expect(shouldAdjustScrollPositionOnItemSizeChange(false, 'idle', {
+      active: true,
+      itemStartPx: 160,
+      scrollTopPx: 120,
+    })).toBe(false);
   });
 
   it('detects only appended local user messages as post-send anchors', () => {

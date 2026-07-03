@@ -95,8 +95,23 @@ export function shouldClearPostSendProgrammaticScrollTarget(
 export function shouldAdjustScrollPositionOnItemSizeChange(
   autoFollow: boolean,
   trackingMode: PostSendFollowTrackingState['mode'] = 'idle',
+  prependAnchor?: {
+    active: boolean;
+    itemStartPx: number;
+    scrollTopPx: number;
+  },
 ): boolean {
-  return autoFollow && trackingMode === 'idle';
+  if (trackingMode !== 'idle') {
+    return false;
+  }
+  if (autoFollow) {
+    return true;
+  }
+  if (!prependAnchor?.active) {
+    return false;
+  }
+
+  return prependAnchor.itemStartPx < prependAnchor.scrollTopPx;
 }
 
 export function buildMessageListLayoutSignature(
