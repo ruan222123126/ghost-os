@@ -152,7 +152,7 @@ export const ConversationMessageList = memo(function ConversationMessageList(pro
   }
 
   return (
-    <div className="conversation-list">
+    <div className="conversation-list" data-chat-feed-content="">
       {listItems.map((item) => (
         <ConversationListItemRow
           key={conversationListItemKey(item)}

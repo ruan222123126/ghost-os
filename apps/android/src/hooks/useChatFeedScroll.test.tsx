@@ -180,6 +180,7 @@ describe("useChatFeedScroll", () => {
     flushRaf();
 
     expect(metrics.scrollTop).toBe(300);
+    expect(feedElement().scrollTo).not.toHaveBeenCalled();
   });
 
   it("preserves the visible message anchor when total feed height changes elsewhere", async () => {
@@ -187,6 +188,7 @@ describe("useChatFeedScroll", () => {
     const loadOlderHistory = vi.fn(async () => undefined);
     const latest = message("session-1:1:user", "user");
     const older = message("session-1:0:user", "user");
+    const loadedMessages = [older, latest];
     const { rerender } = render(
       <ScrollHarness
         feedItems={[feedItem("latest", 0, 80)]}
@@ -211,13 +213,122 @@ describe("useChatFeedScroll", () => {
           feedItem("latest", 260, 340),
         ]}
         hasOlderHistory={false}
-        messages={[older, latest]}
+        messages={loadedMessages}
         metrics={metrics}
         onLoadOlderHistory={loadOlderHistory}
       />,
     );
 
     expect(metrics.scrollTop).toBe(260);
+    expect(feedElement().scrollTo).not.toHaveBeenCalled();
+  });
+
+  it("keeps the visible anchor stable when prepended history resizes after render", async () => {
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 0 });
+    const loadOlderHistory = vi.fn(async () => undefined);
+    const latest = message("session-1:1:user", "user");
+    const older = message("session-1:0:user", "user");
+    const loadedMessages = [older, latest];
+    const { rerender } = render(
+      <ScrollHarness
+        feedItems={[feedItem("latest", 0, 80)]}
+        hasOlderHistory
+        messages={[latest]}
+        metrics={metrics}
+        onLoadOlderHistory={loadOlderHistory}
+      />,
+    );
+    vi.mocked(feedElement().scrollTo).mockClear();
+    metrics.scrollTop = 0;
+
+    fireEvent.scroll(feedElement());
+
+    metrics.scrollHeight = 1300;
+    rerender(
+      <ScrollHarness
+        feedItems={[
+          feedItem("older", 0, 220),
+          feedItem("latest", 260, 340),
+        ]}
+        hasOlderHistory={false}
+        messages={loadedMessages}
+        metrics={metrics}
+        onLoadOlderHistory={loadOlderHistory}
+      />,
+    );
+
+    expect(metrics.scrollTop).toBe(260);
+
+    metrics.scrollHeight = 1420;
+    rerender(
+      <ScrollHarness
+        feedItems={[
+          feedItem("older", -260, 80),
+          feedItem("latest", 120, 200),
+        ]}
+        hasOlderHistory={false}
+        messages={loadedMessages}
+        metrics={metrics}
+        onLoadOlderHistory={loadOlderHistory}
+      />,
+    );
+    notifyResize(feedContentElement());
+
+    expect(metrics.scrollTop).toBe(380);
+  });
+
+  it("keeps the older-history anchor while the load request is still pending", async () => {
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 0 });
+    const loadOlderHistory = vi.fn(() => new Promise<void>(() => undefined));
+    const latest = message("session-1:1:user", "user");
+    const older = message("session-1:0:user", "user");
+    const loadedMessages = [older, latest];
+    const { rerender } = render(
+      <ScrollHarness
+        feedItems={[feedItem("latest", 0, 80)]}
+        hasOlderHistory
+        messages={[latest]}
+        metrics={metrics}
+        onLoadOlderHistory={loadOlderHistory}
+      />,
+    );
+    vi.mocked(feedElement().scrollTo).mockClear();
+    metrics.scrollTop = 0;
+
+    fireEvent.scroll(feedElement());
+
+    expect(loadOlderHistory).toHaveBeenCalledTimes(1);
+
+    metrics.scrollHeight = 1100;
+    rerender(
+      <ScrollHarness
+        feedItems={[feedItem("latest", 0, 80)]}
+        hasOlderHistory
+        loadingOlderHistory
+        messages={[latest]}
+        metrics={metrics}
+        onLoadOlderHistory={loadOlderHistory}
+      />,
+    );
+    notifyResize(feedContentElement());
+    flushRaf();
+
+    metrics.scrollHeight = 1360;
+    rerender(
+      <ScrollHarness
+        feedItems={[
+          feedItem("older", 0, 220),
+          feedItem("latest", 260, 340),
+        ]}
+        hasOlderHistory={false}
+        messages={loadedMessages}
+        metrics={metrics}
+        onLoadOlderHistory={loadOlderHistory}
+      />,
+    );
+
+    expect(metrics.scrollTop).toBe(260);
+    expect(feedElement().scrollTo).not.toHaveBeenCalled();
   });
 
   it("does not apply height-delta compensation when the visible anchor is already stable", async () => {
@@ -364,18 +475,20 @@ function ScrollHarness(props: {
       }}
       onScroll={scroll.handleScroll}
     >
-      {props.feedItems?.map((item) => (
-        <div
-          key={item.id}
-          ref={(node) => {
-            if (!node) {
-              return;
-            }
-            applyFeedItemMetrics(node, item);
-          }}
-          data-chat-feed-item=""
-        />
-      ))}
+      <div data-testid="feed-content" data-chat-feed-content="">
+        {props.feedItems?.map((item) => (
+          <div
+            key={item.id}
+            ref={(node) => {
+              if (!node) {
+                return;
+              }
+              applyFeedItemMetrics(node, item);
+            }}
+            data-chat-feed-item=""
+          />
+        ))}
+      </div>
     </main>
   );
 }
@@ -461,6 +574,10 @@ function postSendRequest(token = 1): PostSendScrollRequest {
 
 function feedElement(): HTMLElement & { scrollTo: ReturnType<typeof vi.fn> } {
   return screen.getByTestId("feed") as HTMLElement & { scrollTo: ReturnType<typeof vi.fn> };
+}
+
+function feedContentElement(): HTMLElement {
+  return screen.getByTestId("feed-content");
 }
 
 function latestSnapshot(): HookSnapshot {

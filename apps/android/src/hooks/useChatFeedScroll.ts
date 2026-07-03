@@ -3,6 +3,8 @@ import type { AgentPayload, MobileConversationMessage, StatusMessage } from "../
 
 const SCROLL_DOWN_THRESHOLD_PX = 50;
 const LOAD_OLDER_THRESHOLD_PX = 32;
+const OLDER_LOAD_STABILIZATION_FRAMES = 2;
+const CHAT_FEED_CONTENT_SELECTOR = "[data-chat-feed-content]";
 const CHAT_FEED_ITEM_SELECTOR = "[data-chat-feed-item]";
 
 interface UseChatFeedScrollOptions {
@@ -23,6 +25,7 @@ interface PostSendScrollRequest {
 interface OlderLoadAnchor {
   element: HTMLElement | null;
   elementTop: number | null;
+  stabilizationFramesRemaining: number;
   scrollHeight: number;
   scrollTop: number;
 }
@@ -33,6 +36,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   const autoFollowRef = useRef(true);
   const olderLoadPendingRef = useRef(false);
   const olderLoadAnchorRef = useRef<OlderLoadAnchor | null>(null);
+  const olderLoadStabilizationFrameRef = useRef<number | null>(null);
   const previousSessionIdRef = useRef<string | undefined>(undefined);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const reply = options.reply;
@@ -46,7 +50,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
 
     previousSessionIdRef.current = currentSessionId;
     olderLoadPendingRef.current = false;
-    olderLoadAnchorRef.current = null;
+    clearOlderLoadAnchor();
     autoFollowRef.current = true;
     setShowScrollDown(false);
     if (scrollRef.current) {
@@ -79,9 +83,17 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   useLayoutEffect(() => {
     if (!options.loadingOlderHistory && olderLoadPendingRef.current) {
       olderLoadPendingRef.current = false;
-      olderLoadAnchorRef.current = null;
+      if (!restoreOlderLoadAnchor()) {
+        clearOlderLoadAnchor();
+      }
     }
   }, [options.loadingOlderHistory]);
+
+  useLayoutEffect(() => {
+    return () => {
+      clearOlderLoadAnchor();
+    };
+  }, []);
 
   useLayoutEffect(() => {
     const element = scrollRef.current;
@@ -90,6 +102,12 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     }
 
     const resizeObserver = new ResizeObserver(() => {
+      if (olderLoadAnchorRef.current && options.loadingOlderHistory) {
+        return;
+      }
+      if (restoreOlderLoadAnchor()) {
+        return;
+      }
       if (autoFollowRef.current && (options.messages.length > 0 || hasReply)) {
         scrollToBottom("auto");
         return;
@@ -101,10 +119,14 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     });
 
     resizeObserver.observe(element);
+    const contentElement = element.querySelector<HTMLElement>(CHAT_FEED_CONTENT_SELECTOR);
+    if (contentElement) {
+      resizeObserver.observe(contentElement);
+    }
     return () => {
       resizeObserver.disconnect();
     };
-  }, [hasReply, options.messages.length, options.statusTone, reply]);
+  }, [hasReply, options.loadingOlderHistory, options.messages.length, options.statusTone, reply]);
 
   function handleScroll(): void {
     const element = scrollRef.current;
@@ -140,10 +162,6 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     }
   }
 
-  function scrollToAnchor(anchorTop: number, behavior: ScrollBehavior): void {
-    scrollRef.current?.scrollTo({ top: anchorTop, behavior });
-  }
-
   function maybeLoadOlderHistory(element: HTMLElement): void {
     if (
       !options.hasOlderHistory
@@ -159,13 +177,14 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     olderLoadPendingRef.current = true;
     olderLoadAnchorRef.current = {
       ...captureVisibleAnchor(element),
+      stabilizationFramesRemaining: OLDER_LOAD_STABILIZATION_FRAMES,
       scrollHeight: element.scrollHeight,
       scrollTop: element.scrollTop,
     };
     autoFollowRef.current = false;
     void options.onLoadOlderHistory().catch(() => {
       olderLoadPendingRef.current = false;
-      olderLoadAnchorRef.current = null;
+      clearOlderLoadAnchor();
     });
   }
 
@@ -176,14 +195,52 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
       return false;
     }
 
+    const previousScrollTop = element.scrollTop;
+    const restored = anchor.scrollHeight === element.scrollHeight && anchor.scrollTop === element.scrollTop
+      ? true
+      : restoreAnchorPosition(element, anchor);
+    if (!restored) {
+      return false;
+    }
+
+    autoFollowRef.current = false;
+    setShowScrollDown(shouldShowScrollDown(element));
+    const stabilizationFramesRemaining = anchor.scrollHeight !== element.scrollHeight
+      || Math.abs(element.scrollTop - previousScrollTop) > 0.5
+      ? OLDER_LOAD_STABILIZATION_FRAMES
+      : anchor.stabilizationFramesRemaining;
+
+    if (options.loadingOlderHistory) {
+      olderLoadAnchorRef.current = {
+        ...anchor,
+        stabilizationFramesRemaining,
+        scrollHeight: element.scrollHeight,
+        scrollTop: element.scrollTop,
+      };
+      return true;
+    }
+
+    if (stabilizationFramesRemaining > 0) {
+      olderLoadAnchorRef.current = {
+        ...anchor,
+        stabilizationFramesRemaining,
+        scrollHeight: element.scrollHeight,
+        scrollTop: element.scrollTop,
+      };
+      scheduleOlderLoadAnchorStabilization();
+      return true;
+    }
+
+    clearOlderLoadAnchor();
+    return true;
+  }
+
+  function restoreAnchorPosition(element: HTMLElement, anchor: OlderLoadAnchor): boolean {
     if (anchor.element && anchor.element.isConnected && anchor.elementTop !== null) {
       const topDelta = anchor.element.getBoundingClientRect().top - anchor.elementTop;
-      olderLoadAnchorRef.current = null;
-      autoFollowRef.current = false;
       if (Math.abs(topDelta) > 0.5) {
-        scrollToAnchor(element.scrollTop + topDelta, "auto");
+        setScrollTopInstant(element, element.scrollTop + topDelta);
       }
-      setShowScrollDown(shouldShowScrollDown(element));
       return true;
     }
     if (element.scrollHeight <= anchor.scrollHeight) {
@@ -191,11 +248,40 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     }
 
     const delta = element.scrollHeight - anchor.scrollHeight;
-    olderLoadAnchorRef.current = null;
-    autoFollowRef.current = false;
-    scrollToAnchor(anchor.scrollTop + delta, "auto");
-    setShowScrollDown(shouldShowScrollDown(element));
+    setScrollTopInstant(element, anchor.scrollTop + delta);
     return true;
+  }
+
+  function scheduleOlderLoadAnchorStabilization(): void {
+    if (olderLoadStabilizationFrameRef.current !== null) {
+      return;
+    }
+
+    olderLoadStabilizationFrameRef.current = window.requestAnimationFrame(() => {
+      olderLoadStabilizationFrameRef.current = null;
+      const anchor = olderLoadAnchorRef.current;
+      if (!anchor) {
+        return;
+      }
+
+      olderLoadAnchorRef.current = {
+        ...anchor,
+        stabilizationFramesRemaining: Math.max(anchor.stabilizationFramesRemaining - 1, 0),
+      };
+      if (!restoreOlderLoadAnchor()) {
+        clearOlderLoadAnchor();
+      }
+    });
+  }
+
+  function clearOlderLoadAnchor(): void {
+    olderLoadAnchorRef.current = null;
+    if (olderLoadStabilizationFrameRef.current === null) {
+      return;
+    }
+
+    window.cancelAnimationFrame(olderLoadStabilizationFrameRef.current);
+    olderLoadStabilizationFrameRef.current = null;
   }
 
   return {
@@ -205,6 +291,10 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     scrollToBottom,
     showScrollDown,
   };
+}
+
+function setScrollTopInstant(element: HTMLElement, scrollTop: number): void {
+  element.scrollTop = scrollTop;
 }
 
 function captureVisibleAnchor(element: HTMLElement): Pick<OlderLoadAnchor, "element" | "elementTop"> {
