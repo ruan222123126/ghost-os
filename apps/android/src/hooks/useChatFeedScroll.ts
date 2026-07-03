@@ -37,6 +37,9 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   const olderLoadPendingRef = useRef(false);
   const olderLoadAnchorRef = useRef<OlderLoadAnchor | null>(null);
   const olderLoadStabilizationFrameRef = useRef<number | null>(null);
+  const pendingBottomScrollFrameRef = useRef<number | null>(null);
+  const pendingBottomScrollBehaviorRef = useRef<ScrollBehavior>("auto");
+  const pendingBottomScrollTokenRef = useRef(0);
   const previousSessionIdRef = useRef<string | undefined>(undefined);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const reply = options.reply;
@@ -76,7 +79,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
       return;
     }
     if (autoFollowRef.current && (options.messages.length > 0 || hasReply)) {
-      scrollToBottom(options.statusTone === "loading" ? "auto" : "smooth");
+      scheduleScrollToBottom(options.statusTone === "loading" ? "auto" : "smooth");
     }
   }, [hasReply, options.messages, options.statusTone, reply]);
 
@@ -92,6 +95,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   useLayoutEffect(() => {
     return () => {
       clearOlderLoadAnchor();
+      cancelPendingBottomScroll();
     };
   }, []);
 
@@ -109,7 +113,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
         return;
       }
       if (autoFollowRef.current && (options.messages.length > 0 || hasReply)) {
-        scrollToBottom("auto");
+        scheduleScrollToBottom("auto");
         return;
       }
 
@@ -134,6 +138,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
       return;
     }
 
+    cancelPendingBottomScroll();
     maybeLoadOlderHistory(element);
     if (olderLoadAnchorRef.current || options.loadingOlderHistory) {
       autoFollowRef.current = false;
@@ -152,6 +157,34 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   }
 
   function scrollToBottom(behavior: ScrollBehavior = "smooth"): void {
+    cancelPendingBottomScroll();
+    commitScrollToBottom(behavior);
+  }
+
+  function scheduleScrollToBottom(behavior: ScrollBehavior): void {
+    autoFollowRef.current = true;
+    setShowScrollDown(false);
+    pendingBottomScrollBehaviorRef.current = resolvePendingBottomScrollBehavior(
+      pendingBottomScrollBehaviorRef.current,
+      behavior,
+    );
+    if (pendingBottomScrollFrameRef.current !== null) {
+      return;
+    }
+
+    const scheduleToken = pendingBottomScrollTokenRef.current + 1;
+    pendingBottomScrollTokenRef.current = scheduleToken;
+    pendingBottomScrollFrameRef.current = window.requestAnimationFrame(() => {
+      if (pendingBottomScrollTokenRef.current !== scheduleToken) {
+        return;
+      }
+      pendingBottomScrollFrameRef.current = null;
+      commitScrollToBottom(pendingBottomScrollBehaviorRef.current);
+      pendingBottomScrollBehaviorRef.current = "auto";
+    });
+  }
+
+  function commitScrollToBottom(behavior: ScrollBehavior): void {
     autoFollowRef.current = true;
     setShowScrollDown(false);
     if (scrollRef.current) {
@@ -160,6 +193,16 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
         behavior,
       });
     }
+  }
+
+  function cancelPendingBottomScroll(): void {
+    if (pendingBottomScrollFrameRef.current === null) {
+      return;
+    }
+    window.cancelAnimationFrame(pendingBottomScrollFrameRef.current);
+    pendingBottomScrollFrameRef.current = null;
+    pendingBottomScrollBehaviorRef.current = "auto";
+    pendingBottomScrollTokenRef.current += 1;
   }
 
   function maybeLoadOlderHistory(element: HTMLElement): void {
@@ -182,6 +225,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
       scrollTop: element.scrollTop,
     };
     autoFollowRef.current = false;
+    cancelPendingBottomScroll();
     void options.onLoadOlderHistory().catch(() => {
       olderLoadPendingRef.current = false;
       clearOlderLoadAnchor();
@@ -295,6 +339,13 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
 
 function setScrollTopInstant(element: HTMLElement, scrollTop: number): void {
   element.scrollTop = scrollTop;
+}
+
+function resolvePendingBottomScrollBehavior(previous: ScrollBehavior, next: ScrollBehavior): ScrollBehavior {
+  if (previous === "auto" || next === "auto") {
+    return "auto";
+  }
+  return next;
 }
 
 function captureVisibleAnchor(element: HTMLElement): Pick<OlderLoadAnchor, "element" | "elementTop"> {

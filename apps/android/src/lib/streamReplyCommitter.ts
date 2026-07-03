@@ -1,5 +1,8 @@
 const FALLBACK_FRAME_DELAY_MS = 16;
 const MIN_STREAM_COMMIT_INTERVAL_MS = 50;
+const MOBILE_STREAM_COMMIT_INTERVAL_MS = 80;
+const BACKGROUND_STREAM_COMMIT_INTERVAL_MS = 250;
+const LOW_CORE_COUNT = 4;
 
 export interface StreamReplyCommitter {
   cancel: () => void;
@@ -119,8 +122,25 @@ export function createStreamReplyCommitter(): StreamReplyCommitter {
     if (lastCommitAtMs === 0) {
       return 0;
     }
-    return Math.max(0, MIN_STREAM_COMMIT_INTERVAL_MS - (Date.now() - lastCommitAtMs));
+    return Math.max(0, resolveStreamCommitIntervalMs() - (Date.now() - lastCommitAtMs));
   }
+}
+
+function resolveStreamCommitIntervalMs(): number {
+  if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+    return BACKGROUND_STREAM_COMMIT_INTERVAL_MS;
+  }
+  if (isConstrainedMobileRuntime()) {
+    return MOBILE_STREAM_COMMIT_INTERVAL_MS;
+  }
+  return MIN_STREAM_COMMIT_INTERVAL_MS;
+}
+
+function isConstrainedMobileRuntime(): boolean {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+  return navigator.maxTouchPoints > 0 || (navigator.hardwareConcurrency ?? LOW_CORE_COUNT + 1) <= LOW_CORE_COUNT;
 }
 
 export function enqueueStreamReplyCommit(

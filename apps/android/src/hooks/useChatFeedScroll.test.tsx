@@ -92,6 +92,7 @@ describe("useChatFeedScroll", () => {
         statusTone="loading"
       />,
     );
+    flushRaf();
 
     expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 1240, behavior: "auto" });
   });
@@ -389,6 +390,7 @@ describe("useChatFeedScroll", () => {
         sessionId="session-2"
       />,
     );
+    flushRaf();
 
     expect(metrics.scrollTop).toBe(1200);
   });
@@ -407,6 +409,7 @@ describe("useChatFeedScroll", () => {
 
     metrics.scrollHeight = 1120;
     notifyResize(feedElement());
+    flushRaf();
 
     expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 1120, behavior: "auto" });
   });

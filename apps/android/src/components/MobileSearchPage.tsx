@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { RefObject } from "react";
 import { Loader2 } from "lucide-react";
 import type { SidebarHistoryItem } from "./MobileChatHome";
 import type { SessionMetadata } from "../mobileTypes";
@@ -8,6 +9,8 @@ import { UiIcon } from "./mobileChat/icons";
 import "./MobileSearchPage.css";
 
 const SEARCH_DELAY_MS = 500;
+const SEARCH_RESULT_VISIBLE_BATCH = 30;
+const SEARCH_RESULT_LOAD_MORE_THRESHOLD_PX = 180;
 
 interface MobileSearchPageProps {
   open: boolean;
@@ -24,6 +27,7 @@ export function MobileSearchPage(props: MobileSearchPageProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
   const searchRunIdRef = useRef(0);
+  const searchBodyRef = useRef<HTMLDivElement | null>(null);
   const normalizedSearchText = searchText.trim().toLocaleLowerCase("zh-CN");
   const sortedHistoryItems = useMemo(
     () => [...historyItems].sort(compareHistoryItems),
@@ -34,6 +38,20 @@ export function MobileSearchPage(props: MobileSearchPageProps) {
     [historyItems],
   );
   const [results, setResults] = useState(sortedHistoryItems);
+  const resultsResetKey = useMemo(
+    () => `${open ? "open" : "closed"}:${normalizedSearchText}:${results.length}:${results[0]?.id ?? ""}`,
+    [normalizedSearchText, open, results],
+  );
+  const [visibleResultCount, handleResultsScroll] = useVisibleSearchResultCount({
+    open,
+    resetKey: resultsResetKey,
+    resultsCount: results.length,
+    scrollElementRef: searchBodyRef,
+  });
+  const visibleResults = useMemo(
+    () => results.slice(0, visibleResultCount),
+    [results, visibleResultCount],
+  );
 
   useEffect(() => {
     if (!open) {
@@ -132,7 +150,7 @@ export function MobileSearchPage(props: MobileSearchPageProps) {
         </button>
       </header>
 
-      <div className="mobile-search-body">
+      <div className="mobile-search-body" ref={searchBodyRef} onScroll={handleResultsScroll}>
         {isLoading ? (
           <div className="mobile-search-loading" role="status" aria-label="正在搜索">
             <Loader2 aria-hidden="true" />
@@ -142,7 +160,7 @@ export function MobileSearchPage(props: MobileSearchPageProps) {
             {!normalizedSearchText ? <h2>近期对话</h2> : null}
             {results.length > 0 ? (
               <ul>
-                {results.map((item) => (
+                {visibleResults.map((item) => (
                   <li key={item.id}>
                     <button type="button" onClick={() => selectHistory(item.id)}>
                       <span>{item.title}</span>
@@ -161,6 +179,82 @@ export function MobileSearchPage(props: MobileSearchPageProps) {
       </div>
     </section>
   );
+}
+
+function useVisibleSearchResultCount(options: {
+  open: boolean;
+  resetKey: string;
+  resultsCount: number;
+  scrollElementRef: RefObject<HTMLDivElement | null>;
+}): [number, () => void] {
+  const { open, resetKey, resultsCount, scrollElementRef } = options;
+  const [visibleCount, setVisibleCount] = useState(() => resolveInitialSearchResultCount(resultsCount));
+  const scrollFrameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setVisibleCount(resolveInitialSearchResultCount(resultsCount));
+    const scrollElement = scrollElementRef.current;
+    if (scrollElement) {
+      scrollElement.scrollTop = 0;
+    }
+  }, [resetKey, resultsCount, scrollElementRef]);
+
+  useEffect(() => {
+    return () => {
+      if (scrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollFrameRef.current);
+      }
+    };
+  }, []);
+
+  function handleScroll(): void {
+    if (!open || scrollFrameRef.current !== null) {
+      return;
+    }
+
+    scrollFrameRef.current = window.requestAnimationFrame(() => {
+      scrollFrameRef.current = null;
+      const scrollElement = scrollElementRef.current;
+      if (!shouldLoadMoreSearchResults(scrollElement, visibleCount, resultsCount)) {
+        return;
+      }
+      setVisibleCount((current) => resolveNextSearchResultCount(current, resultsCount));
+    });
+  }
+
+  return [visibleCount, handleScroll];
+}
+
+function shouldLoadMoreSearchResults(
+  scrollElement: HTMLDivElement | null,
+  visibleCount: number,
+  resultsCount: number,
+): boolean {
+  if (
+    !scrollElement
+    || visibleCount >= resultsCount
+    || scrollElement.clientHeight <= 0
+    || scrollElement.scrollHeight <= 0
+  ) {
+    return false;
+  }
+
+  return scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight
+    <= SEARCH_RESULT_LOAD_MORE_THRESHOLD_PX;
+}
+
+function resolveInitialSearchResultCount(resultsCount: number): number {
+  if (resultsCount <= 0) {
+    return 0;
+  }
+  return Math.min(resultsCount, SEARCH_RESULT_VISIBLE_BATCH);
+}
+
+function resolveNextSearchResultCount(current: number, resultsCount: number): number {
+  if (current >= resultsCount) {
+    return current;
+  }
+  return Math.min(resultsCount, current + SEARCH_RESULT_VISIBLE_BATCH);
 }
 
 function sessionMetadataToHistoryItem(
