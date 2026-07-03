@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   appendStoredMobileMessages,
   loadPersistedMobileConversations,
+  loadStoredLastActiveMobileSessionId,
   loadStoredMobileConversations,
   savePersistedMobileConversations,
+  saveStoredLastActiveMobileSessionId,
   saveStoredMobileConversations,
   upsertStoredMobileConversation,
 } from "../lib/mobileSessionStorage";
@@ -146,6 +148,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
   const [homeMessages, setHomeMessages] = useState<MobileConversationMessage[]>([]);
   const [homeReply, setHomeReply] = useState<AgentPayload>();
   const [homeRun, setHomeRun] = useState<MobileSessionRunState>(() => createIdleRunState());
+  const [lastActiveSessionId, setLastActiveSessionId] = useState(() => loadStoredLastActiveMobileSessionId());
   const [sessionViews, setSessionViews] = useState<Record<string, MobileSessionView>>({});
   const [storedConversations, setStoredConversations] = useState<StoredMobileConversation[]>(() => initialStoredConversations());
   const [storageLoaded, setStorageLoaded] = useState(() => !hasTauriRuntime());
@@ -154,6 +157,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     useState<StatusMessage>(PERSIST_DISABLED_STATUS);
   const activeSessionIdRef = useRef<string | undefined>(undefined);
   const postSendScrollTokenRef = useRef(0);
+  const lastActiveSessionRestoreAttemptedRef = useRef(false);
   const stoppingRunKeysRef = useRef<Set<string>>(new Set());
   const sessionViewsRef = useRef<Record<string, MobileSessionView>>(sessionViews);
   const storedConversationsRef = useRef<StoredMobileConversation[]>(storedConversations);
@@ -224,6 +228,27 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     options.sessions,
     options.sessionsLoaded,
     sessionViews,
+    storageLoaded,
+  ]);
+
+  useEffect(() => {
+    if (
+      lastActiveSessionRestoreAttemptedRef.current
+      || activeSessionIdRef.current
+      || !lastActiveSessionId
+      || !options.bridgeConnected
+      || !options.sessionsLoaded
+      || !storageLoaded
+    ) {
+      return;
+    }
+
+    lastActiveSessionRestoreAttemptedRef.current = true;
+    void selectSession(lastActiveSessionId);
+  }, [
+    lastActiveSessionId,
+    options.bridgeConnected,
+    options.sessionsLoaded,
     storageLoaded,
   ]);
 
@@ -546,8 +571,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       : shouldLoadBridgeSnapshot
       ? createRunningRunState(undefined, undefined, SESSION_MESSAGES_LOADING_STATUS_TEXT)
       : existing?.run ?? createIdleRunState(stored ? SESSION_MESSAGES_LOADED_STATUS_TEXT : SESSION_MESSAGES_LOADING_STATUS_TEXT);
-    activeSessionIdRef.current = trimmedSessionId;
-    setActiveSessionId(trimmedSessionId);
+    setActiveSession(trimmedSessionId);
     setHomeReply(undefined);
     setHomeRun(createIdleRunState());
     setSessionViews((current) =>
@@ -673,8 +697,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
 
   function startNewSession(): void {
     deactivateSessionView(activeSessionIdRef.current);
-    activeSessionIdRef.current = undefined;
-    setActiveSessionId(undefined);
+    setActiveSession(undefined);
     setHomeMessages([]);
     setHomeReply(undefined);
     setHomeRun(createIdleRunState("新会话"));
@@ -683,8 +706,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
 
   function clearCurrentConversation(): void {
     deactivateSessionView(activeSessionIdRef.current);
-    activeSessionIdRef.current = undefined;
-    setActiveSessionId(undefined);
+    setActiveSession(undefined);
     setHomeMessages([]);
     setHomeReply(undefined);
     setHomeRun(createIdleRunState("本地消息已清空"));
@@ -882,8 +904,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
   ): void {
     const normalizedMessages = normalizeConversationSessionIds(messages, sessionId);
     if (input.activate) {
-      activeSessionIdRef.current = sessionId;
-      setActiveSessionId(sessionId);
+      setActiveSession(sessionId);
       setHomeMessages([]);
       setHomeReply(undefined);
       setHomeRun(createIdleRunState());
@@ -975,6 +996,14 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       saveConversationsInBackground(next);
       return next;
     });
+  }
+
+  function setActiveSession(sessionId: string | undefined): void {
+    const trimmedSessionId = sessionId?.trim() || undefined;
+    activeSessionIdRef.current = trimmedSessionId;
+    setActiveSessionId(trimmedSessionId);
+    setLastActiveSessionId(trimmedSessionId || "");
+    saveStoredLastActiveMobileSessionId(trimmedSessionId);
   }
 
   async function syncLocalTurnToBridge(

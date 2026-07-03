@@ -9,6 +9,7 @@ import type {
 import { hasTauriRuntime } from "./bridgeBus";
 
 export const MOBILE_CONVERSATIONS_STORAGE_KEY = "ghost-os-mobile.conversations.v1";
+export const MOBILE_LAST_ACTIVE_SESSION_STORAGE_KEY = "ghost-os-mobile.lastActiveSessionId.v1";
 
 interface ConversationUpsert {
   bridgeMessageCount?: number;
@@ -45,6 +46,19 @@ export async function loadPersistedMobileConversations(): Promise<StoredMobileCo
 
 export function saveStoredMobileConversations(conversations: StoredMobileConversation[]): void {
   window.localStorage.setItem(MOBILE_CONVERSATIONS_STORAGE_KEY, JSON.stringify(conversations));
+}
+
+export function loadStoredLastActiveMobileSessionId(): string {
+  return window.localStorage.getItem(MOBILE_LAST_ACTIVE_SESSION_STORAGE_KEY)?.trim() || "";
+}
+
+export function saveStoredLastActiveMobileSessionId(sessionId: string | undefined): void {
+  const trimmedSessionId = sessionId?.trim() || "";
+  if (!trimmedSessionId) {
+    window.localStorage.removeItem(MOBILE_LAST_ACTIVE_SESSION_STORAGE_KEY);
+    return;
+  }
+  window.localStorage.setItem(MOBILE_LAST_ACTIVE_SESSION_STORAGE_KEY, trimmedSessionId);
 }
 
 export async function savePersistedMobileConversations(conversations: StoredMobileConversation[]): Promise<void> {

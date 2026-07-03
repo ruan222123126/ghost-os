@@ -7,6 +7,7 @@ import {
   MOBILE_PERSISTED_CONVERSATION_LIMIT,
   MOBILE_PERSISTED_SESSION_PAGE_LIMIT,
 } from "../lib/mobileSessionLimits";
+import { MOBILE_LAST_ACTIVE_SESSION_STORAGE_KEY } from "../lib/mobileSessionStorage";
 import { buildAgentMessageWithSelectedSkill } from "../lib/selectedSkillMessage";
 import type {
   AgentPayload,
@@ -47,6 +48,7 @@ describe("useMobileSessions", () => {
     });
     expect(result.current.historyItems[0]).toMatchObject({ id: "session-1", title: "first task" });
     expect(loadStored()[0]?.title).toBe("first task");
+    expect(window.localStorage.getItem(MOBILE_LAST_ACTIVE_SESSION_STORAGE_KEY)).toBe("session-1");
   });
 
   it("sends selected skill metadata and keeps the selected skill on the local user message", async () => {
@@ -91,6 +93,7 @@ describe("useMobileSessions", () => {
     });
     expect(result.current.activeSessionId).toBe("session-1");
     expect(result.current.canSend).toBe(false);
+    expect(window.localStorage.getItem(MOBILE_LAST_ACTIVE_SESSION_STORAGE_KEY)).toBe("session-1");
 
     rerender({
       bridgeConnected: true,
@@ -131,6 +134,70 @@ describe("useMobileSessions", () => {
       messages: [expect.objectContaining({ role: "user", sessionId: "session-1", text: "loaded" })],
       title: "Bridge title",
     });
+    expect(window.localStorage.getItem(MOBILE_LAST_ACTIVE_SESSION_STORAGE_KEY)).toBe("session-1");
+  });
+
+  it("auto-selects the last active session after Bridge sessions load", async () => {
+    window.localStorage.setItem(MOBILE_LAST_ACTIVE_SESSION_STORAGE_KEY, "session-1");
+    const getSession = vi.fn(async (sessionId: string) => sessionDetail(sessionId));
+    const { result } = renderMobileSessions({
+      getSession,
+      sessions: [session("session-1", "Bridge title")],
+      sessionsLoaded: true,
+    });
+
+    await waitFor(() => expect(result.current.activeMessages[0]?.text).toBe("loaded"));
+
+    expect(getSession).toHaveBeenCalledWith("session-1");
+    expect(result.current.activeMessages[0]).toMatchObject({
+      role: "user",
+      sessionId: "session-1",
+      text: "loaded",
+    });
+  });
+
+  it("waits for Bridge sessions to load before restoring the last active session", async () => {
+    window.localStorage.setItem(MOBILE_LAST_ACTIVE_SESSION_STORAGE_KEY, "session-1");
+    const getSession = vi.fn(async (sessionId: string) => sessionDetail(sessionId));
+    const { result, rerender } = renderMobileSessions({
+      getSession,
+      sessions: [],
+      sessionsLoaded: false,
+    });
+
+    expect(result.current.activeSessionId).toBeUndefined();
+    expect(getSession).not.toHaveBeenCalled();
+
+    rerender({
+      bridgeConnected: true,
+      getFullSession: vi.fn(async (sessionId: string) => sessionDetail(sessionId)),
+      getSession,
+      pinnedHistoryIds: [],
+      persistComputerSessionsEnabled: false,
+      sendAgentMessage: vi.fn(async () => ({ ok: false })),
+      sessions: [session("session-1", "Bridge title")],
+      sessionsLoaded: true,
+      stopAgentRun: vi.fn(async () => ({ ok: true, status: "stopped" as const })),
+    });
+
+    await waitFor(() => expect(result.current.activeSessionId).toBe("session-1"));
+    expect(getSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears the last active session when starting a new session", async () => {
+    window.localStorage.setItem(MOBILE_LAST_ACTIVE_SESSION_STORAGE_KEY, "session-1");
+    const { result } = renderMobileSessions({
+      sessions: [session("session-1", "Bridge title")],
+      sessionsLoaded: true,
+    });
+
+    await waitFor(() => expect(result.current.activeSessionId).toBe("session-1"));
+    act(() => {
+      result.current.startNewSession();
+    });
+
+    expect(result.current.activeSessionId).toBeUndefined();
+    expect(window.localStorage.getItem(MOBILE_LAST_ACTIVE_SESSION_STORAGE_KEY)).toBeNull();
   });
 
   it("shows a loading state and waits for the latest Bridge page when selecting cached history", async () => {
