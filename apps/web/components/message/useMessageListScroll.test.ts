@@ -4,6 +4,10 @@ import TestRenderer, { act } from 'react-test-renderer';
 import { useMessageListScroll } from './useMessageListScroll';
 
 describe('components/message/useMessageListScroll', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it('starts loaded history at the bottom without immediately loading older messages', async () => {
     const scrollElement = createScrollElement({
       clientHeight: 400,
@@ -34,12 +38,14 @@ describe('components/message/useMessageListScroll', () => {
   });
 
   it('loads older messages after the user reaches the top following initial placement', async () => {
+    jest.useFakeTimers();
     const scrollElement = createScrollElement({
       clientHeight: 400,
       scrollHeight: 1600,
       scrollTop: 0,
     });
     const loadOlderHistory = jest.fn(async () => undefined);
+    let latestHook: HookProbeRenderState | null = null;
     let renderer!: TestRenderer.ReactTestRenderer;
 
     await act(async () => {
@@ -49,6 +55,9 @@ describe('components/message/useMessageListScroll', () => {
           hasOlderHistory: true,
           layoutSignature: 'session:ready',
           loadOlderHistory,
+          onRender: (state) => {
+            latestHook = state;
+          },
           scrollElement,
           visibleCommittedMessageCount: 12,
         }),
@@ -69,6 +78,9 @@ describe('components/message/useMessageListScroll', () => {
           hasOlderHistory: true,
           layoutSignature: 'session:ready',
           loadOlderHistory,
+          onRender: (state) => {
+            latestHook = state;
+          },
           scrollElement,
           visibleCommittedMessageCount: 12,
         }),
@@ -76,10 +88,28 @@ describe('components/message/useMessageListScroll', () => {
       await Promise.resolve();
     });
 
+    expect(requireLatestHook(latestHook).olderHistoryLoadingPaused).toBe(true);
+    expect(loadOlderHistory).not.toHaveBeenCalled();
+
+    await act(async () => {
+      jest.advanceTimersByTime(1499);
+      await Promise.resolve();
+    });
+
+    expect(loadOlderHistory).not.toHaveBeenCalled();
+
+    await act(async () => {
+      jest.advanceTimersByTime(1);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
     expect(loadOlderHistory).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
   });
 
   it('keeps the visible row anchored when older messages are prepended', async () => {
+    jest.useFakeTimers();
     const scrollElement = createScrollElement({
       clientHeight: 300,
       scrollHeight: 600,
@@ -130,6 +160,14 @@ describe('components/message/useMessageListScroll', () => {
       await Promise.resolve();
     });
 
+    expect(loadOlderHistory).not.toHaveBeenCalled();
+
+    await act(async () => {
+      jest.advanceTimersByTime(1500);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
     expect(loadOlderHistory).toHaveBeenCalledTimes(1);
 
     await act(async () => {
@@ -156,6 +194,7 @@ describe('components/message/useMessageListScroll', () => {
     });
 
     expect(scrollElement.scrollTop).toBe(520);
+    jest.useRealTimers();
   });
 
   it('shows a bottom affordance after manual upward scroll and scrolls back to the bottom', async () => {
@@ -331,6 +370,7 @@ describe('components/message/useMessageListScroll', () => {
 });
 
 interface HookProbeRenderState {
+  olderHistoryLoadingPaused: boolean;
   scrollToBottom: () => void;
   showScrollToBottom: boolean;
 }
@@ -378,6 +418,7 @@ function HookProbe(props: {
     visibleCommittedMessageCount: props.visibleCommittedMessageCount,
   });
   props.onRender?.({
+    olderHistoryLoadingPaused: hook.olderHistoryLoadingPaused,
     scrollToBottom: hook.scrollToBottom,
     showScrollToBottom: hook.showScrollToBottom,
   });

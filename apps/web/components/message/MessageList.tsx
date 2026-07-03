@@ -48,6 +48,13 @@ export const MessageList: FC<MessageListProps> = ({
     visibleCommittedMessages,
     visibleMessagesForPostSendOverflow,
   } = view;
+  const rowsWithPausedHistoryLoading = useMemo(() => {
+    if (loadingOlderHistory) {
+      return rows;
+    }
+
+    return [{ key: 'history-loading' as const, kind: 'history_loading' as const }, ...rows];
+  }, [loadingOlderHistory, rows]);
   const thinkingStartedAtMs = useThinkingStartedAtMs(loading);
   const visibleMessageTailRef = useRef<ReturnType<typeof buildVisibleMessageTailSnapshot> | null>(
     visibleCommittedMessages.length === 0 ? buildVisibleMessageTailSnapshot(visibleCommittedMessages) : null,
@@ -57,22 +64,26 @@ export const MessageList: FC<MessageListProps> = ({
   const latestStreamingThinkingPanelOpen = latestStreamingThinkingId
     ? Boolean(openThinkingPanels[latestStreamingThinkingId])
     : false;
+  const [olderHistoryLoadingPausedRows, setOlderHistoryLoadingPausedRows] = useState(false);
+  const effectiveRows = olderHistoryLoadingPausedRows ? rowsWithPausedHistoryLoading : rows;
+  const effectiveRowCount = effectiveRows.length;
   const rowVirtualizer = useVirtualizer({
-    count: rowCount,
+    count: effectiveRowCount,
     estimateSize: () => estimatedRowSize,
-    getItemKey: (index) => rows[index].key,
+    getItemKey: (index) => effectiveRows[index].key,
     getScrollElement: () => scrollElementRef.current,
     overscan: MESSAGE_LIST_OVERSCAN,
     useAnimationFrameWithResizeObserver: true,
   });
   const virtualItems = rowVirtualizer.getVirtualItems();
   const measureMessageRow = rowVirtualizer.measureElement;
-  const rowKeys = useMemo(() => rows.map((row) => row.key), [rows]);
+  const rowKeys = useMemo(() => effectiveRows.map((row) => row.key), [effectiveRows]);
+  const effectiveLoadingOlderHistory = loadingOlderHistory || olderHistoryLoadingPausedRows;
   const layoutSignature = buildMessageListLayoutSignature({
     committedMessages: visibleCommittedMessages,
     latestStreamingThinkingId,
     latestStreamingThinkingPanelOpen,
-    loadingOlderHistory,
+    loadingOlderHistory: effectiveLoadingOlderHistory,
     showThinkingIndicator,
     streamingRows,
   });
@@ -81,6 +92,7 @@ export const MessageList: FC<MessageListProps> = ({
     postSendAnchorIndex,
   );
   const {
+    olderHistoryLoadingPaused,
     scrollElementRef,
     scrollToBottom,
     showScrollToBottom,
@@ -99,6 +111,9 @@ export const MessageList: FC<MessageListProps> = ({
     postSendToken,
     visibleCommittedMessageCount: visibleCommittedMessages.length,
   });
+  useEffect(() => {
+    setOlderHistoryLoadingPausedRows(olderHistoryLoadingPaused);
+  }, [olderHistoryLoadingPaused]);
 
   const handleToggleToolCard = useCallback((messageId: string) => {
     setOpenToolCards((previous) => ({
@@ -168,7 +183,7 @@ export const MessageList: FC<MessageListProps> = ({
     previousHasAssistantTextRef.current = hasAssistantText;
   }, [hasAssistantText, latestStreamingThinkingId, shouldAutoCollapseLatestThinkingPanel]);
 
-  if (rowCount === 0) {
+  if (effectiveRowCount === 0) {
     return (
       <div className="messages-shell">
         <div ref={scrollElementRef} className="messages is-empty" aria-live="polite" />
@@ -183,12 +198,12 @@ export const MessageList: FC<MessageListProps> = ({
           style={{ height: rowVirtualizer.getTotalSize() + trailingSpacerPx }}
         >
           {virtualItems.map((virtualItem) => {
-            const row = rows[virtualItem.index];
+            const row = effectiveRows[virtualItem.index];
             const hasTrailingTool = shouldPlaceAssistantCopyInline({
               currentRow: row,
               currentIndex: virtualItem.index,
-              rowCount,
-              getRowAtIndex: (index) => rows[index],
+              rowCount: effectiveRowCount,
+              getRowAtIndex: (index) => effectiveRows[index],
             });
 
             return (

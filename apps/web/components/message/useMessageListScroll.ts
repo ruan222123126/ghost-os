@@ -18,8 +18,13 @@ import { useMessageListPostSendFocus } from './useMessageListPostSendFocus';
 
 const LOAD_OLDER_TRIGGER_ROWS = 5;
 const MANUAL_SCROLL_INTENT_CLEAR_DELAY_MS = 500;
+const OLDER_HISTORY_LOADING_PAUSE_MS = 1500;
 const PREPEND_ANCHOR_SETTLE_FRAMES = 3;
 type ScrollFrameHandle = number | ReturnType<typeof setTimeout>;
+interface OlderLoadPauseHandle {
+  resolve: ((completed: boolean) => void) | null;
+  timer: ReturnType<typeof setTimeout> | null;
+}
 const MANUAL_SCROLL_KEYS = new Set([
   'ArrowDown',
   'ArrowUp',
@@ -48,9 +53,12 @@ export interface UseMessageListScrollOptions {
 
 export function useMessageListScroll(options: UseMessageListScrollOptions) {
   const scrollElementRef = useRef<HTMLDivElement>(null);
+  const [olderHistoryLoadingPaused, setOlderHistoryLoadingPaused] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const autoFollowRef = useRef(true);
+  const mountedRef = useRef(false);
   const olderLoadPendingRef = useRef(false);
+  const olderLoadPauseRef = useRef<OlderLoadPauseHandle>({ resolve: null, timer: null });
   const prependAnchorRef = useRef<PrependAnchor | null>(null);
   const prependAnchorReleaseFrameRef = useRef<ScrollFrameHandle | null>(null);
   const skipOlderHistoryLoadOnceRef = useRef(false);
@@ -130,23 +138,29 @@ export function useMessageListScroll(options: UseMessageListScrollOptions) {
   });
   useInitialBottomScroll({
     autoFollowRef,
-    loadingOlderHistory: options.loadingOlderHistory,
+    loadingOlderHistory: options.loadingOlderHistory || olderHistoryLoadingPaused,
     prependAnchorRef,
     scrollElementRef,
     skipOlderHistoryLoadOnceRef,
     visibleCommittedMessageCount: options.visibleCommittedMessageCount,
   });
+  useMountedFlag(mountedRef, olderLoadPauseRef);
   useOlderHistoryLoading({
     ...options,
     cancelPrependAnchorRelease,
+    mountedRef,
+    olderHistoryLoadingPaused,
     olderLoadPendingRef,
+    olderLoadPauseRef,
     prependAnchorRef,
     scrollElementRef,
+    setOlderHistoryLoadingPaused,
     skipOlderHistoryLoadOnceRef,
   });
   usePrependAnchorRestore({
     ...options,
     cancelPrependAnchorRelease,
+    loadingOlderHistory: options.loadingOlderHistory || olderHistoryLoadingPaused,
     prependAnchorRef,
     schedulePrependAnchorRelease,
     scrollElementRef,
@@ -155,7 +169,7 @@ export function useMessageListScroll(options: UseMessageListScrollOptions) {
     autoFollowRef,
     cancelScheduledScroll,
     layoutSignature: options.layoutSignature,
-    loadingOlderHistory: options.loadingOlderHistory,
+    loadingOlderHistory: options.loadingOlderHistory || olderHistoryLoadingPaused,
     onNormalLayoutChange: scheduleNormalFollow,
     postSendAnchorIndex: options.postSendAnchorIndex,
     postSendHasVisibleContent: options.postSendHasVisibleContent,
@@ -168,7 +182,13 @@ export function useMessageListScroll(options: UseMessageListScrollOptions) {
   useScrollFrameCleanup(scrollFrameRef);
   useScrollFrameCleanup(prependAnchorReleaseFrameRef);
 
-  return { scrollElementRef, scrollToBottom, showScrollToBottom, trailingSpacerPx };
+  return {
+    olderHistoryLoadingPaused,
+    scrollElementRef,
+    scrollToBottom,
+    showScrollToBottom,
+    trailingSpacerPx,
+  };
 }
 
 function useInitialBottomScroll(options: {
@@ -368,17 +388,21 @@ function useOlderHistoryLoading(options: UseOlderHistoryLoadingOptions) {
     firstVisibleCommittedMessageId,
     hasOlderHistory,
     loadOlderHistory,
+    mountedRef,
+    olderHistoryLoadingPaused,
     loadingOlderHistory,
     olderLoadPendingRef,
+    olderLoadPauseRef,
     prependAnchorRef,
     rowKeys,
     rowVirtualizer,
     scrollElementRef,
+    setOlderHistoryLoadingPaused,
     skipOlderHistoryLoadOnceRef,
     visibleCommittedMessageCount,
   } = options;
   const handleLoadOlderHistory = useCallback(async () => {
-    if (loadingOlderHistory || olderLoadPendingRef.current) {
+    if (loadingOlderHistory || olderHistoryLoadingPaused || olderLoadPendingRef.current) {
       return;
     }
     if (!hasOlderHistory) {
@@ -394,22 +418,35 @@ function useOlderHistoryLoading(options: UseOlderHistoryLoadingOptions) {
       visibleCommittedMessageCount,
     });
     olderLoadPendingRef.current = true;
+    setOlderHistoryLoadingPaused(true);
     try {
+      const completedPause = await pauseOlderHistoryLoading(olderLoadPauseRef);
+      if (!completedPause) {
+        return;
+      }
+
       await loadOlderHistory();
     } finally {
       olderLoadPendingRef.current = false;
+      if (mountedRef.current) {
+        setOlderHistoryLoadingPaused(false);
+      }
     }
   }, [
     cancelPrependAnchorRelease,
     firstVisibleCommittedMessageId,
     hasOlderHistory,
     loadOlderHistory,
+    mountedRef,
+    olderHistoryLoadingPaused,
     loadingOlderHistory,
     olderLoadPendingRef,
+    olderLoadPauseRef,
     prependAnchorRef,
     rowKeys,
     rowVirtualizer,
     scrollElementRef,
+    setOlderHistoryLoadingPaused,
     visibleCommittedMessageCount,
   ]);
 
@@ -418,7 +455,11 @@ function useOlderHistoryLoading(options: UseOlderHistoryLoadingOptions) {
       skipOlderHistoryLoadOnceRef.current = false;
       return;
     }
-    if (!shouldLoadOlderHistory({ firstVirtualItemIndex, hasOlderHistory, loadingOlderHistory })) {
+    if (!shouldLoadOlderHistory({
+      firstVirtualItemIndex,
+      hasOlderHistory,
+      loadingOlderHistory: loadingOlderHistory || olderHistoryLoadingPaused,
+    })) {
       return;
     }
 
@@ -427,6 +468,7 @@ function useOlderHistoryLoading(options: UseOlderHistoryLoadingOptions) {
     firstVirtualItemIndex,
     handleLoadOlderHistory,
     hasOlderHistory,
+    olderHistoryLoadingPaused,
     loadingOlderHistory,
     skipOlderHistoryLoadOnceRef,
   ]);
@@ -466,6 +508,19 @@ function useScrollFrameCleanup(scrollFrameRef: MutableRefObject<ScrollFrameHandl
   }, [scrollFrameRef]);
 }
 
+function useMountedFlag(
+  mountedRef: MutableRefObject<boolean>,
+  pauseRef: MutableRefObject<OlderLoadPauseHandle>,
+) {
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      cancelOlderHistoryLoadingPause(pauseRef);
+    };
+  }, [mountedRef, pauseRef]);
+}
+
 function usePostSendScrollLock(
   scrollElementRef: MutableRefObject<HTMLDivElement | null>,
   postSendFollowTrackingRef: MutableRefObject<PostSendFollowTrackingState>,
@@ -494,9 +549,13 @@ function usePostSendScrollLock(
 
 interface UseOlderHistoryLoadingOptions extends UseMessageListScrollOptions {
   cancelPrependAnchorRelease: () => void;
+  mountedRef: MutableRefObject<boolean>;
+  olderHistoryLoadingPaused: boolean;
   olderLoadPendingRef: MutableRefObject<boolean>;
+  olderLoadPauseRef: MutableRefObject<OlderLoadPauseHandle>;
   prependAnchorRef: MutableRefObject<PrependAnchor | null>;
   scrollElementRef: MutableRefObject<HTMLDivElement | null>;
+  setOlderHistoryLoadingPaused: (value: boolean) => void;
   skipOlderHistoryLoadOnceRef: MutableRefObject<boolean>;
 }
 
@@ -517,6 +576,32 @@ function shouldLoadOlderHistory(options: {
   }
   return options.firstVirtualItemIndex !== null
     && options.firstVirtualItemIndex <= LOAD_OLDER_TRIGGER_ROWS;
+}
+
+function pauseOlderHistoryLoading(
+  pauseRef: MutableRefObject<OlderLoadPauseHandle>,
+) {
+  return new Promise<boolean>((resolve) => {
+    pauseRef.current.resolve = resolve;
+    pauseRef.current.timer = setTimeout(() => {
+      pauseRef.current.resolve = null;
+      pauseRef.current.timer = null;
+      resolve(true);
+    }, OLDER_HISTORY_LOADING_PAUSE_MS);
+  });
+}
+
+function cancelOlderHistoryLoadingPause(
+  pauseRef: MutableRefObject<OlderLoadPauseHandle>,
+) {
+  if (pauseRef.current.timer !== null) {
+    clearTimeout(pauseRef.current.timer);
+    pauseRef.current.timer = null;
+  }
+
+  const resolve = pauseRef.current.resolve;
+  pauseRef.current.resolve = null;
+  resolve?.(false);
 }
 
 function restorePrependAnchor(options: {
