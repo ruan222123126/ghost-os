@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"ghost-os/bridge/internal/stringutil"
 )
 
 func parseRSS(raw []byte, feedURL string) (Result, error) {
@@ -39,7 +41,7 @@ func parseRSS(raw []byte, feedURL string) (Result, error) {
 
 func buildRSSItem(entry rssItem, feed FeedInfo) Item {
 	link := strings.TrimSpace(entry.Link)
-	id := firstNonEmpty(strings.TrimSpace(entry.GUID), link)
+	id := stringutil.FirstNonEmpty(strings.TrimSpace(entry.GUID), link)
 	if id == "" {
 		id = synthesizeID(strings.TrimSpace(entry.Title), link, entry.PubDate, entry.Published, entry.Updated)
 	}
@@ -47,7 +49,7 @@ func buildRSSItem(entry rssItem, feed FeedInfo) Item {
 		ID:          id,
 		Title:       strings.TrimSpace(entry.Title),
 		Link:        link,
-		Summary:     firstNonEmpty(cleanText(entry.Description), cleanText(entry.Summary), cleanText(entry.Content)),
+		Summary:     stringutil.FirstNonEmpty(cleanText(entry.Description), cleanText(entry.Summary), cleanText(entry.Content)),
 		SourceTitle: feed.Title,
 		SourceLink:  feed.Link,
 	}

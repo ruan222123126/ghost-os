@@ -168,15 +168,6 @@ func buildFallbackStreamErrorEvent(traceID string, sessionID string, err error) 
 	return streaming.NewEvent(traceID, sessionID, 0, "", streaming.EventError, payload)
 }
 
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if normalized := strings.TrimSpace(value); normalized != "" {
-			return normalized
-		}
-	}
-	return ""
-}
-
 func (t *transport) handleSessionEvents(w http.ResponseWriter, r *http.Request, sessionID string) {
 	if !requireMethod(w, r, http.MethodGet) {
 		return

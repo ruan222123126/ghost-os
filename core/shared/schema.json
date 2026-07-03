@@ -159,6 +159,9 @@
         "sessionMetadata": {
             "$ref": "./schema/defs/session_history.json#/$defs/sessionMetadata"
         },
+        "sessionRuntimeSelection": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionRuntimeSelection"
+        },
         "sessionSidebarPartition": {
             "$ref": "./schema/defs/session_history.json#/$defs/sessionSidebarPartition"
         },

@@ -45,6 +45,13 @@ describe('lib/api/sessions/parser', () => {
       message_count: 1,
       page: SESSION_PAGE,
       token_count: 128,
+      last_runtime_selection: {
+        runtime: 'ghost',
+        provider: 'openai-main',
+        provider_type: 'openai',
+        model: 'gpt-5.4',
+        mode: 'plan',
+      },
       messages: [
         {
           index: 0,

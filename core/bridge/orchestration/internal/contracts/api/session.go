@@ -72,6 +72,14 @@ type SessionMetadata struct {
 	TokenCount   int    `json:"token_count"`
 }
 
+type SessionRuntimeSelection struct {
+	Runtime      string `json:"runtime"`
+	Provider     string `json:"provider,omitempty"`
+	ProviderType string `json:"provider_type,omitempty"`
+	Model        string `json:"model,omitempty"`
+	Mode         string `json:"mode,omitempty"`
+}
+
 type SessionMessagePage struct {
 	Limit         int  `json:"limit"`
 	Before        *int `json:"before,omitempty"`
@@ -116,15 +124,16 @@ type SessionTurnDraft struct {
 }
 
 type SessionDetail struct {
-	ID           string             `json:"id"`
-	Title        string             `json:"title"`
-	Messages     []SessionMessage   `json:"messages"`
-	CreatedAt    string             `json:"created_at"`
-	UpdatedAt    string             `json:"updated_at"`
-	MessageCount int                `json:"message_count"`
-	Page         SessionMessagePage `json:"page"`
-	TokenCount   int                `json:"token_count"`
-	TurnDraft    *SessionTurnDraft  `json:"turn_draft,omitempty"`
+	ID                   string                   `json:"id"`
+	Title                string                   `json:"title"`
+	Messages             []SessionMessage         `json:"messages"`
+	CreatedAt            string                   `json:"created_at"`
+	UpdatedAt            string                   `json:"updated_at"`
+	MessageCount         int                      `json:"message_count"`
+	Page                 SessionMessagePage       `json:"page"`
+	TokenCount           int                      `json:"token_count"`
+	TurnDraft            *SessionTurnDraft        `json:"turn_draft,omitempty"`
+	LastRuntimeSelection *SessionRuntimeSelection `json:"last_runtime_selection,omitempty"`
 }
 
 type SessionAppendMessage struct {

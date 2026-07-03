@@ -6,15 +6,18 @@ import (
 
 	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
+	"ghost-os/bridge/internal/runtimeutil"
+	"ghost-os/bridge/session"
 	"ghost-os/bridge/tools"
 )
 
 type agentRuntimeDependencies struct {
-	cfg          Config
-	client       agent.Completer
-	registry     *tools.Registry
-	systemPrompt string
-	cleanup      func()
+	cfg              Config
+	client           agent.Completer
+	registry         *tools.Registry
+	systemPrompt     string
+	runtimeSelection *session.RuntimeSelection
+	cleanup          func()
 }
 
 type AgentRuntimeFactory interface {
@@ -50,7 +53,7 @@ func buildAgentRuntimeDependencies(
 	if err != nil {
 		return agentRuntimeDependencies{}, err
 	}
-	return finalizeAgentRuntimeDependencies(components)
+	return finalizeAgentRuntimeDependencies(components, configStoreSnapshot(store))
 }
 
 func newRuntimeBuildComponents(
@@ -78,6 +81,7 @@ func newRuntimeBuildComponents(
 
 func finalizeAgentRuntimeDependencies(
 	components runtimeBuildComponents,
+	snapshot bridgeconfig.Snapshot,
 ) (agentRuntimeDependencies, error) {
 	systemPrompt, err := buildRuntimeSystemPrompt(components.cfg, components.registry)
 	if err != nil {
@@ -85,10 +89,11 @@ func finalizeAgentRuntimeDependencies(
 		return agentRuntimeDependencies{}, err
 	}
 	return agentRuntimeDependencies{
-		cfg:          components.cfg,
-		client:       components.clients.primary,
-		registry:     components.registry,
-		systemPrompt: systemPrompt,
+		cfg:              components.cfg,
+		client:           components.clients.primary,
+		registry:         components.registry,
+		systemPrompt:     systemPrompt,
+		runtimeSelection: runtimeutil.BuildGhostRuntimeSelectionFromSnapshot(snapshot, components.cfg, session.RuntimeSelectionModeDefault),
 		cleanup: func() {
 			closeRuntimeToolResources(components.resources)
 		},
@@ -123,6 +128,13 @@ func withFileToolPromptOverrides(cfg Config) (Config, error) {
 	}
 	cfg.ToolSelector.PromptOverrides = overrides
 	return cfg, nil
+}
+
+func configStoreSnapshot(store *ConfigStore) bridgeconfig.Snapshot {
+	if store == nil || store.inner == nil {
+		return bridgeconfig.Snapshot{}
+	}
+	return store.inner.Snapshot()
 }
 
 func buildRuntimeSystemPrompt(cfg Config, registry *tools.Registry) (string, error) {

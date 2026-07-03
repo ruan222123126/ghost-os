@@ -12,6 +12,7 @@ import (
 	"github.com/pion/webrtc/v4"
 
 	bridgeconfig "ghost-os/bridge/config"
+	"ghost-os/bridge/internal/stringutil"
 	"ghost-os/bridge/mobile"
 	bridgeorchestration "ghost-os/bridge/orchestration"
 	"ghost-os/bridge/streaming"
@@ -83,8 +84,8 @@ func (t *Transport) handleSignal(msg signalMessage) {
 			t.sendSignal(signalMessage{
 				Type:     signalBusy,
 				PCID:     t.cfg.PCID,
-				MobileID: firstNonEmpty(msg.MobileID, msg.DeviceID),
-				DeviceID: firstNonEmpty(msg.DeviceID, msg.MobileID),
+				MobileID: stringutil.FirstNonEmpty(msg.MobileID, msg.DeviceID),
+				DeviceID: stringutil.FirstNonEmpty(msg.DeviceID, msg.MobileID),
 				Error:    err.Error(),
 			})
 		}
@@ -105,8 +106,8 @@ func (t *Transport) handleSignal(msg signalMessage) {
 }
 
 func (t *Transport) startPeer(msg signalMessage) error {
-	mobileID := firstNonEmpty(msg.MobileID, msg.DeviceID)
-	deviceID := firstNonEmpty(msg.DeviceID, msg.MobileID)
+	mobileID := stringutil.FirstNonEmpty(msg.MobileID, msg.DeviceID)
+	deviceID := stringutil.FirstNonEmpty(msg.DeviceID, msg.MobileID)
 	if strings.TrimSpace(mobileID) == "" {
 		return fmt.Errorf("mobile_id is required")
 	}
@@ -182,7 +183,7 @@ func (p *peerSession) createOffer() error {
 }
 
 func (t *Transport) applyAnswer(msg signalMessage) error {
-	peer := t.peer(firstNonEmpty(msg.MobileID, msg.DeviceID))
+	peer := t.peer(stringutil.FirstNonEmpty(msg.MobileID, msg.DeviceID))
 	if peer == nil {
 		return fmt.Errorf("peer not found")
 	}
@@ -193,7 +194,7 @@ func (t *Transport) applyAnswer(msg signalMessage) error {
 }
 
 func (t *Transport) addRemoteICE(msg signalMessage) error {
-	peer := t.peer(firstNonEmpty(msg.MobileID, msg.DeviceID))
+	peer := t.peer(stringutil.FirstNonEmpty(msg.MobileID, msg.DeviceID))
 	if peer == nil {
 		return fmt.Errorf("peer not found")
 	}
@@ -507,7 +508,7 @@ func (p *peerSession) runPreparedStream(
 	sink := dataChannelStreamSink{peer: p, requestID: frame.RequestID}
 	_, sessionID, err := prepared.Run(ctx, sink)
 	if err != nil {
-		p.sendStreamEnd(frame.RequestID, "error", err.Error(), map[string]any{"session_id": firstNonEmpty(sessionID, inputSessionID)})
+		p.sendStreamEnd(frame.RequestID, "error", err.Error(), map[string]any{"session_id": stringutil.FirstNonEmpty(sessionID, inputSessionID)})
 		return
 	}
 	p.sendStreamEnd(frame.RequestID, "success", "", map[string]any{"session_id": sessionID})
@@ -643,13 +644,4 @@ func (s dataChannelStreamSink) Emit(ctx context.Context, event streaming.Event) 
 		Payload:   event,
 	})
 	return event, nil
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
 }

@@ -75,6 +75,7 @@ export type {
   SessionMetadata,
   SessionPushAssistantMessagePayload,
   SessionPushAwaitingHumanPayload,
+  SessionRuntimeSelection,
   TaskRunCardEventPayload,
   TaskRunCardFinishedPayload,
   TaskRunCardStartedPayload,

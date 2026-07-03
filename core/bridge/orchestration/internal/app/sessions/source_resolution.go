@@ -3,6 +3,7 @@ package sessions
 import (
 	"strings"
 
+	"ghost-os/bridge/internal/stringutil"
 	"ghost-os/bridge/orchestration/internal/contracts/api"
 	bridgeTasks "ghost-os/bridge/tasks"
 )
@@ -108,10 +109,10 @@ func buildSessionSourceTaskIndex(tasks []SessionSourceTask) sessionSourceTaskInd
 func sourceNameFromTask(task SessionSourceTask) string {
 	id := strings.TrimSpace(task.ID)
 	if bridgeTasks.NormalizeKind(task.TaskKind) == bridgeTasks.KindOrchestration {
-		return firstNonEmpty(task.Name, id)
+		return stringutil.FirstNonEmpty(task.Name, id)
 	}
 	if bridgeTasks.NormalizeKind(task.TaskKind) == bridgeTasks.KindAgentMessage {
-		return firstNonEmpty(previewTaskMessage(task.Message), id)
+		return stringutil.FirstNonEmpty(previewTaskMessage(task.Message), id)
 	}
 	return id
 }
@@ -138,13 +139,13 @@ func sessionSourceFromRun(run bridgeTasks.RunLog, index sessionSourceTaskIndex) 
 	return resolvedSessionSource{
 		Kind:      kind,
 		OwnerID:   ownerID,
-		OwnerName: firstNonEmpty(index.names[ownerID], ownerID),
+		OwnerName: stringutil.FirstNonEmpty(index.names[ownerID], ownerID),
 	}
 }
 
 func sourceKindFromRun(run bridgeTasks.RunLog, index sessionSourceTaskIndex) string {
 	taskID := strings.TrimSpace(run.TaskID)
-	runKind := bridgeTasks.NormalizeKind(firstNonEmpty(run.TaskKind, index.kinds[taskID]))
+	runKind := bridgeTasks.NormalizeKind(stringutil.FirstNonEmpty(run.TaskKind, index.kinds[taskID]))
 	if runKind == bridgeTasks.KindWorkflow {
 		return SessionSourceKindWorkflow
 	}

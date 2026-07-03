@@ -9,6 +9,7 @@ import type {
   ExternalCodexPermissionMode,
   PendingQuestionMessage,
   SessionImageContent,
+  SessionDetail,
   SessionTurnDraft,
   StreamingAssistantSegment,
   StreamingThinkingSegment,
@@ -37,7 +38,7 @@ export interface UseBridgeChatResult {
   stopCurrentRun: () => Promise<void>;
   answerQuestion: (questionId: string, answer: string) => Promise<void>;
   cancelQuestion: (questionId: string) => Promise<void>;
-  loadSessionHistory: (sessionId: string) => Promise<void>;
+  loadSessionHistory: (sessionId: string) => Promise<SessionDetail | null>;
   loadOlderHistory: () => Promise<void>;
   clearMessages: (sessionId?: string) => void;
   backgroundCompletedSessionIds: ReadonlySet<string>;

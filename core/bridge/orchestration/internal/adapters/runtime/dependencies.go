@@ -7,6 +7,7 @@ import (
 	apprelay "ghost-os/bridge/orchestration/internal/app/agentturn/relay"
 	ownerapp "ghost-os/bridge/orchestration/internal/app/orchestrations/owner"
 	appworkflows "ghost-os/bridge/orchestration/internal/app/workflows"
+	"ghost-os/bridge/session"
 	"ghost-os/bridge/tools"
 )
 
@@ -17,6 +18,7 @@ type Dependencies interface {
 	SystemPrompt() string
 	SystemPromptOverride() bool
 	SystemPromptFiles() *bridgeconfig.SystemPromptFiles
+	RuntimeSelection() *session.RuntimeSelection
 	Close()
 }
 

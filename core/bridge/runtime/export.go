@@ -41,6 +41,10 @@ func (d agentRuntimeDependencies) SystemPrompt() string {
 	return d.systemPrompt
 }
 
+func (d agentRuntimeDependencies) RuntimeSelection() *session.RuntimeSelection {
+	return session.CloneRuntimeSelection(d.runtimeSelection)
+}
+
 func WrapConfigStore(store bridgeconfig.Store) *ConfigStore {
 	if store == nil {
 		return nil

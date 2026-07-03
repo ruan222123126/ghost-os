@@ -184,6 +184,42 @@ func TestBuildSessionDetailPayloadProjectsLegacyCodexToolResult(t *testing.T) {
 	}
 }
 
+func TestBuildSessionDetailPayloadIncludesLastRuntimeSelection(t *testing.T) {
+	payload := sessionturn.BuildSessionDetailPayload(sessionturn.SessionDetailInput{
+		ID:           "session-runtime-selection",
+		Title:        "runtime selection",
+		CreatedAt:    time.Unix(0, 0).UTC(),
+		UpdatedAt:    time.Unix(0, 0).UTC(),
+		MessageCount: 1,
+		Page: sessionturn.SessionMessagePageInput{
+			Limit: 100,
+		},
+		LastRuntimeSelection: &sessionturn.SessionRuntimeSelectionInput{
+			Runtime:      session.RuntimeSelectionGhost,
+			Provider:     "openai-main",
+			ProviderType: string(llm.ProviderOpenAI),
+			Model:        "gpt-5.4",
+			Mode:         session.RuntimeSelectionModePlan,
+		},
+	}, false)
+
+	if payload.LastRuntimeSelection == nil {
+		t.Fatal("expected last_runtime_selection")
+	}
+	if payload.LastRuntimeSelection.Provider != "openai-main" {
+		t.Fatalf("unexpected provider: got %q", payload.LastRuntimeSelection.Provider)
+	}
+	if payload.LastRuntimeSelection.ProviderType != string(llm.ProviderOpenAI) {
+		t.Fatalf("unexpected provider_type: got %q", payload.LastRuntimeSelection.ProviderType)
+	}
+	if payload.LastRuntimeSelection.Model != "gpt-5.4" {
+		t.Fatalf("unexpected model: got %q", payload.LastRuntimeSelection.Model)
+	}
+	if payload.LastRuntimeSelection.Mode != session.RuntimeSelectionModePlan {
+		t.Fatalf("unexpected mode: got %q", payload.LastRuntimeSelection.Mode)
+	}
+}
+
 func TestBuildSessionDetailPayloadLeavesLegacyNonCodexToolTextUnprojected(t *testing.T) {
 	payload := sessionturn.BuildSessionDetailPayload(sessionturn.SessionDetailInput{
 		ID:           "session-legacy-bash",

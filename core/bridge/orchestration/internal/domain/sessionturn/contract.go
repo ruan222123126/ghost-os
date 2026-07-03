@@ -36,15 +36,16 @@ func BuildSessionDetailPayload(
 	}
 
 	return sessionDetail{
-		ID:           detail.ID,
-		Title:        strings.TrimSpace(detail.Title),
-		Messages:     messages,
-		CreatedAt:    detail.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:    detail.UpdatedAt.UTC().Format(time.RFC3339),
-		MessageCount: detail.MessageCount,
-		Page:         BuildSessionMessagePagePayload(detail.Page),
-		TokenCount:   detail.TokenCount,
-		TurnDraft:    turnDraft,
+		ID:                   detail.ID,
+		Title:                strings.TrimSpace(detail.Title),
+		Messages:             messages,
+		CreatedAt:            detail.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:            detail.UpdatedAt.UTC().Format(time.RFC3339),
+		MessageCount:         detail.MessageCount,
+		Page:                 BuildSessionMessagePagePayload(detail.Page),
+		TokenCount:           detail.TokenCount,
+		TurnDraft:            turnDraft,
+		LastRuntimeSelection: buildSessionRuntimeSelectionPayload(detail.LastRuntimeSelection),
 	}
 }
 

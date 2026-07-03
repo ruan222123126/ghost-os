@@ -12,7 +12,7 @@ import {
   configControllerState,
   sessionControllerState,
 } from '@/hooks/homePageControllerState';
-import { CODEX_MODEL_IDS, DEFAULT_CODEX_MODEL } from '@/lib/codexModels';
+import { CODEX_MODEL_IDS, DEFAULT_CODEX_MODEL, normalizeCodexModel } from '@/lib/codexModels';
 import { ignorePromise } from '@/lib/errors';
 import { parseSettingsQuery, stripSettingsQuery, type SettingsQueryTab } from '@/lib/settingsQuery';
 import type {
@@ -143,13 +143,15 @@ export function useHomePageController(): HomePageController {
   const sessions = useSessions({ autoRefresh: true });
   const config = useBridgeConfig({ autoRefresh: !settings.showConfig });
   const [agentMode, setAgentMode] = useState<AgentModeSelection>(null);
+  const [codexModel, setCodexModel] = useState(DEFAULT_CODEX_MODEL);
   const chat = useBridgeChat({
     currentSessionId: sessions.currentSessionId,
     externalCodexPermissionMode: config.config?.external_codex_permission_mode,
     externalProjectRoot: config.config?.project_root,
     onSessionResolved: sessions.setCurrentSessionId,
   });
-  const applySessionRuntimeSelection = useSessionRuntimeSelectionApplier(config.selectActiveModel, setAgentMode);
+  const selectActiveModel = useComposerModelSelection(agentMode, config.selectActiveModel, setCodexModel);
+  const applySessionRuntimeSelection = useSessionRuntimeSelectionApplier(config.selectActiveModel, setAgentMode, setCodexModel);
   const actions = useHomePageActions(sessions, chat, applySessionRuntimeSelection);
   const derived = buildDerivedHomeState({
     chat,
@@ -158,8 +160,8 @@ export function useHomePageController(): HomePageController {
     showConfig: settings.showConfig,
   });
   const modelState = useMemo(() => {
-    return buildComposerModelState(agentMode, config.activeModelOption, config.modelOptions);
-  }, [agentMode, config.activeModelOption, config.modelOptions]);
+    return buildComposerModelState(agentMode, config.activeModelOption, config.modelOptions, codexModel);
+  }, [agentMode, codexModel, config.activeModelOption, config.modelOptions]);
 
   return {
     ...sessionControllerState(sessions, chat),
@@ -174,7 +176,7 @@ export function useHomePageController(): HomePageController {
     loadOlderHistory: chat.loadOlderHistory,
     stopCurrentRun: chat.stopCurrentRun,
     saveConfig: config.saveConfig,
-    selectActiveModel: config.selectActiveModel,
+    selectActiveModel,
     agentMode,
     setAgentMode,
     refreshConfig: config.refreshConfig,
@@ -270,6 +272,7 @@ function useHomePageActions(
 function useSessionRuntimeSelectionApplier(
   selectActiveModel: HomePageController['selectActiveModel'],
   setAgentMode: (mode: AgentModeSelection) => void,
+  setCodexModel: (model: string) => void,
 ): SessionRuntimeSelectionApplier {
   return useCallback(async (selection) => {
     if (!selection) {
@@ -277,12 +280,32 @@ function useSessionRuntimeSelectionApplier(
     }
 
     setAgentMode(agentModeForRuntimeSelection(selection));
+    if (selection.runtime === 'codex') {
+      setCodexModel(normalizeCodexModel(selection.model));
+      return;
+    }
+
     const option = providerModelOptionForRuntimeSelection(selection);
     if (!option) {
       return;
     }
     await selectActiveModel(option);
-  }, [selectActiveModel, setAgentMode]);
+  }, [selectActiveModel, setAgentMode, setCodexModel]);
+}
+
+function useComposerModelSelection(
+  agentMode: AgentModeSelection,
+  selectActiveModel: HomePageController['selectActiveModel'],
+  setCodexModel: (model: string) => void,
+): HomePageController['selectActiveModel'] {
+  return useCallback(async (option) => {
+    if (agentMode !== null && option.providerType === 'codex') {
+      setCodexModel(normalizeCodexModel(option.model));
+      return true;
+    }
+
+    return selectActiveModel(option);
+  }, [agentMode, selectActiveModel, setCodexModel]);
 }
 
 async function loadSessionRuntimeSelectionDetail(sessionId: string) {
@@ -324,6 +347,7 @@ function buildComposerModelState(
   agentMode: AgentModeSelection,
   activeModelOption: ProviderModelOption | null,
   modelOptions: ProviderModelOption[],
+  codexModel: string,
 ): ComposerModelState {
   if (agentMode === null) {
     return {
@@ -334,7 +358,7 @@ function buildComposerModelState(
 
   const codexOptions = buildCodexModelOptions(modelOptions);
   return {
-    activeModelOption: resolveActiveCodexModelOption(activeModelOption, codexOptions),
+    activeModelOption: resolveActiveCodexModelOption(codexModel, activeModelOption, codexOptions),
     modelOptions: codexOptions,
   };
 }
@@ -355,12 +379,13 @@ function buildCodexModelOptions(modelOptions: ProviderModelOption[]): ProviderMo
 }
 
 function resolveActiveCodexModelOption(
+  codexModel: string,
   activeModelOption: ProviderModelOption | null,
   codexOptions: ProviderModelOption[],
 ): ProviderModelOption | null {
   const activeCodexModel = activeModelOption?.providerType === 'codex'
     ? activeModelOption.model.trim()
-    : DEFAULT_CODEX_MODEL;
+    : normalizeCodexModel(codexModel);
   const targetModel = activeCodexModel || DEFAULT_CODEX_MODEL;
 
   return codexOptions.find((option) => sameModel(option.model, targetModel))

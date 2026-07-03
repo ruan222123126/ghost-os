@@ -394,6 +394,19 @@ pub struct SessionMetadata {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionRuntimeSelection {
+    pub runtime: String,
+    #[serde(default)]
+    pub provider: Option<String>,
+    #[serde(default)]
+    pub provider_type: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub mode: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct SessionSidebarPartition {
     pub id: String,
     pub name: String,
@@ -493,6 +506,8 @@ pub struct SessionDetail {
     pub message_count: i64,
     pub page: SessionMessagePage,
     pub token_count: i64,
+    #[serde(default)]
+    pub last_runtime_selection: Option<SessionRuntimeSelection>,
     #[serde(default)]
     pub turn_draft: Option<SessionTurnDraft>,
 }

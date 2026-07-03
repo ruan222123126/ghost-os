@@ -264,6 +264,14 @@ export interface SessionMetadata {
   token_count: number;
 }
 
+export interface SessionRuntimeSelection {
+  runtime: 'ghost' | 'codex';
+  provider?: string;
+  provider_type?: 'openai' | 'anthropic' | 'custom' | 'codex';
+  model?: string;
+  mode?: 'default' | 'plan';
+}
+
 export interface SessionSidebarPartition {
   id: string;
   name: string;
@@ -339,6 +347,7 @@ export interface SessionDetail {
   message_count: number;
   page: SessionMessagePage;
   token_count: number;
+  last_runtime_selection?: SessionRuntimeSelection | null;
   turn_draft?: SessionTurnDraft | null;
 }
 

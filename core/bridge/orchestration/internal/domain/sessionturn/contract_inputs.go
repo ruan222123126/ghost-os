@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"ghost-os/bridge/llm"
+	"ghost-os/bridge/session"
 )
 
 const (
@@ -22,16 +23,48 @@ type SessionMetadataInput struct {
 }
 
 type SessionDetailInput struct {
-	ID             string
-	Title          string
-	Messages       []IndexedSessionMessageInput
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	MessageCount   int
-	Page           SessionMessagePageInput
-	TokenCount     int
-	AssistantDraft *AssistantDraftInput
-	TurnDraft      *SessionTurnDraftInput
+	ID                   string
+	Title                string
+	Messages             []IndexedSessionMessageInput
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+	MessageCount         int
+	Page                 SessionMessagePageInput
+	TokenCount           int
+	AssistantDraft       *AssistantDraftInput
+	TurnDraft            *SessionTurnDraftInput
+	LastRuntimeSelection *SessionRuntimeSelectionInput
+}
+
+type SessionRuntimeSelectionInput struct {
+	Runtime      string
+	Provider     string
+	ProviderType string
+	Model        string
+	Mode         string
+}
+
+func buildSessionRuntimeSelectionPayload(selection *SessionRuntimeSelectionInput) *sessionRuntimeSelection {
+	if selection == nil {
+		return nil
+	}
+	normalized, ok := session.NormalizeRuntimeSelection(session.RuntimeSelection{
+		Runtime:      selection.Runtime,
+		Provider:     selection.Provider,
+		ProviderType: selection.ProviderType,
+		Model:        selection.Model,
+		Mode:         selection.Mode,
+	})
+	if !ok {
+		return nil
+	}
+	return &sessionRuntimeSelection{
+		Runtime:      normalized.Runtime,
+		Provider:     normalized.Provider,
+		ProviderType: normalized.ProviderType,
+		Model:        normalized.Model,
+		Mode:         normalized.Mode,
+	}
 }
 
 type IndexedSessionMessageInput struct {

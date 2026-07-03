@@ -58,12 +58,3 @@ func synthesizeID(values ...string) string {
 	}
 	return strings.Join(parts, " | ")
 }
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if value = strings.TrimSpace(value); value != "" {
-			return value
-		}
-	}
-	return ""
-}

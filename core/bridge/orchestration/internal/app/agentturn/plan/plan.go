@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	bridgeconfig "ghost-os/bridge/config"
+	"ghost-os/bridge/internal/runtimeutil"
 	"ghost-os/bridge/llm"
 	bridgemode "ghost-os/bridge/mode"
 	appsessions "ghost-os/bridge/orchestration/internal/app/sessions"
@@ -66,11 +67,17 @@ func (r Runner) Execute(
 	if r.RuntimeFactory == nil {
 		return Result{}, ErrRuntimeFactoryRequired
 	}
-	deps, err := r.RuntimeFactory.Build(applyRequestRuntimeOptionsToStore(r.ConfigStore, req.RequestRuntime))
+	runtimeStore := applyRequestRuntimeOptionsToStore(r.ConfigStore, req.RequestRuntime)
+	deps, err := r.RuntimeFactory.Build(runtimeStore)
 	if err != nil {
 		return Result{}, err
 	}
 	defer deps.Close()
+	runtimeSelection := runtimeutil.BuildGhostRuntimeSelection(
+		runtimeStore,
+		deps.Config,
+		session.RuntimeSelectionModePlan,
+	)
 
 	sess, history, err := r.loadHistory(req.SessionID, deps)
 	if err != nil {
@@ -86,7 +93,7 @@ func (r Runner) Execute(
 	if err != nil {
 		return Result{}, err
 	}
-	if err := r.persistPlanTurn(sess, req.UserInput, assistantMessage, conversationState); err != nil {
+	if err := r.persistPlanTurn(sess, req.UserInput, assistantMessage, conversationState, runtimeSelection); err != nil {
 		return Result{}, err
 	}
 	return Result{Message: assistantMessage.Text, SessionID: sess.ID}, nil
@@ -163,11 +170,15 @@ func (r Runner) persistPlanTurn(
 	userInput llm.Message,
 	assistantMessage llm.Message,
 	conversationState llm.ConversationState,
+	runtimeSelection *session.RuntimeSelection,
 ) error {
 	if sess == nil {
 		return session.ErrSessionNotFound
 	}
 	sess.ConversationState = conversationState
+	if runtimeSelection != nil {
+		sess.SetLastRuntimeSelection(*runtimeSelection)
+	}
 	sess.AddMessage(userInput)
 	sess.AddMessage(assistantMessage)
 	if r.SessionStore == nil {

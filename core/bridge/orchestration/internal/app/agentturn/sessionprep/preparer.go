@@ -25,6 +25,7 @@ type RuntimeDependencies struct {
 	SystemPrompt         string
 	SystemPromptOverride bool
 	SystemPromptFiles    *bridgeconfig.SystemPromptFiles
+	RuntimeSelection     *session.RuntimeSelection
 	Cleanup              func()
 }
 
@@ -104,17 +105,18 @@ func (p Preparer) PrepareState(ctx context.Context, cmd Command) (*turnstate.Sta
 		return nil, &agentturn.SessionSetupError{SessionID: strings.TrimSpace(sess.ID), Err: err}
 	}
 	return &turnstate.State{
-		SessionStore:    p.SessionStore,
-		RuntimeCleanup:  cmd.Deps.Close,
-		Persistence:     cmd.Persistence,
-		Session:         sess,
-		Agent:           runAgent,
-		ExecCtx:         execCtx,
-		TraceID:         cmd.Input.TraceID,
-		UserMessage:     cmd.Input.UserMessage,
-		PreTurnMessages: preTurnMessages,
-		TurnStartedAt:   cmd.Input.StartedAt,
-		Cleanup:         cleanup,
+		SessionStore:     p.SessionStore,
+		RuntimeCleanup:   cmd.Deps.Close,
+		Persistence:      cmd.Persistence,
+		Session:          sess,
+		Agent:            runAgent,
+		ExecCtx:          execCtx,
+		TraceID:          cmd.Input.TraceID,
+		UserMessage:      cmd.Input.UserMessage,
+		PreTurnMessages:  preTurnMessages,
+		TurnStartedAt:    cmd.Input.StartedAt,
+		RuntimeSelection: cmd.Deps.RuntimeSelection,
+		Cleanup:          cleanup,
 	}, nil
 }
 

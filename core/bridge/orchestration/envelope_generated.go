@@ -78,6 +78,7 @@ type agentStreamMessagePayload = api.AgentStreamMessagePayload
 type sessionMessage = api.SessionMessage
 type agentDonePayload = api.AgentDonePayload
 type sessionMetadata = api.SessionMetadata
+type sessionRuntimeSelection = api.SessionRuntimeSelection
 type sessionSidebarPartition = api.SessionSidebarPartition
 type sessionSidebarPartitionState = api.SessionSidebarPartitionState
 type sessionSidebarPartitionPutRequest = api.SessionSidebarPartitionPutRequest

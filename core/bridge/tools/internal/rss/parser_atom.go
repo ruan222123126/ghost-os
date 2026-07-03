@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"ghost-os/bridge/internal/stringutil"
 )
 
 func parseAtom(raw []byte, feedURL string) (Result, error) {
@@ -39,7 +41,7 @@ func parseAtom(raw []byte, feedURL string) (Result, error) {
 
 func buildAtomItem(entry atomEntry, feed FeedInfo) Item {
 	link := pickAtomLink(entry.Links)
-	id := firstNonEmpty(strings.TrimSpace(entry.ID), link)
+	id := stringutil.FirstNonEmpty(strings.TrimSpace(entry.ID), link)
 	if id == "" {
 		id = synthesizeID(strings.TrimSpace(entry.Title), link, entry.Published, entry.Updated)
 	}
@@ -47,7 +49,7 @@ func buildAtomItem(entry atomEntry, feed FeedInfo) Item {
 		ID:          id,
 		Title:       strings.TrimSpace(entry.Title),
 		Link:        link,
-		Summary:     firstNonEmpty(cleanText(entry.Summary), cleanText(entry.Content)),
+		Summary:     stringutil.FirstNonEmpty(cleanText(entry.Summary), cleanText(entry.Content)),
 		SourceTitle: feed.Title,
 		SourceLink:  feed.Link,
 	}

@@ -6,6 +6,7 @@ import (
 
 	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
+	"ghost-os/bridge/internal/runtimeutil"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/orchestration/internal/app/agentturn"
 	"ghost-os/bridge/orchestration/internal/contracts/bus"
@@ -27,6 +28,7 @@ type agentRuntimeDependencies struct {
 	systemPrompt         string
 	systemPromptOverride bool
 	systemPromptFiles    *bridgeconfig.SystemPromptFiles
+	runtimeSelection     *session.RuntimeSelection
 	cleanup              func()
 }
 
@@ -58,6 +60,10 @@ func (d agentRuntimeDependencies) SystemPromptOverride() bool {
 
 func (d agentRuntimeDependencies) SystemPromptFiles() *bridgeconfig.SystemPromptFiles {
 	return d.systemPromptFiles
+}
+
+func (d agentRuntimeDependencies) RuntimeSelection() *session.RuntimeSelection {
+	return session.CloneRuntimeSelection(d.runtimeSelection)
 }
 
 type AgentRuntimeFactory interface {
@@ -119,11 +125,12 @@ func NewRuntimeDependencies(
 	cleanup func(),
 ) RuntimeDependencies {
 	return agentRuntimeDependencies{
-		cfg:          cfg,
-		client:       client,
-		registry:     registry,
-		systemPrompt: systemPrompt,
-		cleanup:      cleanup,
+		cfg:              cfg,
+		client:           client,
+		registry:         registry,
+		systemPrompt:     systemPrompt,
+		runtimeSelection: runtimeutil.BuildGhostRuntimeSelection(nil, cfg, session.RuntimeSelectionModeDefault),
+		cleanup:          cleanup,
 	}
 }
 
@@ -141,11 +148,12 @@ func (f runtimeFactoryAdapter) Build(store bridgeconfig.Store) (agentRuntimeDepe
 		return agentRuntimeDependencies{}, err
 	}
 	return agentRuntimeDependencies{
-		cfg:          deps.Config(),
-		client:       deps.Client(),
-		registry:     deps.Registry(),
-		systemPrompt: deps.SystemPrompt(),
-		cleanup:      deps.Close,
+		cfg:              deps.Config(),
+		client:           deps.Client(),
+		registry:         deps.Registry(),
+		systemPrompt:     deps.SystemPrompt(),
+		runtimeSelection: session.CloneRuntimeSelection(deps.RuntimeSelection()),
+		cleanup:          deps.Close,
 	}, nil
 }
 

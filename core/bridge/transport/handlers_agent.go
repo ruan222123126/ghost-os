@@ -8,6 +8,8 @@ import (
 	bridgeorchestration "ghost-os/bridge/orchestration"
 	"net/http"
 	"strings"
+
+	"ghost-os/bridge/internal/stringutil"
 )
 
 type streamRunResult struct {
@@ -203,7 +205,7 @@ func (t *transport) runDetachedStream(
 
 	select {
 	case result := <-resultCh:
-		emitUnhandledStreamError(runCtx, sink, traceID, firstNonEmpty(result.sessionID, inputSessionID), result.err)
+		emitUnhandledStreamError(runCtx, sink, traceID, stringutil.FirstNonEmpty(result.sessionID, inputSessionID), result.err)
 	case <-requestCtx.Done():
 		sseSink.Detach()
 		go t.finishDetachedStream(runCtx, resultCh, sink, traceID, inputSessionID)
@@ -218,7 +220,7 @@ func (t *transport) finishDetachedStream(
 	inputSessionID string,
 ) {
 	result := <-resultCh
-	emitUnhandledStreamError(runCtx, sink, traceID, firstNonEmpty(result.sessionID, inputSessionID), result.err)
+	emitUnhandledStreamError(runCtx, sink, traceID, stringutil.FirstNonEmpty(result.sessionID, inputSessionID), result.err)
 }
 
 func (t *transport) streamRunContext() context.Context {
