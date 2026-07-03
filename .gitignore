@@ -43,6 +43,7 @@ core/bridge/bridge
 
 # Runtime logs.
 data/logs/*
+.agents/logs/
 
 # Agent scratch artifacts.
 .codex
