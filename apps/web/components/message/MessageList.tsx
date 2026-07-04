@@ -1,24 +1,15 @@
 'use client';
-import { useVirtualizer } from '@tanstack/react-virtual';
 import type { FC } from 'react';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MessageListRow } from '@/lib/chat-view/types';
 import { useWebLocale } from '@/lib/i18n/provider';
 import { TopLoadingBar } from '@/components/TopLoadingBar';
 import { MessageRow } from './MessageRow';
 import { shouldPlaceAssistantCopyInline } from './messageCopyPlacement';
-import {
-  buildMessageListLayoutSignature,
-  buildVisibleMessageTailSnapshot,
-  getPostSendAnchorIndexFromVisibleMessages,
-  hasVisibleContentAfterIndex,
-  shouldReleasePostSendAnchor,
-} from './messageListScroll';
+import { buildMessageListLayoutSignature } from './messageListScroll';
 import { ThinkingIndicator } from './ThinkingIndicator';
 import type { MessageListProps } from './types';
 import { useMessageListScroll } from './useMessageListScroll';
-
-const MESSAGE_LIST_OVERSCAN = 8;
 
 export const MessageList: FC<MessageListProps> = ({
   view,
@@ -35,7 +26,6 @@ export const MessageList: FC<MessageListProps> = ({
   const previousHasAssistantTextRef = useRef(false);
   const thinkingAutoCollapsedRef = useRef(false);
   const {
-    estimatedRowSize,
     hasAssistantText,
     latestStreamingThinkingId,
     loading,
@@ -46,30 +36,18 @@ export const MessageList: FC<MessageListProps> = ({
     shouldAutoCollapseLatestThinkingPanel,
     streamingRows,
     visibleCommittedMessages,
-    visibleMessagesForPostSendOverflow,
   } = view;
   const thinkingStartedAtMs = useThinkingStartedAtMs(loading);
-  const visibleMessageTailRef = useRef<ReturnType<typeof buildVisibleMessageTailSnapshot> | null>(
-    visibleCommittedMessages.length === 0 ? buildVisibleMessageTailSnapshot(visibleCommittedMessages) : null,
-  );
-  const [postSendAnchorIndex, setPostSendAnchorIndex] = useState<number | null>(null);
-  const [postSendToken, setPostSendToken] = useState(0);
   const latestStreamingThinkingPanelOpen = latestStreamingThinkingId
     ? Boolean(openThinkingPanels[latestStreamingThinkingId])
     : false;
   const effectiveRows = rows;
   const effectiveRowCount = effectiveRows.length;
-  const rowVirtualizer = useVirtualizer({
-    count: effectiveRowCount,
-    estimateSize: () => estimatedRowSize,
-    getItemKey: (index) => effectiveRows[index].key,
-    getScrollElement: () => scrollElementRef.current,
-    overscan: MESSAGE_LIST_OVERSCAN,
-    useAnimationFrameWithResizeObserver: true,
-  });
-  const virtualItems = rowVirtualizer.getVirtualItems();
-  const measureMessageRow = rowVirtualizer.measureElement;
-  const rowKeys = useMemo(() => effectiveRows.map((row) => row.key), [effectiveRows]);
+  const renderedRows = useMemo(() => {
+    return effectiveRows
+      .map((row, index) => ({ index, row }))
+      .reverse();
+  }, [effectiveRows]);
   const layoutSignature = buildMessageListLayoutSignature({
     committedMessages: visibleCommittedMessages,
     latestStreamingThinkingId,
@@ -78,29 +56,18 @@ export const MessageList: FC<MessageListProps> = ({
     showThinkingIndicator,
     streamingRows,
   });
-  const postSendHasVisibleContent = hasVisibleContentAfterIndex(
-    visibleMessagesForPostSendOverflow,
-    postSendAnchorIndex,
-  );
   const {
+    historySentinelRef,
     olderHistoryLoadingPaused,
     scrollElementRef,
     scrollToBottom,
     showScrollToBottom,
-    trailingSpacerPx,
   } = useMessageListScroll({
-    rowVirtualizer,
-    rowKeys,
-    firstVirtualItemIndex: virtualItems[0]?.index ?? null,
-    firstVisibleCommittedMessageId: visibleCommittedMessages[0]?.id ?? null,
     hasOlderHistory,
     layoutSignature,
     loadOlderHistory,
     loadingOlderHistory,
-    postSendAnchorIndex,
-    postSendHasVisibleContent,
-    postSendToken,
-    visibleCommittedMessageCount: visibleCommittedMessages.length,
+    rowCount,
   });
   const showHistoryLoading = olderHistoryLoadingPaused || loadingOlderHistory;
 
@@ -117,28 +84,6 @@ export const MessageList: FC<MessageListProps> = ({
       [messageId]: !previous[messageId],
     }));
   }, []);
-
-  useLayoutEffect(() => {
-    const previousTail = visibleMessageTailRef.current;
-    const anchorIndex = getPostSendAnchorIndexFromVisibleMessages({
-      messages: visibleCommittedMessages,
-      previousTail,
-    });
-    visibleMessageTailRef.current = buildVisibleMessageTailSnapshot(visibleCommittedMessages);
-    if (anchorIndex === null) {
-      if (shouldReleasePostSendAnchor({
-        anchorIndex: postSendAnchorIndex,
-        loading,
-        messages: visibleCommittedMessages,
-      })) {
-        setPostSendAnchorIndex(null);
-      }
-      return;
-    }
-
-    setPostSendAnchorIndex(anchorIndex);
-    setPostSendToken((token) => token + 1);
-  }, [loading, postSendAnchorIndex, visibleCommittedMessages]);
 
   useEffect(() => {
     if (!latestStreamingThinkingId) {
@@ -184,45 +129,37 @@ export const MessageList: FC<MessageListProps> = ({
       {showHistoryLoading ? (
         <TopLoadingBar className="messages-history-loading-overlay" label={copy.chat.loadingOlderMessages} />
       ) : null}
-      <div ref={scrollElementRef} className="messages ui-scroll" aria-live="polite">
-        <div
-          className="messages-viewport"
-          style={{ height: rowVirtualizer.getTotalSize() + trailingSpacerPx }}
-        >
-          {virtualItems.map((virtualItem) => {
-            const row = effectiveRows[virtualItem.index];
-            const hasTrailingTool = shouldPlaceAssistantCopyInline({
-              currentRow: row,
-              currentIndex: virtualItem.index,
-              rowCount: effectiveRowCount,
-              getRowAtIndex: (index) => effectiveRows[index],
-            });
+      <div ref={scrollElementRef} className="messages ui-scroll is-reverse-flow" aria-live="polite">
+        {renderedRows.map(({ index, row }) => {
+          const hasTrailingTool = shouldPlaceAssistantCopyInline({
+            currentRow: row,
+            currentIndex: index,
+            rowCount: effectiveRowCount,
+            getRowAtIndex: (index) => effectiveRows[index],
+          });
 
-            return (
-              <div
-                key={row.key}
-                data-index={virtualItem.index}
-                ref={measureMessageRow}
-                className="messages-virtual-row"
-                style={{ transform: `translateY(${virtualItem.start}px)` }}
-              >
-                {renderRow(row, {
-                  copy,
-                  assistantMarkdownEnabled,
-                  hasTrailingTool,
-                  loading,
-                  thinkingStartedAtMs,
-                  openToolCards,
-                  onAnswerQuestion,
-                  onCancelQuestion,
-                  onToggleThinkingPanel: handleToggleThinkingPanel,
-                  onToggleToolCard: handleToggleToolCard,
-                  openThinkingPanels,
-                })}
-              </div>
-            );
-          })}
-        </div>
+          return (
+            <div
+              key={row.key}
+              data-index={index}
+              className="messages-flow-row"
+            >
+              {renderRow(row, {
+                assistantMarkdownEnabled,
+                hasTrailingTool,
+                loading,
+                thinkingStartedAtMs,
+                openToolCards,
+                onAnswerQuestion,
+                onCancelQuestion,
+                onToggleThinkingPanel: handleToggleThinkingPanel,
+                onToggleToolCard: handleToggleToolCard,
+                openThinkingPanels,
+              })}
+            </div>
+          );
+        })}
+        <div ref={historySentinelRef} className="messages-history-sentinel" aria-hidden="true" />
       </div>
       {showScrollToBottom ? (
         <button
@@ -241,7 +178,6 @@ export const MessageList: FC<MessageListProps> = ({
 function renderRow(
   row: MessageListRow,
   options: {
-    copy: ReturnType<typeof useWebLocale>['copy'];
     assistantMarkdownEnabled: boolean;
     hasTrailingTool: boolean;
     loading: boolean;
@@ -255,12 +191,6 @@ function renderRow(
   },
 ) {
   switch (row.kind) {
-    case 'history_loading':
-      return (
-        <div className="message-row is-history-loading">
-          <TopLoadingBar label={options.copy.chat.loadingOlderMessages} />
-        </div>
-      );
     case 'thinking_indicator':
       return <ThinkingIndicator startedAtMs={options.thinkingStartedAtMs} />;
     case 'message':

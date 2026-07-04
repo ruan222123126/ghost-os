@@ -13,8 +13,15 @@
   overflow-y: auto;
   overflow-x: hidden;
   overflow-anchor: none;
+  overscroll-behavior: contain;
   padding: 32px 22px 84px;
   background: rgb(255 255 255);
+}
+
+.messages.is-reverse-flow {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: stretch;
 }
 
 .messages-history-loading-overlay {
@@ -24,18 +31,18 @@
   z-index: 2;
 }
 
-.messages-viewport {
-  position: relative;
+.messages-flow-row {
   width: 100%;
+  flex: 0 0 auto;
+  padding-bottom: 32px;
   overflow-anchor: none;
 }
 
-.messages-virtual-row {
-  position: absolute;
-  top: 0;
-  left: 0;
+.messages-history-sentinel {
   width: 100%;
-  padding-bottom: 32px;
+  height: 1px;
+  flex: 0 0 1px;
+  overflow-anchor: none;
 }
 
 .messages-scroll-bottom-button {

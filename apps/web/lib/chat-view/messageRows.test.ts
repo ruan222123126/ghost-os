@@ -23,9 +23,8 @@ describe('lib/chat-view/messageRows', () => {
 
     expect(projection.visibleCommittedMessages.map((message) => message.id)).toEqual(['assistant-1']);
     expect(projection.showThinkingIndicator).toBe(true);
-    expect(projection.estimatedRowSize).toBe(96);
+    expect(projection.loadingOlderHistory).toBe(true);
     expect(projection.rows.map((row) => row.key)).toEqual([
-      'history-loading',
       'assistant-1',
       'thinking-indicator',
     ]);

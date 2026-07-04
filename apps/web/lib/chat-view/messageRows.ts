@@ -20,8 +20,6 @@ import type {
 } from './types';
 import { buildToolCardViewModel } from './tool-details/viewModel';
 
-const MESSAGE_ROW_ESTIMATE_PX = 96;
-
 export function buildChatViewProjection(input: ChatViewInput): ChatViewProjection {
   const visibleCommittedMessages = filterCommittedMessagesForDisplay(
     input.committedMessages,
@@ -44,10 +42,6 @@ export function buildChatViewProjection(input: ChatViewInput): ChatViewProjectio
       hasThinkingText,
       hasAssistantText,
     }),
-    visibleMessagesForPostSendOverflow: [
-      ...visibleCommittedMessages,
-      ...streamingRows.map((row) => row.message),
-    ],
   };
 }
 
@@ -55,7 +49,6 @@ export function buildMessageListProjection(input: MessageListProjectionInput): M
   const projection = buildChatViewProjection(input);
   const rows = buildMessageListRows({
     committedMessages: projection.visibleCommittedMessages,
-    loadingOlderHistory: input.loadingOlderHistory,
     showThinkingIndicator: projection.showThinkingIndicator,
     streamingRows: projection.streamingRows,
     toolCard: input.toolCard,
@@ -63,7 +56,6 @@ export function buildMessageListProjection(input: MessageListProjectionInput): M
 
   return {
     ...projection,
-    estimatedRowSize: MESSAGE_ROW_ESTIMATE_PX,
     rows,
     rowCount: rows.length,
     loading: input.loading,
@@ -74,15 +66,10 @@ export function buildMessageListProjection(input: MessageListProjectionInput): M
 export function buildMessageListRows(options: {
   committedMessages: ChatMessage[];
   showThinkingIndicator: boolean;
-  loadingOlderHistory: boolean;
   streamingRows: StreamingMessageRow[];
   toolCard?: ToolCardViewModelOptions;
 }): MessageListRow[] {
   const rows: MessageListRow[] = [];
-
-  if (options.loadingOlderHistory) {
-    rows.push({ key: 'history-loading', kind: 'history_loading' });
-  }
 
   for (const message of options.committedMessages) {
     rows.push(buildMessageRow(message.id, message, options.toolCard));

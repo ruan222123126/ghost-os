@@ -1,43 +1,76 @@
-import type { VirtualItem, Virtualizer } from '@tanstack/react-virtual';
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import { useMessageListScroll } from './useMessageListScroll';
 
 describe('components/message/useMessageListScroll', () => {
-  afterEach(() => {
-    jest.useRealTimers();
+  let intersectionCallback: IntersectionObserverCallback | null = null;
+  let originalIntersectionObserver: typeof IntersectionObserver | undefined;
+
+  beforeEach(() => {
+    originalIntersectionObserver = globalThis.IntersectionObserver;
+    intersectionCallback = null;
+    globalThis.IntersectionObserver = class MockIntersectionObserver {
+      readonly root: Element | Document | null = null;
+      readonly rootMargin = '0px';
+      readonly thresholds = [0.1];
+
+      constructor(callback: IntersectionObserverCallback) {
+        intersectionCallback = callback;
+      }
+
+      disconnect() {}
+      observe() {}
+      takeRecords(): IntersectionObserverEntry[] {
+        return [];
+      }
+      unobserve() {}
+    };
   });
 
-  it('starts loaded history at the bottom without immediately loading older messages', async () => {
+  afterEach(() => {
+    jest.useRealTimers();
+    if (originalIntersectionObserver) {
+      globalThis.IntersectionObserver = originalIntersectionObserver;
+      return;
+    }
+
+    delete (globalThis as Partial<typeof globalThis>).IntersectionObserver;
+  });
+
+  it('starts reverse-flow history at the bottom without immediately loading older messages', async () => {
     const scrollElement = createScrollElement({
       clientHeight: 400,
       scrollHeight: 1600,
-      scrollTop: 0,
+      scrollTop: -600,
     });
     const loadOlderHistory = jest.fn(async () => undefined);
 
     await act(async () => {
       TestRenderer.create(
         React.createElement(HookProbe, {
-          firstVirtualItemIndex: 0,
           hasOlderHistory: true,
           layoutSignature: 'session:ready',
           loadOlderHistory,
+          rowCount: 12,
           scrollElement,
-          visibleCommittedMessageCount: 12,
         }),
         {
-          createNodeMock: () => scrollElement,
+          createNodeMock: createNodeMock(scrollElement),
         },
       );
       await Promise.resolve();
     });
 
-    expect(scrollElement.scrollTop).toBe(1600);
+    await act(async () => {
+      triggerHistoryIntersection();
+      await Promise.resolve();
+    });
+
+    expect(scrollElement.scrollTop).toBe(0);
     expect(loadOlderHistory).not.toHaveBeenCalled();
   });
 
-  it('loads older messages after the user reaches the top following initial placement', async () => {
+  it('loads older messages after the top sentinel intersects following initial placement', async () => {
     jest.useFakeTimers();
     const scrollElement = createScrollElement({
       clientHeight: 400,
@@ -46,45 +79,34 @@ describe('components/message/useMessageListScroll', () => {
     });
     const loadOlderHistory = jest.fn(async () => undefined);
     let latestHook: HookProbeRenderState | null = null;
-    let renderer!: TestRenderer.ReactTestRenderer;
 
     await act(async () => {
-      renderer = TestRenderer.create(
+      TestRenderer.create(
         React.createElement(HookProbe, {
-          firstVirtualItemIndex: 20,
           hasOlderHistory: true,
           layoutSignature: 'session:ready',
           loadOlderHistory,
           onRender: (state) => {
             latestHook = state;
           },
+          rowCount: 12,
           scrollElement,
-          visibleCommittedMessageCount: 12,
         }),
         {
-          createNodeMock: () => scrollElement,
+          createNodeMock: createNodeMock(scrollElement),
         },
       );
       await Promise.resolve();
     });
 
+    await act(async () => {
+      triggerHistoryIntersection();
+      await Promise.resolve();
+    });
     expect(loadOlderHistory).not.toHaveBeenCalled();
 
     await act(async () => {
-      scrollElement.scrollTop = 0;
-      renderer.update(
-        React.createElement(HookProbe, {
-          firstVirtualItemIndex: 0,
-          hasOlderHistory: true,
-          layoutSignature: 'session:ready',
-          loadOlderHistory,
-          onRender: (state) => {
-            latestHook = state;
-          },
-          scrollElement,
-          visibleCommittedMessageCount: 12,
-        }),
-      );
+      triggerHistoryIntersection();
       await Promise.resolve();
     });
 
@@ -105,15 +127,13 @@ describe('components/message/useMessageListScroll', () => {
     });
 
     expect(loadOlderHistory).toHaveBeenCalledTimes(1);
-    jest.useRealTimers();
   });
 
-  it('keeps the visible row anchored when older messages are prepended', async () => {
-    jest.useFakeTimers();
+  it('does not compensate scrollTop when older rows are prepended in reverse flow', async () => {
     const scrollElement = createScrollElement({
       clientHeight: 300,
-      scrollHeight: 600,
-      scrollTop: 0,
+      scrollHeight: 900,
+      scrollTop: -420,
     });
     const loadOlderHistory = jest.fn(async () => undefined);
     let renderer!: TestRenderer.ReactTestRenderer;
@@ -121,83 +141,39 @@ describe('components/message/useMessageListScroll', () => {
     await act(async () => {
       renderer = TestRenderer.create(
         React.createElement(HookProbe, {
-          firstVirtualItemIndex: 20,
           hasOlderHistory: true,
           layoutSignature: 'session:ready',
           loadOlderHistory,
-          rowKeys: ['message-1', 'message-2'],
+          rowCount: 12,
           scrollElement,
-          virtualItems: [
-            createVirtualItem(0, 0, 100),
-            createVirtualItem(1, 100, 220),
-          ],
-          visibleCommittedMessageCount: 2,
         }),
         {
-          createNodeMock: () => scrollElement,
+          createNodeMock: createNodeMock(scrollElement),
         },
       );
       await Promise.resolve();
     });
 
+    scrollElement.scrollTop = -420;
+    scrollElement.scrollHeight = 1200;
+
     await act(async () => {
-      scrollElement.scrollTop = 120;
       renderer.update(
         React.createElement(HookProbe, {
-          firstVirtualItemIndex: 0,
-          hasOlderHistory: true,
-          layoutSignature: 'session:ready',
-          loadOlderHistory,
-          rowKeys: ['message-1', 'message-2'],
-          scrollElement,
-          virtualItems: [
-            createVirtualItem(0, 0, 100),
-            createVirtualItem(1, 100, 220),
-          ],
-          visibleCommittedMessageCount: 2,
-        }),
-      );
-      await Promise.resolve();
-    });
-
-    expect(loadOlderHistory).not.toHaveBeenCalled();
-
-    await act(async () => {
-      jest.advanceTimersByTime(1500);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(loadOlderHistory).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      scrollElement.scrollHeight = 900;
-      renderer.update(
-        React.createElement(HookProbe, {
-          firstVirtualItemIndex: 8,
-          firstVisibleCommittedMessageId: 'older-1',
           hasOlderHistory: true,
           layoutSignature: 'session:older-loaded',
           loadOlderHistory,
-          rowKeys: ['older-1', 'older-2', 'message-1', 'message-2'],
+          rowCount: 22,
           scrollElement,
-          virtualItems: [
-            createVirtualItem(0, 0, 180),
-            createVirtualItem(1, 180, 400),
-            createVirtualItem(2, 400, 500),
-            createVirtualItem(3, 500, 620),
-          ],
-          visibleCommittedMessageCount: 4,
         }),
       );
       await Promise.resolve();
     });
 
-    expect(scrollElement.scrollTop).toBe(520);
-    jest.useRealTimers();
+    expect(scrollElement.scrollTop).toBe(-420);
   });
 
-  it('shows a bottom affordance after manual upward scroll and scrolls back to the bottom', async () => {
+  it('shows a bottom affordance after upward scroll and scrolls back to the bottom', async () => {
     const scrollElement = createScrollElement({
       clientHeight: 400,
       scrollHeight: 1600,
@@ -209,18 +185,17 @@ describe('components/message/useMessageListScroll', () => {
     await act(async () => {
       TestRenderer.create(
         React.createElement(HookProbe, {
-          firstVirtualItemIndex: 20,
           hasOlderHistory: false,
           layoutSignature: 'session:ready',
           loadOlderHistory,
           onRender: (state) => {
             latestHook = state;
           },
+          rowCount: 12,
           scrollElement,
-          visibleCommittedMessageCount: 12,
         }),
         {
-          createNodeMock: () => scrollElement,
+          createNodeMock: createNodeMock(scrollElement),
         },
       );
       await Promise.resolve();
@@ -229,8 +204,7 @@ describe('components/message/useMessageListScroll', () => {
     expect(requireLatestHook(latestHook).showScrollToBottom).toBe(false);
 
     await act(async () => {
-      scrollElement.dispatchEvent(new Event('wheel'));
-      scrollElement.scrollTop = 800;
+      scrollElement.scrollTop = -800;
       scrollElement.dispatchEvent(new Event('scroll'));
       await Promise.resolve();
     });
@@ -244,129 +218,22 @@ describe('components/message/useMessageListScroll', () => {
 
     expect(scrollElement.scrollTo).toHaveBeenLastCalledWith({
       behavior: 'smooth',
-      top: 1600,
+      top: 0,
     });
-    expect(scrollElement.scrollTop).toBe(1600);
+    expect(scrollElement.scrollTop).toBe(0);
     expect(requireLatestHook(latestHook).showScrollToBottom).toBe(false);
   });
 
-  it('keeps the post-send anchor after an automatic layout scroll', async () => {
-    const scrollElement = createScrollElement({
-      clientHeight: 400,
-      scrollHeight: 500,
-      scrollTop: 0,
-    });
-    const loadOlderHistory = jest.fn(async () => undefined);
-    let renderer!: TestRenderer.ReactTestRenderer;
+  function triggerHistoryIntersection() {
+    if (!intersectionCallback) {
+      throw new Error('IntersectionObserver callback was not registered');
+    }
 
-    await act(async () => {
-      renderer = TestRenderer.create(
-        React.createElement(HookProbe, {
-          firstVirtualItemIndex: null,
-          hasOlderHistory: false,
-          layoutSignature: 'post-send:start',
-          loadOlderHistory,
-          postSendAnchorIndex: 0,
-          postSendHasVisibleContent: false,
-          postSendToken: 1,
-          rowStartPx: 300,
-          scrollElement,
-          visibleCommittedMessageCount: 0,
-        }),
-        {
-          createNodeMock: () => scrollElement,
-        },
-      );
-      await Promise.resolve();
-    });
-
-    expect(scrollElement.scrollTop).toBe(300);
-
-    scrollElement.scrollHeight = 480;
-    scrollElement.scrollTop = 250;
-    scrollElement.dispatchEvent(new Event('scroll'));
-
-    await act(async () => {
-      renderer.update(
-        React.createElement(HookProbe, {
-          firstVirtualItemIndex: null,
-          hasOlderHistory: false,
-          layoutSignature: 'post-send:thinking-collapsed',
-          loadOlderHistory,
-          postSendAnchorIndex: 0,
-          postSendHasVisibleContent: false,
-          postSendToken: 1,
-          rowStartPx: 300,
-          scrollElement,
-          visibleCommittedMessageCount: 0,
-        }),
-      );
-      await Promise.resolve();
-    });
-
-    expect(scrollElement.scrollTop).toBe(300);
-  });
-
-  it('releases the post-send anchor after a manual wheel scroll', async () => {
-    const scrollElement = createScrollElement({
-      clientHeight: 400,
-      scrollHeight: 500,
-      scrollTop: 0,
-    });
-    const loadOlderHistory = jest.fn(async () => undefined);
-    let renderer!: TestRenderer.ReactTestRenderer;
-
-    await act(async () => {
-      renderer = TestRenderer.create(
-        React.createElement(HookProbe, {
-          firstVirtualItemIndex: null,
-          hasOlderHistory: false,
-          layoutSignature: 'post-send:start',
-          loadOlderHistory,
-          postSendAnchorIndex: 0,
-          postSendHasVisibleContent: false,
-          postSendToken: 1,
-          rowStartPx: 300,
-          scrollElement,
-          visibleCommittedMessageCount: 0,
-        }),
-        {
-          createNodeMock: () => scrollElement,
-        },
-      );
-      await Promise.resolve();
-    });
-
-    expect(scrollElement.scrollTop).toBe(300);
-
-    await act(async () => {
-      scrollElement.dispatchEvent(new Event('wheel'));
-      scrollElement.scrollTop = 250;
-      scrollElement.dispatchEvent(new Event('scroll'));
-      scrollElement.scrollHeight = 480;
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      renderer.update(
-        React.createElement(HookProbe, {
-          firstVirtualItemIndex: null,
-          hasOlderHistory: false,
-          layoutSignature: 'post-send:manual-scroll',
-          loadOlderHistory,
-          postSendAnchorIndex: 0,
-          postSendHasVisibleContent: false,
-          postSendToken: 1,
-          rowStartPx: 300,
-          scrollElement,
-          visibleCommittedMessageCount: 0,
-        }),
-      );
-      await Promise.resolve();
-    });
-
-    expect(scrollElement.scrollTop).toBe(250);
-  });
+    intersectionCallback(
+      [{ isIntersecting: true } as IntersectionObserverEntry],
+      {} as IntersectionObserver,
+    );
+  }
 });
 
 interface HookProbeRenderState {
@@ -384,38 +251,20 @@ function requireLatestHook(state: HookProbeRenderState | null): HookProbeRenderS
 }
 
 function HookProbe(props: {
-  firstVisibleCommittedMessageId?: string;
-  firstVirtualItemIndex: number | null;
   hasOlderHistory: boolean;
   layoutSignature: string;
   loadingOlderHistory?: boolean;
   loadOlderHistory: () => Promise<void>;
   onRender?: (state: HookProbeRenderState) => void;
-  postSendAnchorIndex?: number | null;
-  postSendHasVisibleContent?: boolean;
-  postSendToken?: number;
-  rowKeys?: string[];
-  rowStartPx?: number;
+  rowCount: number;
   scrollElement: ScrollElement;
-  virtualItems?: VirtualItem[];
-  visibleCommittedMessageCount: number;
 }) {
   const hook = useMessageListScroll({
-    firstVirtualItemIndex: props.firstVirtualItemIndex,
-    firstVisibleCommittedMessageId: props.firstVisibleCommittedMessageId ?? 'message-1',
     hasOlderHistory: props.hasOlderHistory,
     layoutSignature: props.layoutSignature,
     loadOlderHistory: props.loadOlderHistory,
     loadingOlderHistory: props.loadingOlderHistory ?? false,
-    postSendAnchorIndex: props.postSendAnchorIndex,
-    postSendHasVisibleContent: props.postSendHasVisibleContent,
-    postSendToken: props.postSendToken,
-    rowKeys: props.rowKeys ?? ['message-1'],
-    rowVirtualizer: createRowVirtualizer(props.scrollElement, {
-      rowStartPx: props.rowStartPx,
-      virtualItems: props.virtualItems,
-    }),
-    visibleCommittedMessageCount: props.visibleCommittedMessageCount,
+    rowCount: props.rowCount,
   });
   props.onRender?.({
     olderHistoryLoadingPaused: hook.olderHistoryLoadingPaused,
@@ -423,7 +272,11 @@ function HookProbe(props: {
     showScrollToBottom: hook.showScrollToBottom,
   });
 
-  return React.createElement('div', { ref: hook.scrollElementRef });
+  return React.createElement(
+    'div',
+    { ref: hook.scrollElementRef, 'data-node': 'scroll' },
+    React.createElement('div', { ref: hook.historySentinelRef, 'data-node': 'sentinel' }),
+  );
 }
 
 interface ScrollElement {
@@ -466,34 +319,15 @@ function createScrollElement(layout: {
   return element;
 }
 
-function createRowVirtualizer(
-  scrollElement: ScrollElement,
-  options: {
-    rowStartPx?: number;
-    virtualItems?: VirtualItem[];
-  } = {},
-): Virtualizer<HTMLDivElement, Element> {
-  const measurementsCache = options.virtualItems
-    ?? (options.rowStartPx === undefined ? [] : [createVirtualItem(0, options.rowStartPx, options.rowStartPx + 96)]);
+function createNodeMock(scrollElement: ScrollElement) {
+  return (element: React.ReactElement) => {
+    if (element.props['data-node'] === 'scroll') {
+      return scrollElement;
+    }
+    if (element.props['data-node'] === 'sentinel') {
+      return {};
+    }
 
-  return {
-    getOffsetForIndex: (index: number) => {
-      const item = measurementsCache[index];
-      return item ? [item.start, 'start'] as const : undefined;
-    },
-    getTotalSize: () => scrollElement.scrollHeight,
-    getVirtualItems: () => measurementsCache,
-    measurementsCache,
-  } as unknown as Virtualizer<HTMLDivElement, Element>;
-}
-
-function createVirtualItem(index: number, start: number, end: number): VirtualItem {
-  return {
-    end,
-    index,
-    key: index,
-    lane: 0,
-    size: end - start,
-    start,
+    return null;
   };
 }
