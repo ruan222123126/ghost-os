@@ -98,12 +98,16 @@ func (m *Manager) prepareSession(
 	ext.UpdatedAt = now
 	ext.PendingApprovals = nil
 	sess.SetExternalRuntime(ext)
+	selectionMode := session.RuntimeSelectionModeDefault
+	if strings.TrimSpace(req.Mode) == CodexModePlan {
+		selectionMode = session.RuntimeSelectionModePlan
+	}
 	sess.SetLastRuntimeSelection(session.RuntimeSelection{
 		Runtime:      session.RuntimeSelectionCodex,
 		Provider:     ProviderCodex,
 		ProviderType: string(llm.ProviderCodex),
 		Model:        strings.TrimSpace(req.Model),
-		Mode:         session.RuntimeSelectionModeDefault,
+		Mode:         selectionMode,
 	})
 	if strings.TrimSpace(sess.Title) == "" {
 		sess.Title = externalSessionTitle(req.Message)

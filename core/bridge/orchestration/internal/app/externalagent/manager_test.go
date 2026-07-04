@@ -265,18 +265,40 @@ func TestManagerExecuteStreamDoesNotReplayAgentMessageSnapshot(t *testing.T) {
 	}
 }
 
-func TestManagerExecuteStreamRejectsCodexPlanMode(t *testing.T) {
-	manager, _, _ := newExternalAgentTestManager(t)
-
-	_, _, err := manager.ExecuteStream(context.Background(), api.ExternalAgentRequest{
-		Message: "make a plan",
-		Mode:    "plan",
-	}, "trace-plan", newCollectingSink(), true)
-	if err == nil {
-		t.Fatal("expected error but got nil")
+func TestManagerExecuteStreamEnablesCodexPlanMode(t *testing.T) {
+	manager, sessionStore, fake := newExternalAgentTestManager(t)
+	fake.startTurn = func(ctx context.Context, client *fakeCodexClient, opts TurnOptions) (string, error) {
+		client.emit(CodexEvent{Type: "agent_message", Payload: map[string]any{"message": "planned"}})
+		client.emit(CodexEvent{Type: "task_complete", Payload: map[string]any{"turn_id": "turn-plan"}})
+		return "turn-plan", nil
 	}
-	if err.Error() != `unsupported external codex mode: "plan"` {
-		t.Fatalf("unexpected error: %v", err)
+
+	message, sessionID, err := manager.ExecuteStream(context.Background(), api.ExternalAgentRequest{
+		Message: "make a plan",
+		Mode:    " PLAN ",
+		Model:   "gpt-5-codex",
+		Effort:  "high",
+	}, "trace-plan", newCollectingSink(), true)
+	if err != nil {
+		t.Fatalf("ExecuteStream: %v", err)
+	}
+	if message != "planned" {
+		t.Fatalf("unexpected message: got %q want %q", message, "planned")
+	}
+	mode := fake.collaborationMode()
+	if mode.Mode != CodexModePlan || mode.Model != "gpt-5-codex" || mode.Effort != "high" {
+		t.Fatalf("expected codex plan collaboration mode, got %+v", mode)
+	}
+
+	loaded, err := sessionStore.Load(sessionID)
+	if err != nil {
+		t.Fatalf("load session: %v", err)
+	}
+	if loaded.ExternalRuntime == nil || loaded.ExternalRuntime.Mode != CodexModePlan {
+		t.Fatalf("expected plan external runtime, got %+v", loaded.ExternalRuntime)
+	}
+	if loaded.LastRuntimeSelection == nil || loaded.LastRuntimeSelection.Mode != session.RuntimeSelectionModePlan {
+		t.Fatalf("expected plan runtime selection, got %+v", loaded.LastRuntimeSelection)
 	}
 }
 

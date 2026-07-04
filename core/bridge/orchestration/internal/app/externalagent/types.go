@@ -13,6 +13,7 @@ const (
 
 const (
 	CodexModeDefault = "default"
+	CodexModePlan    = "plan"
 )
 
 const (
