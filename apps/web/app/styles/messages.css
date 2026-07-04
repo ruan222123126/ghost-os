@@ -17,6 +17,13 @@
   background: rgb(255 255 255);
 }
 
+.messages-history-loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+}
+
 .messages-viewport {
   position: relative;
   width: 100%;

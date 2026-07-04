@@ -48,13 +48,6 @@ export const MessageList: FC<MessageListProps> = ({
     visibleCommittedMessages,
     visibleMessagesForPostSendOverflow,
   } = view;
-  const rowsWithPausedHistoryLoading = useMemo(() => {
-    if (loadingOlderHistory) {
-      return rows;
-    }
-
-    return [{ key: 'history-loading' as const, kind: 'history_loading' as const }, ...rows];
-  }, [loadingOlderHistory, rows]);
   const thinkingStartedAtMs = useThinkingStartedAtMs(loading);
   const visibleMessageTailRef = useRef<ReturnType<typeof buildVisibleMessageTailSnapshot> | null>(
     visibleCommittedMessages.length === 0 ? buildVisibleMessageTailSnapshot(visibleCommittedMessages) : null,
@@ -64,8 +57,7 @@ export const MessageList: FC<MessageListProps> = ({
   const latestStreamingThinkingPanelOpen = latestStreamingThinkingId
     ? Boolean(openThinkingPanels[latestStreamingThinkingId])
     : false;
-  const [olderHistoryLoadingPausedRows, setOlderHistoryLoadingPausedRows] = useState(false);
-  const effectiveRows = olderHistoryLoadingPausedRows ? rowsWithPausedHistoryLoading : rows;
+  const effectiveRows = rows;
   const effectiveRowCount = effectiveRows.length;
   const rowVirtualizer = useVirtualizer({
     count: effectiveRowCount,
@@ -78,12 +70,11 @@ export const MessageList: FC<MessageListProps> = ({
   const virtualItems = rowVirtualizer.getVirtualItems();
   const measureMessageRow = rowVirtualizer.measureElement;
   const rowKeys = useMemo(() => effectiveRows.map((row) => row.key), [effectiveRows]);
-  const effectiveLoadingOlderHistory = loadingOlderHistory || olderHistoryLoadingPausedRows;
   const layoutSignature = buildMessageListLayoutSignature({
     committedMessages: visibleCommittedMessages,
     latestStreamingThinkingId,
     latestStreamingThinkingPanelOpen,
-    loadingOlderHistory: effectiveLoadingOlderHistory,
+    loadingOlderHistory,
     showThinkingIndicator,
     streamingRows,
   });
@@ -111,9 +102,7 @@ export const MessageList: FC<MessageListProps> = ({
     postSendToken,
     visibleCommittedMessageCount: visibleCommittedMessages.length,
   });
-  useEffect(() => {
-    setOlderHistoryLoadingPausedRows(olderHistoryLoadingPaused);
-  }, [olderHistoryLoadingPaused]);
+  const showHistoryLoading = olderHistoryLoadingPaused || loadingOlderHistory;
 
   const handleToggleToolCard = useCallback((messageId: string) => {
     setOpenToolCards((previous) => ({
@@ -192,6 +181,9 @@ export const MessageList: FC<MessageListProps> = ({
   }
   return (
     <div className="messages-shell">
+      {showHistoryLoading ? (
+        <TopLoadingBar className="messages-history-loading-overlay" label={copy.chat.loadingOlderMessages} />
+      ) : null}
       <div ref={scrollElementRef} className="messages ui-scroll" aria-live="polite">
         <div
           className="messages-viewport"

@@ -169,7 +169,6 @@ export function useMessageListScroll(options: UseMessageListScrollOptions) {
     autoFollowRef,
     cancelScheduledScroll,
     layoutSignature: options.layoutSignature,
-    loadingOlderHistory: options.loadingOlderHistory || olderHistoryLoadingPaused,
     onNormalLayoutChange: scheduleNormalFollow,
     postSendAnchorIndex: options.postSendAnchorIndex,
     postSendHasVisibleContent: options.postSendHasVisibleContent,

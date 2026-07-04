@@ -30,7 +30,6 @@ interface UseMessageListPostSendFocusOptions {
   autoFollowRef: MutableRefObject<boolean>;
   cancelScheduledScroll: () => void;
   layoutSignature: string;
-  loadingOlderHistory: boolean;
   onNormalLayoutChange: () => void;
   postSendAnchorIndex?: number | null;
   postSendHasVisibleContent?: boolean;
@@ -45,7 +44,6 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
     autoFollowRef,
     cancelScheduledScroll,
     layoutSignature,
-    loadingOlderHistory,
     onNormalLayoutChange,
     postSendHasVisibleContent,
     rowVirtualizer,
@@ -67,7 +65,6 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
       pendingAnchorRef,
       postSendRef,
       layoutSignature,
-      loadingOlderHistory,
       onNormalLayoutChange,
       postSendHasVisibleContent,
       rowVirtualizer,
@@ -82,7 +79,6 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
     autoFollowRef,
     cancelScheduledScroll,
     layoutSignature,
-    loadingOlderHistory,
     onNormalLayoutChange,
     postSendHasVisibleContent,
     rowVirtualizer,
@@ -280,7 +276,5 @@ function applyPendingAnchorScroll(
 }
 
 function getPostSendAnchor(options: PostSendStateMachineOptions) {
-  const historyRowOffset = options.loadingOlderHistory ? 1 : 0;
-  const rowIndex = (options.anchorIndex ?? 0) + historyRowOffset;
-  return options.rowVirtualizer.measurementsCache[rowIndex];
+  return options.rowVirtualizer.measurementsCache[options.anchorIndex ?? 0];
 }

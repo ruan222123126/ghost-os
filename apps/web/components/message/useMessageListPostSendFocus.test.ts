@@ -188,7 +188,6 @@ function HookProbe(props: {
     autoFollowRef: props.autoFollowRef,
     cancelScheduledScroll: props.cancelScheduledScroll,
     layoutSignature: props.layoutSignature,
-    loadingOlderHistory: false,
     onNormalLayoutChange: props.onNormalLayoutChange,
     postSendAnchorIndex: props.postSendAnchorIndex === undefined ? 0 : props.postSendAnchorIndex,
     postSendHasVisibleContent: props.postSendHasVisibleContent,
