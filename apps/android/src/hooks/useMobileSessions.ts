@@ -165,6 +165,10 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
   const sessionViewsRef = useRef<Record<string, MobileSessionView>>(sessionViews);
   const storedConversationsRef = useRef<StoredMobileConversation[]>(storedConversations);
   const syncRunIdRef = useRef(0);
+  const computerSessionSyncSignature = useMemo(
+    () => buildComputerSessionSyncSignature(options.sessions),
+    [options.sessions],
+  );
 
   useEffect(() => {
     activeSessionIdRef.current = activeSessionId;
@@ -296,7 +300,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     options.getSession,
     options.pinnedHistoryIds,
     options.persistComputerSessionsEnabled,
-    options.sessions,
+    computerSessionSyncSignature,
     options.sessionsLoaded,
     storageLoaded,
   ]);
@@ -1376,6 +1380,17 @@ function isStoredConversationCurrent(conversation: StoredMobileConversation, ses
   return conversation.updated_at === session.updated_at
     && conversation.source_message_count === session.message_count
     && syncedMessageCount === conversation.source_message_count;
+}
+
+function buildComputerSessionSyncSignature(sessions: SessionMetadata[]): string {
+  return JSON.stringify(
+    recentMobileBridgeSessions(sessions).map((session) => ({
+      id: session.id,
+      message_count: session.message_count,
+      title: session.title,
+      updated_at: session.updated_at,
+    })),
+  );
 }
 
 function shouldPollExternalRunningSession(view: MobileSessionView): boolean {

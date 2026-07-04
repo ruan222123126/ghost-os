@@ -957,6 +957,62 @@ describe("useMobileSessions", () => {
     expect(result.current.activeMessages.map((message) => message.text)).toEqual(["loaded"]);
   });
 
+  it("does not restart computer session persistence when refreshed sessions keep the same content", async () => {
+    const pendingSessionLoads: Array<{
+      resolve: (detail: SessionDetail) => void;
+      sessionId: string;
+    }> = [];
+    const sessions = Array.from({ length: 4 }, (_, index) =>
+      sessionWithUpdatedAt(`session-${index}`, `Session ${index}`, `2026-01-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`),
+    );
+    const getSession = vi.fn((sessionId: string) =>
+      new Promise<SessionDetail>((resolve) => {
+        pendingSessionLoads.push({ resolve, sessionId });
+      }),
+    );
+    const baseProps: UseMobileSessionsOptionsForTest = {
+      bridgeConnected: true,
+      getFullSession: vi.fn(async (sessionId: string) => sessionDetail(sessionId)),
+      getSession,
+      pinnedHistoryIds: [],
+      persistComputerSessionsEnabled: true,
+      sendAgentMessage: vi.fn(async () => ({ ok: false })),
+      sessions,
+      sessionsLoaded: true,
+      stopAgentRun: vi.fn(async () => ({ ok: true, status: "stopped" as const })),
+    };
+    const { result, rerender } = renderHook((props: UseMobileSessionsOptionsForTest) => useMobileSessions(props), {
+      initialProps: baseProps,
+    });
+
+    await waitFor(() => expect(getSession).toHaveBeenCalledTimes(1));
+
+    rerender({
+      ...baseProps,
+      sessions: sessions.map((item) => ({ ...item })),
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(getSession).toHaveBeenCalledTimes(1);
+
+    for (const [index] of sessions.entries()) {
+      const pending = pendingSessionLoads[index];
+      expect(pending).toBeDefined();
+      await act(async () => {
+        pending.resolve(sessionDetail(pending.sessionId));
+        await Promise.resolve();
+      });
+      if (index < sessions.length - 1) {
+        await waitFor(() => expect(getSession).toHaveBeenCalledTimes(index + 2));
+      }
+    }
+
+    await waitFor(() => expect(result.current.computerSessionPersistStatus.text).toBe("已同步 4 个"));
+    expect(getSession).toHaveBeenCalledTimes(4);
+  });
+
   it("limits computer session persistence to the most recent Bridge sessions", async () => {
     const sessions = Array.from({ length: MOBILE_PERSISTED_CONVERSATION_LIMIT + 2 }, (_, index) =>
       sessionWithUpdatedAt(`session-${index}`, `Session ${index}`, `2026-01-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`),
