@@ -110,6 +110,7 @@ const HomePage: FC = () => {
             configError={controller.configError}
             showConfig={controller.showConfig}
             hasOlderHistory={controller.hasOlderHistory}
+            postSendFocusRequest={controller.postSendFocusRequest}
             loadOlderHistory={controller.loadOlderHistory}
             answerQuestion={controller.answerQuestion}
             cancelQuestion={controller.cancelQuestion}
@@ -233,6 +234,7 @@ const HomePageChatPanel: FC<{
   configError: HomePageController['configError'];
   showConfig: HomePageController['showConfig'];
   hasOlderHistory: HomePageController['hasOlderHistory'];
+  postSendFocusRequest: HomePageController['postSendFocusRequest'];
   loadOlderHistory: HomePageController['loadOlderHistory'];
   answerQuestion: HomePageController['answerQuestion'];
   cancelQuestion: HomePageController['cancelQuestion'];
@@ -268,6 +270,7 @@ const HomePageChatPanel: FC<{
   configError,
   showConfig,
   hasOlderHistory,
+  postSendFocusRequest,
   loadOlderHistory,
   answerQuestion,
   cancelQuestion,
@@ -363,6 +366,7 @@ const HomePageChatPanel: FC<{
             view={messageListView}
             assistantMarkdownEnabled={assistantMarkdownEnabled}
             hasOlderHistory={hasOlderHistory}
+            postSendFocusRequest={postSendFocusRequest}
             loadOlderHistory={loadOlderHistory}
             onAnswerQuestion={answerQuestion}
             onCancelQuestion={cancelQuestion}

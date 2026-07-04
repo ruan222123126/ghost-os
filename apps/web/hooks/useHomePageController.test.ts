@@ -244,6 +244,7 @@ function buildChatController() {
     chatError: '',
     hasPendingQuestion: false,
     hasOlderHistory: false,
+    postSendFocusRequest: null,
     canStop: false,
     answerQuestion: jest.fn(),
     cancelQuestion: jest.fn(),

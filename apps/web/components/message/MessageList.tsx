@@ -18,6 +18,7 @@ export const MessageList: FC<MessageListProps> = ({
   loadOlderHistory,
   onAnswerQuestion,
   onCancelQuestion,
+  postSendFocusRequest,
 }) => {
   const { copy } = useWebLocale();
   const [openToolCards, setOpenToolCards] = useState<Record<string, boolean>>({});
@@ -59,15 +60,20 @@ export const MessageList: FC<MessageListProps> = ({
   const {
     historySentinelRef,
     olderHistoryLoadingPaused,
+    registerMessageRow,
     scrollElementRef,
     scrollToBottom,
     showScrollToBottom,
+    trailingSpacerPx,
   } = useMessageListScroll({
     hasOlderHistory,
     layoutSignature,
     loadOlderHistory,
     loadingOlderHistory,
+    postSendFocusRequest,
     rowCount,
+    streamingRows,
+    visibleCommittedMessages,
   });
   const showHistoryLoading = olderHistoryLoadingPaused || loadingOlderHistory;
 
@@ -130,6 +136,13 @@ export const MessageList: FC<MessageListProps> = ({
         <TopLoadingBar className="messages-history-loading-overlay" label={copy.chat.loadingOlderMessages} />
       ) : null}
       <div ref={scrollElementRef} className="messages ui-scroll is-reverse-flow" aria-live="polite">
+        {trailingSpacerPx > 0 ? (
+          <div
+            className="messages-trailing-spacer"
+            style={{ height: trailingSpacerPx }}
+            aria-hidden="true"
+          />
+        ) : null}
         {renderedRows.map(({ index, row }) => {
           const hasTrailingTool = shouldPlaceAssistantCopyInline({
             currentRow: row,
@@ -143,6 +156,9 @@ export const MessageList: FC<MessageListProps> = ({
               key={row.key}
               data-index={index}
               className="messages-flow-row"
+              ref={row.kind === 'message' && row.message.kind === 'user'
+                ? registerMessageRow(row.message.id)
+                : undefined}
             >
               {renderRow(row, {
                 assistantMarkdownEnabled,

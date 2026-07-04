@@ -20,9 +20,11 @@ describe('components/message/MessageList', () => {
     mockedUseMessageListScroll.mockReturnValue({
       historySentinelRef: React.createRef<HTMLDivElement>(),
       olderHistoryLoadingPaused: true,
+      registerMessageRow: jest.fn(() => jest.fn()),
       scrollElementRef: React.createRef<HTMLDivElement>(),
       scrollToBottom: jest.fn(),
       showScrollToBottom: false,
+      trailingSpacerPx: 0,
     });
   });
 
@@ -44,6 +46,7 @@ describe('components/message/MessageList', () => {
             loadOlderHistory: jest.fn(async () => undefined),
             onAnswerQuestion: jest.fn(async () => undefined),
             onCancelQuestion: jest.fn(async () => undefined),
+            postSendFocusRequest: null,
             view: buildMessageListView(),
           }),
         ),

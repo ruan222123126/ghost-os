@@ -42,6 +42,7 @@ export interface HomePageController {
   chatError: string;
   hasPendingQuestion: boolean;
   hasOlderHistory: boolean;
+  postSendFocusRequest: ReturnType<typeof useBridgeChat>['postSendFocusRequest'];
   canStop: boolean;
   config: ReturnType<typeof useBridgeConfig>['config'];
   configLoading: boolean;

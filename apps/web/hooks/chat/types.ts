@@ -18,6 +18,11 @@ import type {
 
 export type { ActiveAgentRun } from '@/lib/chat-stream/types';
 
+export interface PostSendFocusRequest {
+  messageId: string;
+  token: number;
+}
+
 export interface UseBridgeChatResult {
   committedMessages: ChatMessage[];
   streamingAssistantSegments: StreamingAssistantSegment[];
@@ -34,6 +39,7 @@ export interface UseBridgeChatResult {
   hasPendingQuestion: boolean;
   canStop: boolean;
   hasOlderHistory: boolean;
+  postSendFocusRequest: PostSendFocusRequest | null;
   sendChatMessage: (input: ChatSendInput) => Promise<void>;
   stopCurrentRun: () => Promise<void>;
   answerQuestion: (questionId: string, answer: string) => Promise<void>;

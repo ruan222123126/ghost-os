@@ -32,6 +32,7 @@ export interface UseChatRunActionsOptions {
   markBackgroundCompleted: ChatStateControls['markBackgroundCompleted'];
   migrateSessionState: ChatStateControls['migrateSessionState'];
   onSessionResolved: UseBridgeChatOptions['onSessionResolved'];
+  requestPostSendFocus: (messageId: string) => void;
   requestFailedText: string;
   runAgentStream: (run: StreamAgentRunInput) => Promise<ChatStreamRunResult>;
   resolveActiveRunSessionId: ChatStateControls['resolveActiveRunSessionId'];
@@ -156,6 +157,7 @@ function useStopCurrentRun(options: UseStopCurrentRunOptions) {
 function beginAgentRun(input: ChatSendInput, options: UseChatRunActionsOptions): AgentRunContext {
   const sessionId = options.currentSessionId.trim();
   const traceId = createClientTraceId('agent-run');
+  const userMessageId = `local:user:${traceId}`;
   const abortController = new AbortController();
   const runtime = resolveAgentRuntime(input.agentRuntime);
   options.clearChatError(sessionId);
@@ -163,10 +165,11 @@ function beginAgentRun(input: ChatSendInput, options: UseChatRunActionsOptions):
   options.setStopPending(sessionId, false);
   options.setActiveRun(sessionId, { abortController, runtime, sessionId, traceId });
   options.appendCommittedMessages(sessionId, [buildUserMessage(input.message, {
-    id: `local:user:${traceId}`,
+    id: userMessageId,
     images: draftImagesToChatImages(input.images),
     selectedSkill: input.selectedSkill,
   })]);
+  options.requestPostSendFocus(userMessageId);
   options.setLoading(sessionId, true);
 
   return {

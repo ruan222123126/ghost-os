@@ -405,6 +405,7 @@ function HookProbe(props: {
       }
     },
     onSessionResolved: props.onSessionResolved,
+    requestPostSendFocus: () => undefined,
     runAgentStream: props.runAgentStream ?? (async () => ({ sessionId: props.currentSessionId, terminalType: 'done' })),
     resolveActiveRunSessionId: () => props.activeRunRef.current?.sessionId ?? props.currentSessionId,
     setActiveRun: props.setActiveRun,

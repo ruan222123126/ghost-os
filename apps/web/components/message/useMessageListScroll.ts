@@ -1,6 +1,10 @@
 import type { MutableRefObject } from 'react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { StreamingMessageRow } from '@/lib/chat-view/types';
+import type { ChatMessage } from '@/lib/types';
+import type { PostSendFocusRequest } from '@/hooks/chat/types';
 import { resolveMessageListAutoFollow } from './messageListScroll';
+import { useMessageListPostSendFocus } from './useMessageListPostSendFocus';
 
 const OLDER_HISTORY_LOADING_PAUSE_MS = 1500;
 type ScrollFrameHandle = number | ReturnType<typeof setTimeout>;
@@ -15,7 +19,10 @@ export interface UseMessageListScrollOptions {
   loadingOlderHistory: boolean;
   loadOlderHistory: () => Promise<void>;
   layoutSignature: string;
+  postSendFocusRequest?: PostSendFocusRequest | null;
   rowCount: number;
+  streamingRows: StreamingMessageRow[];
+  visibleCommittedMessages: ChatMessage[];
 }
 
 export function useMessageListScroll(options: UseMessageListScrollOptions) {
@@ -38,19 +45,11 @@ export function useMessageListScroll(options: UseMessageListScrollOptions) {
     });
   }, []);
 
-  const scrollToBottom = useCallback(() => {
+  const syncCurrentBottomAffordance = useCallback(() => {
     const container = scrollElementRef.current;
-    if (!container) {
-      return;
+    if (container) {
+      syncBottomAffordance(container, autoFollowRef, setShowScrollToBottom);
     }
-
-    cancelScrollFrame(scrollFrameRef);
-    autoFollowRef.current = true;
-    setShowScrollToBottom(false);
-    container.scrollTo({
-      behavior: 'smooth',
-      top: 0,
-    });
   }, []);
 
   useInitialBottomPlacement({
@@ -61,10 +60,44 @@ export function useMessageListScroll(options: UseMessageListScrollOptions) {
     skipOlderHistoryLoadOnceRef,
   });
   useMountedFlag(mountedRef, olderLoadPauseRef);
-  useAutoFollowTracking({
+
+  const postSendFocus = useMessageListPostSendFocus({
     autoFollowRef,
+    layoutSignature: options.layoutSignature,
+    loadingOlderHistory: options.loadingOlderHistory || olderHistoryLoadingPaused,
+    postSendFocusRequest: options.postSendFocusRequest ?? null,
+    scheduleBottomFollow,
     scrollElementRef,
     setShowScrollToBottom,
+    streamingRows: options.streamingRows,
+    syncCurrentBottomAffordance,
+    visibleCommittedMessages: options.visibleCommittedMessages,
+  });
+
+  const scrollToBottom = useCallback(() => {
+    const container = scrollElementRef.current;
+    if (!container) {
+      return;
+    }
+
+    cancelScrollFrame(scrollFrameRef);
+    postSendFocus.cancelAnchorScroll();
+    postSendFocus.releasePostSendLock(false);
+    autoFollowRef.current = true;
+    setShowScrollToBottom(false);
+    container.scrollTo({
+      behavior: 'smooth',
+      top: 0,
+    });
+  }, [postSendFocus]);
+
+  useAutoFollowTracking({
+    autoFollowRef,
+    postSendLockJustStartedRef: postSendFocus.postSendLockJustStartedRef,
+    postSendLockRef: postSendFocus.postSendLockRef,
+    scrollElementRef,
+    setShowScrollToBottom,
+    syncPostSendLock: postSendFocus.syncPostSendLock,
   });
   useBottomFollowOnLayoutChange({
     autoFollowRef,
@@ -86,11 +119,13 @@ export function useMessageListScroll(options: UseMessageListScrollOptions) {
   useScrollFrameCleanup(scrollFrameRef);
 
   return {
+    registerMessageRow: postSendFocus.registerMessageRow,
     historySentinelRef,
     olderHistoryLoadingPaused,
     scrollElementRef,
     scrollToBottom,
     showScrollToBottom,
+    trailingSpacerPx: postSendFocus.trailingSpacerPx,
   };
 }
 
@@ -128,20 +163,45 @@ function useInitialBottomPlacement(options: {
 
 function useAutoFollowTracking(options: {
   autoFollowRef: MutableRefObject<boolean>;
+  postSendLockJustStartedRef: MutableRefObject<boolean>;
+  postSendLockRef: MutableRefObject<unknown | null>;
   scrollElementRef: MutableRefObject<HTMLDivElement | null>;
   setShowScrollToBottom: (value: boolean) => void;
+  syncPostSendLock: () => void;
 }) {
-  const { autoFollowRef, scrollElementRef, setShowScrollToBottom } = options;
+  const {
+    autoFollowRef,
+    postSendLockJustStartedRef,
+    postSendLockRef,
+    scrollElementRef,
+    setShowScrollToBottom,
+    syncPostSendLock,
+  } = options;
   const syncAutoFollow = useCallback(() => {
     const container = scrollElementRef.current;
     if (!container) {
       return;
     }
+    if (postSendLockRef.current) {
+      if (postSendLockJustStartedRef.current) {
+        setShowScrollToBottom(false);
+        return;
+      }
 
-    const nextAutoFollow = resolveMessageListAutoFollow(container);
-    autoFollowRef.current = nextAutoFollow;
-    setShowScrollToBottom(!nextAutoFollow);
-  }, [autoFollowRef, scrollElementRef, setShowScrollToBottom]);
+      syncPostSendLock();
+      setShowScrollToBottom(false);
+      return;
+    }
+
+    syncBottomAffordance(container, autoFollowRef, setShowScrollToBottom);
+  }, [
+    autoFollowRef,
+    postSendLockJustStartedRef,
+    postSendLockRef,
+    scrollElementRef,
+    setShowScrollToBottom,
+    syncPostSendLock,
+  ]);
 
   useEffect(() => {
     const container = scrollElementRef.current;
@@ -318,6 +378,16 @@ function cancelOlderHistoryLoadingPause(
   const resolve = pauseRef.current.resolve;
   pauseRef.current.resolve = null;
   resolve?.(false);
+}
+
+function syncBottomAffordance(
+  container: HTMLElement,
+  autoFollowRef: MutableRefObject<boolean>,
+  setShowScrollToBottom: (value: boolean) => void,
+) {
+  const nextAutoFollow = resolveMessageListAutoFollow(container);
+  autoFollowRef.current = nextAutoFollow;
+  setShowScrollToBottom(!nextAutoFollow);
 }
 
 function scheduleScrollToBottom(options: {

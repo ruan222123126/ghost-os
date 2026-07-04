@@ -2,6 +2,9 @@ import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import { useMessageListScroll } from './useMessageListScroll';
 
+const EMPTY_VISIBLE_MESSAGES: [] = [];
+const EMPTY_STREAMING_ROWS: [] = [];
+
 describe('components/message/useMessageListScroll', () => {
   let intersectionCallback: IntersectionObserverCallback | null = null;
   let originalIntersectionObserver: typeof IntersectionObserver | undefined;
@@ -224,6 +227,55 @@ describe('components/message/useMessageListScroll', () => {
     expect(requireLatestHook(latestHook).showScrollToBottom).toBe(false);
   });
 
+  it('focuses the requested user message and adds reverse-flow trailing space', async () => {
+    jest.useFakeTimers();
+    const scrollElement = createScrollElement({
+      clientHeight: 500,
+      scrollHeight: 300,
+      scrollTop: 0,
+    });
+    const userRowElement = createMeasuredElement(() => 120 + scrollElement.scrollTop);
+    const loadOlderHistory = jest.fn(async () => undefined);
+    let latestHook: HookProbeRenderState | null = null;
+
+    await act(async () => {
+      TestRenderer.create(
+        React.createElement(HookProbe, {
+          hasOlderHistory: false,
+          layoutSignature: 'session:post-send',
+          loadOlderHistory,
+          onRender: (state) => {
+            scrollElement.scrollHeight = 300 + state.trailingSpacerPx;
+            latestHook = state;
+          },
+          postSendFocusRequest: { messageId: 'user-1', token: 1 },
+          rowCount: 1,
+          scrollElement,
+          userRowElement,
+          visibleCommittedMessages: [{ id: 'user-1', kind: 'user', content: 'hello' }],
+        }),
+        {
+          createNodeMock: createNodeMock(scrollElement, userRowElement),
+        },
+      );
+      await Promise.resolve();
+    });
+
+    expect(requireLatestHook(latestHook).trailingSpacerPx).toBe(320);
+
+    await act(async () => {
+      jest.runOnlyPendingTimers();
+      await Promise.resolve();
+    });
+
+    expect(scrollElement.scrollTo).toHaveBeenLastCalledWith({
+      behavior: 'smooth',
+      top: -120,
+    });
+    expect(scrollElement.scrollTop).toBe(-120);
+    expect(requireLatestHook(latestHook).showScrollToBottom).toBe(false);
+  });
+
   function triggerHistoryIntersection() {
     if (!intersectionCallback) {
       throw new Error('IntersectionObserver callback was not registered');
@@ -240,6 +292,7 @@ interface HookProbeRenderState {
   olderHistoryLoadingPaused: boolean;
   scrollToBottom: () => void;
   showScrollToBottom: boolean;
+  trailingSpacerPx: number;
 }
 
 function requireLatestHook(state: HookProbeRenderState | null): HookProbeRenderState {
@@ -256,25 +309,35 @@ function HookProbe(props: {
   loadingOlderHistory?: boolean;
   loadOlderHistory: () => Promise<void>;
   onRender?: (state: HookProbeRenderState) => void;
+  postSendFocusRequest?: { messageId: string; token: number } | null;
   rowCount: number;
   scrollElement: ScrollElement;
+  userRowElement?: MeasuredElement;
+  visibleCommittedMessages?: Array<{ id: string; kind: 'user'; content: string }>;
 }) {
   const hook = useMessageListScroll({
     hasOlderHistory: props.hasOlderHistory,
     layoutSignature: props.layoutSignature,
     loadOlderHistory: props.loadOlderHistory,
     loadingOlderHistory: props.loadingOlderHistory ?? false,
+    postSendFocusRequest: props.postSendFocusRequest ?? null,
     rowCount: props.rowCount,
+    streamingRows: EMPTY_STREAMING_ROWS,
+    visibleCommittedMessages: props.visibleCommittedMessages ?? EMPTY_VISIBLE_MESSAGES,
   });
   props.onRender?.({
     olderHistoryLoadingPaused: hook.olderHistoryLoadingPaused,
     scrollToBottom: hook.scrollToBottom,
     showScrollToBottom: hook.showScrollToBottom,
+    trailingSpacerPx: hook.trailingSpacerPx,
   });
 
   return React.createElement(
     'div',
     { ref: hook.scrollElementRef, 'data-node': 'scroll' },
+    props.userRowElement
+      ? React.createElement('div', { ref: hook.registerMessageRow('user-1'), 'data-node': 'user-row' })
+      : null,
     React.createElement('div', { ref: hook.historySentinelRef, 'data-node': 'sentinel' }),
   );
 }
@@ -283,6 +346,7 @@ interface ScrollElement {
   addEventListener: (type: string, listener: EventListener) => void;
   clientHeight: number;
   dispatchEvent: (event: Event) => boolean;
+  getBoundingClientRect: () => Pick<DOMRect, 'top'>;
   removeEventListener: (type: string, listener: EventListener) => void;
   scrollHeight: number;
   scrollTo: (options: ScrollToOptions) => void;
@@ -308,6 +372,7 @@ function createScrollElement(layout: {
       }
       return true;
     },
+    getBoundingClientRect: () => ({ top: 0 }),
     removeEventListener: (type, listener) => {
       listeners.get(type)?.delete(listener);
     },
@@ -319,10 +384,23 @@ function createScrollElement(layout: {
   return element;
 }
 
-function createNodeMock(scrollElement: ScrollElement) {
+interface MeasuredElement {
+  getBoundingClientRect: () => Pick<DOMRect, 'top'>;
+}
+
+function createMeasuredElement(resolveTop: () => number): MeasuredElement {
+  return {
+    getBoundingClientRect: () => ({ top: resolveTop() }),
+  };
+}
+
+function createNodeMock(scrollElement: ScrollElement, userRowElement?: MeasuredElement) {
   return (element: React.ReactElement) => {
     if (element.props['data-node'] === 'scroll') {
       return scrollElement;
+    }
+    if (element.props['data-node'] === 'user-row') {
+      return userRowElement ?? {};
     }
     if (element.props['data-node'] === 'sentinel') {
       return {};
