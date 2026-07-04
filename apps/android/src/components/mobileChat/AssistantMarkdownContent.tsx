@@ -1,6 +1,7 @@
 import { memo } from "react";
 import MarkdownRender, { setCustomComponents } from "markstream-react";
 import type { CustomComponentMap, NodeComponentProps } from "markstream-react";
+import { formatAssistantTextForDisplay } from "../../../../shared/assistantTextSpacing";
 import { MessageCopyButton } from "./MessageCopyButton";
 
 const ASSISTANT_MARKDOWN_CUSTOM_ID = "ghost-os-mobile-assistant-markdown";
@@ -60,10 +61,12 @@ function AssistantMarkdownContentBase({
   final = true,
   showCopyButton = true,
 }: AssistantMarkdownContentProps) {
+  const displayContent = formatAssistantTextForDisplay(content);
+
   if (!final) {
     return (
       <div className="assistant-markdown assistant-markdown-streaming">
-        <pre>{content}</pre>
+        <pre>{displayContent}</pre>
       </div>
     );
   }
@@ -79,7 +82,7 @@ function AssistantMarkdownContentBase({
           showFontSizeButtons: false,
           showPreviewButton: false,
         }}
-        content={content}
+        content={displayContent}
         customId={ASSISTANT_MARKDOWN_CUSTOM_ID}
         d2Props={{ showCopyButton }}
         fade={false}

@@ -1,5 +1,6 @@
 import type { FC } from 'react';
 import { memo, useMemo } from 'react';
+import { formatAssistantTextForDisplay } from '../../../shared/assistantTextSpacing';
 import { isMarkdownFenceLine, shouldRenderAssistantMarkdown } from './assistantMarkdown';
 import { AssistantMarkdownRenderer } from './AssistantMarkdownRenderer';
 
@@ -34,23 +35,24 @@ const AssistantMarkdownContentBase: FC<AssistantMarkdownContentProps> = ({
   final = true,
   showCopyButton = true,
 }) => {
+  const displayContent = useMemo(() => formatAssistantTextForDisplay(content), [content]);
   const renderMode = useMemo(() => {
     if (!enabled) {
       return false;
     }
-    return shouldRenderAssistantMarkdown(content);
-  }, [content, enabled]);
+    return shouldRenderAssistantMarkdown(displayContent);
+  }, [displayContent, enabled]);
 
   if (!renderMode) {
-    return <div className="message-content">{content}</div>;
+    return <div className="message-content">{displayContent}</div>;
   }
 
   return (
     <div className="message-content assistant-markdown">
       {final ? (
-        <AssistantMarkdownBlock content={content} final showCopyButton={showCopyButton} />
+        <AssistantMarkdownBlock content={displayContent} final showCopyButton={showCopyButton} />
       ) : (
-        <StreamingAssistantMarkdownContent content={content} showCopyButton={showCopyButton} />
+        <StreamingAssistantMarkdownContent content={displayContent} showCopyButton={showCopyButton} />
       )}
     </div>
   );

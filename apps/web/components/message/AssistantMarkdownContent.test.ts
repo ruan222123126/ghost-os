@@ -25,6 +25,17 @@ describe('components/message/AssistantMarkdownContent', () => {
     expect(html).not.toContain('mock-markdown');
   });
 
+  it('adds display spacing between adjacent sentence outputs on the plain text path', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AssistantMarkdownContent, {
+        content: '先检查项目。测试通过。',
+        enabled: false,
+      }),
+    );
+
+    expect(html).toContain('先检查项目。\n\n测试通过。');
+  });
+
   it('keeps markdown recognition behavior when markdown is enabled', () => {
     const html = renderToStaticMarkup(
       React.createElement(AssistantMarkdownContent, {

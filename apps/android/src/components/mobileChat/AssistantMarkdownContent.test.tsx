@@ -52,6 +52,12 @@ describe("AssistantMarkdownContent", () => {
     expect(renderer.getAttribute("data-html-policy")).toBe("safe");
   });
 
+  it("adds display spacing between adjacent sentence outputs", () => {
+    render(<AssistantMarkdownContent content="先检查项目。测试通过。" />);
+
+    expect(screen.getByTestId("markstream-renderer").textContent).toBe("先检查项目。\n\n测试通过。");
+  });
+
   it("renders streaming content as plain text before final markdown parse", () => {
     render(<AssistantMarkdownContent content="```ts\nconsole.log(1)" final={false} showCopyButton={false} />);
 
@@ -59,5 +65,11 @@ describe("AssistantMarkdownContent", () => {
     const pre = document.querySelector("pre");
     expect(pre?.textContent).toContain("```ts");
     expect(pre?.textContent).toContain("console.log(1)");
+  });
+
+  it("uses the same display spacing for streaming plain text", () => {
+    render(<AssistantMarkdownContent content="先检查项目。测试通过。" final={false} showCopyButton={false} />);
+
+    expect(document.querySelector("pre")?.textContent).toBe("先检查项目。\n\n测试通过。");
   });
 });
