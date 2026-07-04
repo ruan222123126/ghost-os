@@ -13,6 +13,7 @@ interface FeedMetrics {
 
 interface HookSnapshot {
   showScrollDown: boolean;
+  trailingSpacerPx: number;
 }
 
 interface FeedItemMetrics {
@@ -21,7 +22,8 @@ interface FeedItemMetrics {
   top: number;
 }
 
-interface PostSendScrollRequest {
+interface PostSendFocusRequest {
+  messageId: string;
   token: number;
 }
 
@@ -49,52 +51,44 @@ describe("useChatFeedScroll", () => {
     vi.unstubAllGlobals();
   });
 
-  it("scrolls to the bottom when a post-send request arrives", () => {
-    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: -200 });
+  it("focuses a requested post-send user message at its reverse-flow row top", () => {
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 300, scrollTop: 0 });
     const userMessage = message("pending:user:1710000000000", "user");
     const { rerender } = render(<ScrollHarness messages={[]} metrics={metrics} />);
     vi.mocked(feedElement().scrollTo).mockClear();
 
     rerender(
       <ScrollHarness
+        feedItems={[feedItem(userMessage.id, 120, 200)]}
         messages={[userMessage]}
         metrics={metrics}
-        postSendScrollRequest={postSendRequest()}
-        statusTone="loading"
-      />,
-    );
-
-    expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 0, behavior: "auto" });
-    expect(latestSnapshot().showScrollDown).toBe(false);
-  });
-
-  it("keeps streaming replies at the bottom after sending", () => {
-    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: -200 });
-    const userMessage = message("pending:user:1710000000000", "user");
-    const { rerender } = render(<ScrollHarness messages={[]} metrics={metrics} />);
-
-    rerender(
-      <ScrollHarness
-        messages={[userMessage]}
-        metrics={metrics}
-        postSendScrollRequest={postSendRequest()}
-        statusTone="loading"
-      />,
-    );
-    vi.mocked(feedElement().scrollTo).mockClear();
-
-    metrics.scrollHeight = 1240;
-    rerender(
-      <ScrollHarness
-        messages={[userMessage]}
-        metrics={metrics}
-        reply={reply("streaming reply")}
+        postSendFocusRequest={postSendRequest(userMessage.id)}
         statusTone="loading"
       />,
     );
     flushRaf();
 
-    expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 0, behavior: "auto" });
+    expect(latestSnapshot().trailingSpacerPx).toBe(320);
+    expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: -120, behavior: "smooth" });
+    expect(latestSnapshot().showScrollDown).toBe(false);
+  });
+
+  it("does not focus appended messages without a post-send request", () => {
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 300, scrollTop: 0 });
+    const userMessage = message("pending:user:1710000000000", "user");
+    const { rerender } = render(<ScrollHarness messages={[]} metrics={metrics} />);
+
+    rerender(
+      <ScrollHarness
+        feedItems={[feedItem(userMessage.id, 120, 200)]}
+        messages={[userMessage]}
+        metrics={metrics}
+      />,
+    );
+    flushRaf();
+
+    expect(feedElement().scrollTo).not.toHaveBeenCalledWith({ top: -120, behavior: "smooth" });
+    expect(latestSnapshot().trailingSpacerPx).toBe(0);
   });
 
   it("does not pull the viewport down while the user is reading older messages", () => {
@@ -140,12 +134,14 @@ describe("useChatFeedScroll", () => {
       <ScrollHarness
         messages={[existingMessage, followUp]}
         metrics={metrics}
-        postSendScrollRequest={postSendRequest()}
+        feedItems={[feedItem(followUp.id, 140, 220)]}
+        postSendFocusRequest={postSendRequest(followUp.id)}
         statusTone="loading"
       />,
     );
+    flushRaf();
 
-    expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 0, behavior: "auto" });
+    expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: -260, behavior: "smooth" });
     expect(latestSnapshot().showScrollDown).toBe(false);
   });
 
@@ -431,7 +427,7 @@ function ScrollHarness(props: {
   messages: MobileConversationMessage[];
   metrics: FeedMetrics;
   onLoadOlderHistory?: () => Promise<void>;
-  postSendScrollRequest?: PostSendScrollRequest | null;
+  postSendFocusRequest?: PostSendFocusRequest | null;
   reply?: AgentPayload;
   sessionId?: string;
   statusTone?: StatusMessage["tone"];
@@ -441,13 +437,14 @@ function ScrollHarness(props: {
     loadingOlderHistory: props.loadingOlderHistory,
     messages: props.messages,
     onLoadOlderHistory: props.onLoadOlderHistory,
-    postSendScrollRequest: props.postSendScrollRequest,
+    postSendFocusRequest: props.postSendFocusRequest,
     reply: props.reply,
     sessionId: props.sessionId,
     statusTone: props.statusTone ?? "idle",
   });
   hookSnapshots.push({
     showScrollDown: scroll.showScrollDown,
+    trailingSpacerPx: scroll.trailingSpacerPx,
   });
 
   return (
@@ -467,6 +464,7 @@ function ScrollHarness(props: {
           <div
             key={item.id}
             ref={(node) => {
+              scroll.registerUserMessageRow(item.id)(node);
               if (!node) {
                 return;
               }
@@ -556,8 +554,8 @@ function reply(text: string): AgentPayload {
   };
 }
 
-function postSendRequest(token = 1): PostSendScrollRequest {
-  return { token };
+function postSendRequest(messageId: string, token = 1): PostSendFocusRequest {
+  return { messageId, token };
 }
 
 function feedElement(): HTMLElement & { scrollTo: ReturnType<typeof vi.fn> } {

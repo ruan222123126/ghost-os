@@ -34,7 +34,7 @@ const mocks = vi.hoisted(() => ({
     loadOlderHistory: vi.fn(),
     loadingOlderHistory: false,
     loadingSessionMessages: false,
-    postSendScrollRequest: null,
+    postSendFocusRequest: null,
     selectSession: vi.fn(),
     sendMessage: async (message: string, selectedSkill?: unknown) => {
       const result = await options.sendAgentMessage({
@@ -60,10 +60,12 @@ vi.mock("./hooks/useChatFeedScroll", () => ({
   useChatFeedScroll: () => ({
     handleScroll: vi.fn(),
     historySentinelRef: { current: null },
+    registerUserMessageRow: vi.fn(() => vi.fn()),
     resetScrollDown: vi.fn(),
     scrollRef: { current: null },
     scrollToBottom: vi.fn(),
     showScrollDown: false,
+    trailingSpacerPx: 0,
   }),
 }));
 

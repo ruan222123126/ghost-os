@@ -50,7 +50,8 @@ describe("useMobileSessions", () => {
 
     expect(result.current.activeSessionId).toBe("session-1");
     expect(result.current.activeMessages.map((message) => message.role)).toEqual(["user", "assistant"]);
-    expect(result.current.postSendScrollRequest).toMatchObject({
+    expect(result.current.postSendFocusRequest).toMatchObject({
+      messageId: expect.stringContaining("pending:user:"),
       token: 1,
     });
     expect(result.current.historyItems[0]).toMatchObject({ id: "session-1", title: "first task" });
@@ -561,7 +562,7 @@ describe("useMobileSessions", () => {
     expect(result.current.activeSessionId).toBeUndefined();
     expect(result.current.activeMessages).toEqual([]);
     expect(result.current.hasConversation).toBe(false);
-    expect(result.current.postSendScrollRequest).toBeNull();
+    expect(result.current.postSendFocusRequest).toBeNull();
   });
 
   it("allows concurrent runs in different sessions but blocks duplicate sends in the same session", async () => {

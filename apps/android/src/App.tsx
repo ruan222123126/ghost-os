@@ -209,16 +209,18 @@ function App() {
   const {
     handleScroll,
     historySentinelRef,
+    registerUserMessageRow,
     resetScrollDown,
     scrollRef,
     scrollToBottom,
     showScrollDown,
+    trailingSpacerPx,
   } = useChatFeedScroll({
     hasOlderHistory: mobileSessions.hasOlderHistory,
     loadingOlderHistory: mobileSessions.loadingOlderHistory,
     messages: mobileSessions.activeMessages,
     onLoadOlderHistory: mobileSessions.loadOlderHistory,
-    postSendScrollRequest: mobileSessions.postSendScrollRequest,
+    postSendFocusRequest: mobileSessions.postSendFocusRequest,
     reply: mobileSessions.activeReply,
     sessionId: mobileSessions.activeSessionId,
     statusTone: mobileSessions.activeStatus.tone,
@@ -442,9 +444,11 @@ function App() {
           <ConversationMessageList
             messages={mobileSessions.activeMessages}
             onApproveExternalAgent={approveExternalAgent}
+            registerUserMessageRow={registerUserMessageRow}
             reply={mobileSessions.activeReply}
             status={displayStatus}
           />
+          <div aria-hidden="true" className="chat-feed-trailing-spacer" style={{ height: trailingSpacerPx }} />
 
           {!showEmptyIntro ? (
             <div ref={historySentinelRef} className="chat-feed-history-sentinel" aria-hidden="true" />

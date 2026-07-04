@@ -218,8 +218,14 @@ code {
 }
 
 .conversation-list {
+  display: contents;
   width: 100%;
   min-width: 0;
+  overflow-anchor: none;
+}
+
+.chat-feed-trailing-spacer {
+  width: 100%;
   flex: 0 0 auto;
   overflow-anchor: none;
 }
