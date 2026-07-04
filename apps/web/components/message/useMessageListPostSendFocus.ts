@@ -11,6 +11,7 @@ interface PostSendLock {
   autoFollowOnRelease: boolean;
   baselineContentHeightPx: number;
   messageId: string;
+  programmaticScrollTarget: number | null;
   targetScrollTop: number;
 }
 
@@ -129,6 +130,7 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
       autoFollowOnRelease: true,
       baselineContentHeightPx: realContentHeightPx,
       messageId,
+      programmaticScrollTarget: targetScrollTop,
       targetScrollTop,
     };
     postSendLockJustStartedRef.current = true;
@@ -156,6 +158,11 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
     if (!lock || !container) {
       return;
     }
+    if (isProgrammaticScrollInProgress(container, lock)) {
+      setShowScrollToBottom(false);
+      return;
+    }
+    lock.programmaticScrollTarget = null;
 
     const targetScrollTop = measureMessageTargetScrollTop(lock.messageId);
     if (targetScrollTop === null) {
@@ -329,6 +336,14 @@ function shouldReleasePostSendLock(options: {
   return options.hasVisibleContent
     && options.realContentHeightPx > options.baselineContentHeightPx
     && options.realContentHeightPx > Math.abs(options.targetScrollTop) + options.clientHeight;
+}
+
+function isProgrammaticScrollInProgress(container: HTMLElement, lock: PostSendLock): boolean {
+  if (lock.programmaticScrollTarget === null) {
+    return false;
+  }
+
+  return Math.abs(container.scrollTop - lock.programmaticScrollTarget) > SCROLL_ANCHOR_TOLERANCE_PX;
 }
 
 function hasUserMessage(messages: ChatMessage[], messageId: string): boolean {

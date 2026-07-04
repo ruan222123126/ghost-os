@@ -276,6 +276,63 @@ describe('components/message/useMessageListScroll', () => {
     expect(requireLatestHook(latestHook).showScrollToBottom).toBe(false);
   });
 
+  it('does not interrupt smooth post-send focus while the programmatic scroll is in progress', async () => {
+    jest.useFakeTimers();
+    const scrollElement = createScrollElement({
+      clientHeight: 500,
+      scrollHeight: 300,
+      scrollTop: 0,
+    });
+    const userRowElement = createMeasuredElement(() => 120 + scrollElement.scrollTop);
+    const loadOlderHistory = jest.fn(async () => undefined);
+    let latestHook: HookProbeRenderState | null = null;
+
+    await act(async () => {
+      TestRenderer.create(
+        React.createElement(HookProbe, {
+          hasOlderHistory: false,
+          layoutSignature: 'session:post-send',
+          loadOlderHistory,
+          onRender: (state) => {
+            scrollElement.scrollHeight = 300 + state.trailingSpacerPx;
+            latestHook = state;
+          },
+          postSendFocusRequest: { messageId: 'user-1', token: 1 },
+          rowCount: 1,
+          scrollElement,
+          userRowElement,
+          visibleCommittedMessages: [{ id: 'user-1', kind: 'user', content: 'hello' }],
+        }),
+        {
+          createNodeMock: createNodeMock(scrollElement, userRowElement),
+        },
+      );
+      await Promise.resolve();
+    });
+
+    scrollElement.scrollTo = jest.fn();
+
+    await act(async () => {
+      jest.runOnlyPendingTimers();
+      await Promise.resolve();
+    });
+
+    expect(scrollElement.scrollTo).toHaveBeenCalledTimes(1);
+    expect(scrollElement.scrollTo).toHaveBeenLastCalledWith({
+      behavior: 'smooth',
+      top: -120,
+    });
+
+    await act(async () => {
+      scrollElement.scrollTop = -40;
+      scrollElement.dispatchEvent(new Event('scroll'));
+      await Promise.resolve();
+    });
+
+    expect(scrollElement.scrollTo).toHaveBeenCalledTimes(1);
+    expect(requireLatestHook(latestHook).showScrollToBottom).toBe(false);
+  });
+
   function triggerHistoryIntersection() {
     if (!intersectionCallback) {
       throw new Error('IntersectionObserver callback was not registered');
