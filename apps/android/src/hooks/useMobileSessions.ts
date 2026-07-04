@@ -162,10 +162,12 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
   const activeSessionIdRef = useRef<string | undefined>(undefined);
   const postSendFocusTokenRef = useRef(0);
   const lastActiveSessionRestoreAttemptedRef = useRef(false);
+  const resumableRunningSessionIdsRef = useRef<Set<string>>(new Set());
   const stoppingRunKeysRef = useRef<Set<string>>(new Set());
   const sessionViewsRef = useRef<Record<string, MobileSessionView>>(sessionViews);
   const storedConversationsRef = useRef<StoredMobileConversation[]>(storedConversations);
   const syncRunIdRef = useRef(0);
+  const [resumePollVersion, setResumePollVersion] = useState(0);
   const computerSessionSyncSignature = useMemo(
     () => buildComputerSessionSyncSignature(options.sessions),
     [options.sessions],
@@ -343,8 +345,8 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       return "";
     }
     const view = sessionViews[activeSessionId];
-    return view && shouldPollExternalRunningSession(view) ? view.id : "";
-  }, [activeSessionId, sessionViews]);
+    return view && shouldPollExternalRunningSession(view, resumableRunningSessionIdsRef.current) ? view.id : "";
+  }, [activeSessionId, resumePollVersion, sessionViews]);
   const activeSessionBridgeVersion = useMemo(() => {
     if (!activeSessionId) {
       return "";
@@ -371,6 +373,32 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       window.clearInterval(timer);
     };
   }, [activeExternalRunningSessionId, options.bridgeConnected, options.getSession, storageLoaded]);
+
+  useEffect(() => {
+    if (options.bridgeConnected) {
+      return;
+    }
+    markRunningSessionsForResume();
+  }, [options.bridgeConnected]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    const markVisibleRunningSessionForResume = () => {
+      if (document.visibilityState === "visible") {
+        markRunningSessionsForResume();
+      }
+    };
+
+    document.addEventListener("visibilitychange", markVisibleRunningSessionForResume);
+    window.addEventListener("focus", markVisibleRunningSessionForResume);
+    return () => {
+      document.removeEventListener("visibilitychange", markVisibleRunningSessionForResume);
+      window.removeEventListener("focus", markVisibleRunningSessionForResume);
+    };
+  }, []);
 
   useEffect(() => {
     if (
@@ -766,6 +794,9 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     if (!isActiveSession(sessionId) && !sessionViewsRef.current[sessionId]) {
       return;
     }
+    if (run.status !== "running") {
+      forgetResumableRunningSession(sessionId);
+    }
 
     setSessionViews((current) =>
       trimSessionViewsForState(
@@ -790,6 +821,10 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     const draftReply = detail.turn_draft
       ? sessionTurnDraftToAgentPayload(detail.turn_draft, detail.id, detail.last_runtime_selection)
       : undefined;
+    const nextRun = draftRun ?? input.run;
+    if (nextRun.status !== "running") {
+      forgetResumableRunningSession(detail.id);
+    }
     const title = detail.title.trim()
       || findStoredTitle(storedConversationsRef.current, detail.id)
       || sessionFallbackTitle(detail.id);
@@ -802,7 +837,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
           messages,
           nextHistoryBefore: detail.page.next_before ?? null,
           reply: draftReply,
-          run: draftRun ?? input.run,
+          run: nextRun,
           title,
           unread: input.unread,
           updatedAt: detail.updated_at,
@@ -984,6 +1019,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     title: string,
     finalMessages: MobileConversationMessage[],
   ): void {
+    forgetResumableRunningSession(sessionId);
     setSessionViews((current) => {
       const existing = current[sessionId];
       const next = upsertSessionView(current, sessionId, {
@@ -1201,6 +1237,31 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     });
   }
 
+  function markRunningSessionsForResume(): void {
+    let changed = false;
+    for (const view of Object.values(sessionViewsRef.current)) {
+      if (!isResumableRunningSessionView(view)) {
+        continue;
+      }
+      if (resumableRunningSessionIdsRef.current.has(view.id)) {
+        continue;
+      }
+      resumableRunningSessionIdsRef.current.add(view.id);
+      changed = true;
+    }
+    if (changed) {
+      setResumePollVersion((current) => current + 1);
+    }
+  }
+
+  function forgetResumableRunningSession(sessionId: string): void {
+    const trimmedSessionId = sessionId.trim();
+    if (!trimmedSessionId || !resumableRunningSessionIdsRef.current.delete(trimmedSessionId)) {
+      return;
+    }
+    setResumePollVersion((current) => current + 1);
+  }
+
   async function syncComputerSessions(runId: number): Promise<SyncComputerSessionsResult> {
     const currentById = new Map(storedConversationsRef.current.map((conversation) => [conversation.id, conversation]));
     const sessionsToSync = recentMobileBridgeSessions(options.sessions);
@@ -1395,8 +1456,27 @@ function buildComputerSessionSyncSignature(sessions: SessionMetadata[]): string 
   );
 }
 
-function shouldPollExternalRunningSession(view: MobileSessionView): boolean {
-  return view.bridgeOwned && view.run.status === "running" && !view.run.requestId && Boolean(view.run.traceId);
+function shouldPollExternalRunningSession(
+  view: MobileSessionView,
+  resumableRunningSessionIds: Set<string>,
+): boolean {
+  if (!view.bridgeOwned || view.run.status !== "running") {
+    return false;
+  }
+  if (resumableRunningSessionIds.has(view.id)) {
+    return true;
+  }
+  return !view.run.requestId && Boolean(view.run.traceId);
+}
+
+function isResumableRunningSessionView(view: MobileSessionView): boolean {
+  if (!view.bridgeOwned || view.run.status !== "running") {
+    return false;
+  }
+  if (view.run.statusText === SESSION_MESSAGES_LOADING_STATUS_TEXT) {
+    return false;
+  }
+  return Boolean(view.run.requestId || view.run.traceId);
 }
 
 function storedConversationFromSessionDetail(detail: SessionDetail): StoredMobileConversation {

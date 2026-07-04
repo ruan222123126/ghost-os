@@ -725,6 +725,89 @@ describe("useMobileSessions", () => {
     });
   });
 
+  it("polls a mobile-started running session after Bridge reconnects", async () => {
+    saveStored([
+      storedConversation("session-1", "One", [message("session-1", "user", "one")]),
+    ]);
+    let getSessionCalls = 0;
+    let finishStream: ((result: SendResult) => void) | undefined;
+    const getSession = vi.fn(async (sessionId: string) => {
+      getSessionCalls += 1;
+      if (getSessionCalls === 1) {
+        return sessionDetailWithMessages(sessionId, [
+          { index: 0, role: "user", text: "one" },
+        ], {
+          hasMoreBefore: false,
+          messageCount: 1,
+          nextBefore: null,
+        });
+      }
+      return sessionDetailWithMessages(sessionId, [
+        { index: 0, role: "user", text: "one" },
+        { index: 1, role: "user", text: "run one" },
+        { index: 2, role: "assistant", text: "done after reconnect" },
+      ], {
+        hasMoreBefore: false,
+        messageCount: 3,
+        nextBefore: null,
+      });
+    });
+    const sendAgentMessage = vi.fn((options: SendOptions) => {
+      options.onStatus({ tone: "loading", text: "运行中" });
+      return new Promise<SendResult>((resolve) => {
+        finishStream = resolve;
+      });
+    });
+    const baseProps: UseMobileSessionsOptionsForTest = {
+      bridgeConnected: true,
+      getFullSession: vi.fn(async (sessionId: string) => sessionDetail(sessionId)),
+      getSession,
+      pinnedHistoryIds: [],
+      persistComputerSessionsEnabled: false,
+      sendAgentMessage,
+      sessions: [session("session-1", "Bridge title")],
+      sessionsLoaded: true,
+      stopAgentRun: vi.fn(async () => ({ ok: true, status: "stopped" as const })),
+    };
+    const { result, rerender } = renderHook((props: UseMobileSessionsOptionsForTest) => useMobileSessions(props), {
+      initialProps: baseProps,
+    });
+
+    await act(async () => {
+      await result.current.selectSession("session-1");
+    });
+    act(() => {
+      void result.current.sendMessage("run one");
+    });
+    await waitFor(() => expect(result.current.activeStatus).toEqual({ tone: "loading", text: "运行中" }));
+
+    await act(async () => {
+      rerender({
+        ...baseProps,
+        bridgeConnected: false,
+        sessions: [],
+        sessionsLoaded: false,
+      });
+      await Promise.resolve();
+    });
+    await act(async () => {
+      rerender(baseProps);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(getSession).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(result.current.activeStatus).toEqual({ tone: "success", text: "回复已返回" }));
+    expect(result.current.activeMessages.map((item) => item.text)).toEqual([
+      "one",
+      "run one",
+      "done after reconnect",
+    ]);
+
+    await act(async () => {
+      finishStream?.({ ok: false });
+    });
+  });
+
   it("ignores inactive session completion until the user selects it again", async () => {
     saveStored([
       storedConversation("session-1", "One", [message("session-1", "user", "one")]),
