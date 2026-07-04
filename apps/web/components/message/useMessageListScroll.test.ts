@@ -261,7 +261,7 @@ describe('components/message/useMessageListScroll', () => {
       await Promise.resolve();
     });
 
-    expect(requireLatestHook(latestHook).trailingSpacerPx).toBe(320);
+    expect(requireLatestHook(latestHook).trailingSpacerPx).toBe(288);
 
     await act(async () => {
       jest.runOnlyPendingTimers();
@@ -270,9 +270,9 @@ describe('components/message/useMessageListScroll', () => {
 
     expect(scrollElement.scrollTo).toHaveBeenLastCalledWith({
       behavior: 'auto',
-      top: -120,
+      top: -88,
     });
-    expect(scrollElement.scrollTop).toBe(-120);
+    expect(scrollElement.scrollTop).toBe(-88);
     expect(requireLatestHook(latestHook).showScrollToBottom).toBe(false);
   });
 
@@ -320,7 +320,7 @@ describe('components/message/useMessageListScroll', () => {
     expect(scrollElement.scrollTo).toHaveBeenCalledTimes(1);
     expect(scrollElement.scrollTo).toHaveBeenLastCalledWith({
       behavior: 'auto',
-      top: -120,
+      top: -88,
     });
 
     await act(async () => {
@@ -382,13 +382,13 @@ describe('components/message/useMessageListScroll', () => {
 
     expect(scrollElement.scrollTo).toHaveBeenLastCalledWith({
       behavior: 'auto',
-      top: -180,
+      top: -148,
     });
 
     scrollElement.scrollTo = jest.fn((options) => {
       scrollElement.scrollTop = Number(options.top ?? scrollElement.scrollTop);
     });
-    scrollElement.scrollTop = -180;
+    scrollElement.scrollTop = -148;
     latestUserOffset = 240;
 
     await act(async () => {
@@ -412,9 +412,9 @@ describe('components/message/useMessageListScroll', () => {
 
     expect(scrollElement.scrollTo).not.toHaveBeenCalledWith({
       behavior: 'auto',
-      top: -240,
+      top: -208,
     });
-    expect(scrollElement.scrollTop).toBe(-180);
+    expect(scrollElement.scrollTop).toBe(-148);
   });
 
   function triggerHistoryIntersection() {

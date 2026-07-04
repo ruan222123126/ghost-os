@@ -5,6 +5,7 @@ import type { ChatMessage } from '@/lib/types';
 import type { PostSendFocusRequest } from '@/hooks/chat/types';
 
 const SCROLL_ANCHOR_TOLERANCE_PX = 2;
+const POST_SEND_ANCHOR_TOP_OFFSET_PX = 32;
 type ScrollFrameHandle = number | ReturnType<typeof setTimeout>;
 
 interface PostSendLock {
@@ -103,7 +104,8 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
       return null;
     }
 
-    return container.scrollTop - (row.getBoundingClientRect().top - container.getBoundingClientRect().top);
+    const rowTopPx = row.getBoundingClientRect().top - container.getBoundingClientRect().top;
+    return Math.min(0, container.scrollTop - rowTopPx + POST_SEND_ANCHOR_TOP_OFFSET_PX);
   }, [scrollElementRef]);
 
   const scrollToAnchor = useCallback((scrollTop: number, behavior: ScrollBehavior) => {
