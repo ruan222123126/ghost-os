@@ -227,7 +227,7 @@ describe('components/message/useMessageListScroll', () => {
     expect(requireLatestHook(latestHook).showScrollToBottom).toBe(false);
   });
 
-  it('focuses the requested user message and adds reverse-flow trailing space', async () => {
+  it('focuses the requested user message immediately and adds reverse-flow trailing space', async () => {
     jest.useFakeTimers();
     const scrollElement = createScrollElement({
       clientHeight: 500,
@@ -269,14 +269,14 @@ describe('components/message/useMessageListScroll', () => {
     });
 
     expect(scrollElement.scrollTo).toHaveBeenLastCalledWith({
-      behavior: 'smooth',
+      behavior: 'auto',
       top: -120,
     });
     expect(scrollElement.scrollTop).toBe(-120);
     expect(requireLatestHook(latestHook).showScrollToBottom).toBe(false);
   });
 
-  it('does not interrupt smooth post-send focus while the programmatic scroll is in progress', async () => {
+  it('does not interrupt immediate post-send focus while the programmatic scroll is in progress', async () => {
     jest.useFakeTimers();
     const scrollElement = createScrollElement({
       clientHeight: 500,
@@ -319,7 +319,7 @@ describe('components/message/useMessageListScroll', () => {
 
     expect(scrollElement.scrollTo).toHaveBeenCalledTimes(1);
     expect(scrollElement.scrollTo).toHaveBeenLastCalledWith({
-      behavior: 'smooth',
+      behavior: 'auto',
       top: -120,
     });
 
@@ -381,7 +381,7 @@ describe('components/message/useMessageListScroll', () => {
     });
 
     expect(scrollElement.scrollTo).toHaveBeenLastCalledWith({
-      behavior: 'smooth',
+      behavior: 'auto',
       top: -180,
     });
 

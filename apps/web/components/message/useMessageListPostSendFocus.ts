@@ -260,7 +260,7 @@ function usePostSendFocusRequest(options: {
       return;
     }
 
-    if (focusPostSendMessage(request.messageId, 'smooth')) {
+    if (focusPostSendMessage(request.messageId, 'auto')) {
       handledPostSendTokenRef.current = request.token;
       pendingPostSendRequestRef.current = null;
       return;
