@@ -265,40 +265,18 @@ func TestManagerExecuteStreamDoesNotReplayAgentMessageSnapshot(t *testing.T) {
 	}
 }
 
-func TestManagerExecuteStreamSetsCodexPlanModeBeforeTurn(t *testing.T) {
-	manager, sessionStore, fake := newExternalAgentTestManager(t)
-	fake.threadModel = "gpt-5.5"
-	var turnStartedAfterMode bool
-	fake.startTurn = func(ctx context.Context, client *fakeCodexClient, opts TurnOptions) (string, error) {
-		turnStartedAfterMode = client.collaborationMode().Mode == CodexModePlan
-		client.emit(CodexEvent{Type: "agent_message", Payload: map[string]any{"message": "planned"}})
-		client.emit(CodexEvent{Type: "task_complete", Payload: map[string]any{"turn_id": "turn-plan"}})
-		return "turn-plan", nil
-	}
+func TestManagerExecuteStreamRejectsCodexPlanMode(t *testing.T) {
+	manager, _, _ := newExternalAgentTestManager(t)
 
-	message, sessionID, err := manager.ExecuteStream(context.Background(), api.ExternalAgentRequest{
+	_, _, err := manager.ExecuteStream(context.Background(), api.ExternalAgentRequest{
 		Message: "make a plan",
-		Mode:    CodexModePlan,
+		Mode:    "plan",
 	}, "trace-plan", newCollectingSink(), true)
-	if err != nil {
-		t.Fatalf("ExecuteStream: %v", err)
+	if err == nil {
+		t.Fatal("expected error but got nil")
 	}
-	if message != "planned" {
-		t.Fatalf("unexpected message: got %q", message)
-	}
-	if !turnStartedAfterMode {
-		t.Fatalf("expected plan mode to be set before turn/start; got %+v", fake.collaborationMode())
-	}
-	mode := fake.collaborationMode()
-	if mode.ThreadID != "thread-1" || mode.Mode != CodexModePlan || mode.Model != "gpt-5.5" || mode.Effort != "" {
-		t.Fatalf("unexpected collaboration mode: %+v", mode)
-	}
-	loaded, err := sessionStore.Load(sessionID)
-	if err != nil {
-		t.Fatalf("load session: %v", err)
-	}
-	if loaded.ExternalRuntime == nil || loaded.ExternalRuntime.Mode != CodexModePlan {
-		t.Fatalf("expected persisted plan mode: %+v", loaded.ExternalRuntime)
+	if err.Error() != `unsupported external codex mode: "plan"` {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

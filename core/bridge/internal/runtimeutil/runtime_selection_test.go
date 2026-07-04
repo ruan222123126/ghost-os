@@ -21,7 +21,7 @@ func TestBuildGhostRuntimeSelectionFromSnapshotUsesSnapshotValues(t *testing.T) 
 				Model: "claude-4",
 			},
 		},
-		session.RuntimeSelectionModePlan,
+		session.RuntimeSelectionModeDefault,
 	)
 
 	if selection == nil {
@@ -39,7 +39,7 @@ func TestBuildGhostRuntimeSelectionFromSnapshotUsesSnapshotValues(t *testing.T) 
 	if selection.Model != "gpt-5.4" {
 		t.Fatalf("unexpected model: got %q", selection.Model)
 	}
-	if selection.Mode != session.RuntimeSelectionModePlan {
+	if selection.Mode != session.RuntimeSelectionModeDefault {
 		t.Fatalf("unexpected mode: got %q", selection.Mode)
 	}
 }

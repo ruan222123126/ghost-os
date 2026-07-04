@@ -1,7 +1,6 @@
 package agentturn
 
 import (
-	"ghost-os/bridge/orchestration/internal/contracts/api"
 	"ghost-os/bridge/orchestration/internal/contracts/bus"
 )
 
@@ -31,7 +30,7 @@ func (s Service) completeStandardTurn(
 		s.log(traceID, bus.ActionAgentSend, "error", err)
 		return bus.ServiceResult{}, err
 	}
-	payload, err := s.Finalizer.NewResponsePayload(result, ResponseMeta{})
+	payload, err := s.Finalizer.NewResponsePayload(result)
 	if err != nil {
 		s.log(traceID, bus.ActionAgentSend, "error", err)
 		return bus.ServiceResult{}, bus.WrapError(bus.ServiceErrorInternal, err)
@@ -39,13 +38,4 @@ func (s Service) completeStandardTurn(
 	s.publishAssistant(traceID, result)
 	s.log(traceID, bus.ActionAgentSend, "success", nil)
 	return bus.ResultSuccess(payload), nil
-}
-
-func (s Service) publishSpecial(traceID string, payload api.AgentResponse) {
-	s.publishAssistant(traceID, FinalizedTurn{
-		Message:    payload.Message,
-		SessionID:  payload.SessionID,
-		SessionEnd: payload.SessionEnd,
-	})
-	s.log(traceID, bus.ActionAgentSend, "success", nil)
 }

@@ -229,7 +229,7 @@ func (c *appServerClient) SetCollaborationMode(ctx context.Context, opts Collabo
 			"mode": mode,
 			"settings": map[string]any{
 				"model":                  strings.TrimSpace(opts.Model),
-				"reasoning_effort":       collaborationModeEffort(mode, opts.Effort),
+				"reasoning_effort":       collaborationModeEffort(opts.Effort),
 				"developer_instructions": nil,
 			},
 		},
@@ -238,13 +238,10 @@ func (c *appServerClient) SetCollaborationMode(ctx context.Context, opts Collabo
 	return err
 }
 
-func collaborationModeEffort(mode string, effort string) any {
+func collaborationModeEffort(effort string) any {
 	trimmed := strings.TrimSpace(effort)
 	if trimmed != "" {
 		return trimmed
-	}
-	if strings.TrimSpace(mode) == CodexModePlan {
-		return "medium"
 	}
 	return nil
 }

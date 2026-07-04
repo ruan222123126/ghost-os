@@ -199,7 +199,7 @@ func TestBuildSessionDetailPayloadIncludesLastRuntimeSelection(t *testing.T) {
 			Provider:     "openai-main",
 			ProviderType: string(llm.ProviderOpenAI),
 			Model:        "gpt-5.4",
-			Mode:         session.RuntimeSelectionModePlan,
+			Mode:         session.RuntimeSelectionModeDefault,
 		},
 	}, false)
 
@@ -215,7 +215,7 @@ func TestBuildSessionDetailPayloadIncludesLastRuntimeSelection(t *testing.T) {
 	if payload.LastRuntimeSelection.Model != "gpt-5.4" {
 		t.Fatalf("unexpected model: got %q", payload.LastRuntimeSelection.Model)
 	}
-	if payload.LastRuntimeSelection.Mode != session.RuntimeSelectionModePlan {
+	if payload.LastRuntimeSelection.Mode != session.RuntimeSelectionModeDefault {
 		t.Fatalf("unexpected mode: got %q", payload.LastRuntimeSelection.Mode)
 	}
 }

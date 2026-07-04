@@ -188,7 +188,7 @@ func normalizeCodexMode(raw string) (string, error) {
 	switch mode {
 	case "":
 		return "", nil
-	case CodexModeDefault, CodexModePlan:
+	case CodexModeDefault:
 		return mode, nil
 	default:
 		return "", fmt.Errorf("unsupported external codex mode: %q", mode)

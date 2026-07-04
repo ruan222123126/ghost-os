@@ -17,7 +17,7 @@ func TestHandleExternalAgentStreamReturnsSSEEvents(t *testing.T) {
 		handler,
 		http.MethodPost,
 		"/api/external-agent/stream",
-		`{"provider":"codex","message":"hello","permission_mode":"safe-yolo","mode":"plan"}`,
+		`{"provider":"codex","message":"hello","permission_mode":"safe-yolo","mode":"default"}`,
 		map[string]string{"Content-Type": "application/json", "X-Trace-ID": "trace-external-stream"},
 	)
 
@@ -36,7 +36,7 @@ func TestHandleExternalAgentStreamReturnsSSEEvents(t *testing.T) {
 	if fake.request.PermissionMode != "safe-yolo" {
 		t.Fatalf("unexpected permission mode: %+v", fake.request)
 	}
-	if fake.request.Mode != "plan" {
+	if fake.request.Mode != "default" {
 		t.Fatalf("unexpected codex mode: %+v", fake.request)
 	}
 

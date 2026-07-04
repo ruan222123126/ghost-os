@@ -19,8 +19,7 @@ func PrepareRequest(params api.AgentParams) (PreparedRequest, error) {
 	if err != nil {
 		return PreparedRequest{}, bus.WrapError(bus.ServiceErrorInvalidInput, err)
 	}
-	mode, err := NormalizeMode(params.Mode)
-	if err != nil {
+	if _, err := NormalizeMode(params.Mode); err != nil {
 		return PreparedRequest{}, bus.WrapError(bus.ServiceErrorInvalidInput, err)
 	}
 	requestRuntime, err := NormalizeRequestRuntimeOptions(params.ProjectRoot)
@@ -30,7 +29,6 @@ func PrepareRequest(params api.AgentParams) (PreparedRequest, error) {
 	return PreparedRequest{
 		UserInput:      userInput,
 		Message:        message,
-		Mode:           mode,
 		SessionID:      strings.TrimSpace(params.SessionID),
 		RequestRuntime: requestRuntime,
 	}, nil
@@ -52,9 +50,6 @@ func NormalizeMode(raw string) (string, error) {
 	mode := strings.ToLower(strings.TrimSpace(raw))
 	if mode == "" {
 		return ModeDefault, nil
-	}
-	if mode == ModePlan {
-		return mode, nil
 	}
 	return "", fmt.Errorf("unsupported agent mode: %q", mode)
 }

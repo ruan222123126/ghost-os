@@ -7,7 +7,6 @@ const (
 	RuntimeSelectionCodex = "codex"
 
 	RuntimeSelectionModeDefault = "default"
-	RuntimeSelectionModePlan    = "plan"
 )
 
 type RuntimeSelection struct {

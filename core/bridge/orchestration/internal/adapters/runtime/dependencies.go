@@ -3,7 +3,6 @@ package runtime
 import (
 	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
-	agentturnplan "ghost-os/bridge/orchestration/internal/app/agentturn/plan"
 	apprelay "ghost-os/bridge/orchestration/internal/app/agentturn/relay"
 	ownerapp "ghost-os/bridge/orchestration/internal/app/orchestrations/owner"
 	appworkflows "ghost-os/bridge/orchestration/internal/app/workflows"
@@ -20,18 +19,6 @@ type Dependencies interface {
 	SystemPromptFiles() *bridgeconfig.SystemPromptFiles
 	RuntimeSelection() *session.RuntimeSelection
 	Close()
-}
-
-func ToPlanDependencies(deps Dependencies) agentturnplan.RuntimeDependencies {
-	if deps == nil {
-		return agentturnplan.RuntimeDependencies{}
-	}
-	return agentturnplan.RuntimeDependencies{
-		Config:       deps.Config(),
-		Client:       deps.Client(),
-		SystemPrompt: deps.SystemPrompt(),
-		Cleanup:      deps.Close,
-	}
 }
 
 func ToRelayDependencies(deps Dependencies) apprelay.RuntimeDependencies {

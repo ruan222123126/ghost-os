@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"ghost-os/bridge/agent"
-	bridgeconfig "ghost-os/bridge/config"
 	agentturnadapter "ghost-os/bridge/orchestration/internal/adapters/agentturnservice"
 	"ghost-os/bridge/orchestration/internal/app/agentturn"
 	"ghost-os/bridge/orchestration/internal/contracts/api"
@@ -16,11 +15,6 @@ import (
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
 	bridgeTasks "ghost-os/bridge/tasks"
-)
-
-const (
-	agentModeDefault = agentturn.ModeDefault
-	agentModePlan    = agentturn.ModePlan
 )
 
 type preparedAgentTurnRequest = agentturn.PreparedRequest
@@ -98,12 +92,6 @@ func (s *bridgeService) agentTurnService() agentturn.Service {
 		EnsureSessionActive:      s.ensureSessionActive,
 		RunTurn:                  s.runPreparedAgentTurn,
 		RunTurnStream:            s.runPreparedAgentTurnStream,
-		Plan: agentturnadapter.PlanConfig{
-			RuntimeBuilder: s.agentTurnRuntimeBuilder(),
-			ConfigStore:    s.configStore,
-			SessionStore:   s.sessionStore,
-			RunRegistry:    s.runRegistry,
-		},
 		Finalize: func(response string, sessionID string) (agentturn.FinalizedTurn, error) {
 			result, err := s.finalizeAgentTurn(response, sessionID)
 			if err != nil {
@@ -113,13 +101,11 @@ func (s *bridgeService) agentTurnService() agentturn.Service {
 		},
 		NewResponsePayload: func(
 			turn agentturn.FinalizedTurn,
-			meta agentturn.ResponseMeta,
 		) (api.AgentResponse, error) {
 			return newAgentResponsePayload(
 				turn.Message,
 				turn.SessionID,
 				turn.SessionEnd,
-				agentResponseMeta{Mode: meta.Mode},
 			)
 		},
 		PublishAssistant: func(traceID string, turn agentturn.FinalizedTurn) {
@@ -130,23 +116,6 @@ func (s *bridgeService) agentTurnService() agentturn.Service {
 		Log:                  logAction,
 		Stop:                 s.agentTurnStopConfig(),
 	})
-}
-
-func (s *bridgeService) agentTurnRuntimeBuilder() agentturnadapter.RuntimeBuilder {
-	factory := AgentRuntimeFactory(nil)
-	if s != nil {
-		factory = s.runtimeFactory
-	}
-	if factory == nil {
-		factory = newAgentRuntimeFactory()
-	}
-	return func(store bridgeconfig.Store) (agentturnadapter.RuntimeDependencies, error) {
-		deps, err := factory.Build(store)
-		if err != nil {
-			return nil, err
-		}
-		return deps, nil
-	}
 }
 
 func (s *bridgeService) agentTurnStopConfig() agentturnadapter.StopConfig {

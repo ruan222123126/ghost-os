@@ -103,7 +103,7 @@ func (m *Manager) prepareSession(
 		Provider:     ProviderCodex,
 		ProviderType: string(llm.ProviderCodex),
 		Model:        strings.TrimSpace(req.Model),
-		Mode:         codexSelectionMode(req.Mode),
+		Mode:         session.RuntimeSelectionModeDefault,
 	})
 	if strings.TrimSpace(sess.Title) == "" {
 		sess.Title = externalSessionTitle(req.Message)
@@ -112,14 +112,6 @@ func (m *Manager) prepareSession(
 		return nil, err
 	}
 	return sess, nil
-}
-
-func codexSelectionMode(mode string) string {
-	trimmed := strings.TrimSpace(mode)
-	if trimmed == "" {
-		return session.RuntimeSelectionModeDefault
-	}
-	return trimmed
 }
 
 func (m *Manager) runtimeForSession(sessionID string, cfg bridgeconfig.Config, cwd string) (*runtimeSession, error) {

@@ -17,7 +17,6 @@ import (
 
 const (
 	ModeDefault = ""
-	ModePlan    = "plan"
 )
 
 type RequestRuntimeOptions = runtimeopts.RequestOptions
@@ -25,7 +24,6 @@ type RequestRuntimeOptions = runtimeopts.RequestOptions
 type PreparedRequest struct {
 	UserInput        llm.Message
 	Message          string
-	Mode             string
 	SessionID        string
 	RequestRuntime   *RequestRuntimeOptions
 	RuntimeOverrides *bridgeTasks.TaskRuntimeOverrides
@@ -35,10 +33,6 @@ type FinalizedTurn struct {
 	Message    string
 	SessionID  string
 	SessionEnd *api.AssistantSessionEndSignalPayload
-}
-
-type ResponseMeta struct {
-	Mode string
 }
 
 type SessionGuards interface {
@@ -51,13 +45,9 @@ type Runner interface {
 	RunTurnStream(ctx context.Context, req PreparedRequest, traceID string, sink streaming.Sink) (string, string, error)
 }
 
-type SpecialModeRunner interface {
-	RunPlan(ctx context.Context, req PreparedRequest, traceID string) (api.AgentResponse, int, error)
-}
-
 type Finalizer interface {
 	Finalize(response string, sessionID string) (FinalizedTurn, error)
-	NewResponsePayload(turn FinalizedTurn, meta ResponseMeta) (api.AgentResponse, error)
+	NewResponsePayload(turn FinalizedTurn) (api.AgentResponse, error)
 }
 
 type Publisher interface {
@@ -85,7 +75,6 @@ type StopHandle struct {
 type Service struct {
 	Guards     SessionGuards
 	Runner     Runner
-	Special    SpecialModeRunner
 	Finalizer  Finalizer
 	Publisher  Publisher
 	Classifier ErrorClassifier
@@ -97,14 +86,12 @@ func NewResponsePayload(
 	message string,
 	sessionID string,
 	sessionEnd *api.AssistantSessionEndSignalPayload,
-	meta ResponseMeta,
 ) (api.AgentResponse, error) {
 	payload := api.AgentResponse{
 		Message:      strings.TrimSpace(message),
 		SessionID:    strings.TrimSpace(sessionID),
 		SessionEnded: sessionEnd != nil,
 		SessionEnd:   sessionEnd,
-		Mode:         strings.TrimSpace(meta.Mode),
 	}
 	if err := ValidateResponsePayload(payload); err != nil {
 		return api.AgentResponse{}, err
@@ -118,9 +105,6 @@ func ValidateResponsePayload(payload api.AgentResponse) error {
 	}
 	if err := validateResponseSessionEnd(payload); err != nil {
 		return err
-	}
-	if payload.Mode == "" {
-		return nil
 	}
 	return validateResponseMode(payload)
 }
@@ -158,10 +142,8 @@ func validateResponseSessionEnd(payload api.AgentResponse) error {
 }
 
 func validateResponseMode(payload api.AgentResponse) error {
-	switch payload.Mode {
-	case ModePlan:
-		return nil
-	default:
-		return errors.New("agent response mode is invalid")
+	if strings.TrimSpace(payload.Mode) != "" {
+		return errors.New("agent response mode is not supported")
 	}
+	return nil
 }

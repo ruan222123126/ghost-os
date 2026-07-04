@@ -17,10 +17,6 @@ import (
 	"ghost-os/bridge/tools"
 )
 
-type agentResponseMeta struct {
-	Mode string
-}
-
 type agentRuntimeDependencies struct {
 	cfg                  bridgeconfig.Config
 	client               agent.Completer
@@ -170,8 +166,8 @@ func parseSessionEndForStream(response string) (string, bool, error) {
 	return normalized, sessionEnd != nil, err
 }
 
-func newAgentResponsePayload(message string, sessionID string, sessionEnd *assistantSessionEndSignalPayload, meta agentResponseMeta) (agentResponse, error) {
-	return agentturn.NewResponsePayload(message, sessionID, sessionEnd, agentturn.ResponseMeta{Mode: meta.Mode})
+func newAgentResponsePayload(message string, sessionID string, sessionEnd *assistantSessionEndSignalPayload) (agentResponse, error) {
+	return agentturn.NewResponsePayload(message, sessionID, sessionEnd)
 }
 
 func validateAgentResponsePayload(payload agentResponse) error {

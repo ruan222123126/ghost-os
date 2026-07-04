@@ -144,7 +144,7 @@ func (s *bridgeService) executeHumanAnswerAndResumeAction(ctx context.Context, p
 	}
 	if params.Cancelled {
 		result := cancelledHumanTurn(sessionID)
-		payload, err := newAgentResponsePayload(result.message, result.sessionID, result.sessionEnd, agentResponseMeta{})
+		payload, err := newAgentResponsePayload(result.message, result.sessionID, result.sessionEnd)
 		if err != nil {
 			return ServiceResult{}, bus.WrapError(ServiceErrorInternal, err)
 		}

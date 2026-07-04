@@ -42,7 +42,7 @@ func (s Service) completeResumeTurn(
 	if err != nil {
 		return bus.ServiceResult{}, bus.WrapError(bus.ErrorKindOf(err), err)
 	}
-	payload, err := s.Finalizer.NewResponsePayload(result, ResponseMeta{})
+	payload, err := s.Finalizer.NewResponsePayload(result)
 	if err != nil {
 		return bus.ServiceResult{}, bus.WrapError(bus.ServiceErrorInternal, err)
 	}
