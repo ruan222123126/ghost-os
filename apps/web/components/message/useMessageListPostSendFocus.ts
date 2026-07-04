@@ -14,6 +14,11 @@ interface PostSendLock {
   targetScrollTop: number;
 }
 
+interface AnchorMeasurement {
+  targetScrollTop: number;
+  topPx: number;
+}
+
 export interface UseMessageListPostSendFocusOptions {
   autoFollowRef: MutableRefObject<boolean>;
   layoutSignature: string;
@@ -93,19 +98,29 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
     syncCurrentBottomAffordance();
   }, [autoFollowRef, scheduleBottomFollow, setTrailingSpacerPx, syncCurrentBottomAffordance]);
 
-  const measureMessageTargetScrollTop = useCallback((
+  const measureMessageAnchor = useCallback((
     messageId: string,
     anchorTopOffsetPx = POST_SEND_ANCHOR_TOP_OFFSET_PX,
-  ): number | null => {
+  ): AnchorMeasurement | null => {
     const container = scrollElementRef.current;
     const row = messageRowsRef.current.get(messageId);
     if (!container || !row) {
       return null;
     }
 
-    const rowTopPx = row.getBoundingClientRect().top - container.getBoundingClientRect().top;
-    return Math.min(0, container.scrollTop - rowTopPx + anchorTopOffsetPx);
+    const topPx = row.getBoundingClientRect().top - container.getBoundingClientRect().top;
+    return {
+      targetScrollTop: Math.min(0, container.scrollTop - topPx + anchorTopOffsetPx),
+      topPx,
+    };
   }, [scrollElementRef]);
+
+  const measureMessageTargetScrollTop = useCallback((
+    messageId: string,
+    anchorTopOffsetPx = POST_SEND_ANCHOR_TOP_OFFSET_PX,
+  ): number | null => {
+    return measureMessageAnchor(messageId, anchorTopOffsetPx)?.targetScrollTop ?? null;
+  }, [measureMessageAnchor]);
 
   const scrollToAnchor = useCallback((scrollTop: number, behavior: ScrollBehavior) => {
     scrollElementRef.current?.scrollTo({ top: scrollTop, behavior });
@@ -169,10 +184,18 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
       return;
     }
 
+    const anchor = measureMessageAnchor(lock.messageId, lock.anchorTopOffsetPx);
+    if (!anchor) {
+      releasePostSendLock(false);
+      return;
+    }
+
     const realContentHeightPx = measureRealContentHeight(container, trailingSpacerPxRef);
-    const spacerForCurrentTarget = requiredTrailingSpacerPx(container, lock.targetScrollTop, realContentHeightPx);
-    if (spacerForCurrentTarget > 0) {
-      setTrailingSpacerPx(spacerForCurrentTarget);
+    const spacerForLockedTarget = requiredTrailingSpacerPx(container, lock.targetScrollTop, realContentHeightPx);
+    if (spacerForLockedTarget > 0) {
+      const anchorDriftPx = lock.anchorTopOffsetPx - anchor.topPx;
+      const spacerForVisibleAnchor = trailingSpacerPxRef.current - anchorDriftPx;
+      setTrailingSpacerPx(Math.min(spacerForLockedTarget, spacerForVisibleAnchor));
       setShowScrollToBottom(false);
       if (Math.abs(container.scrollTop - lock.targetScrollTop) > SCROLL_ANCHOR_TOLERANCE_PX) {
         lock.programmaticScrollTarget = lock.targetScrollTop;
@@ -181,12 +204,7 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
       return;
     }
 
-    const targetScrollTop = measureMessageTargetScrollTop(lock.messageId, lock.anchorTopOffsetPx);
-    if (targetScrollTop === null) {
-      releasePostSendLock(false);
-      return;
-    }
-
+    const { targetScrollTop } = anchor;
     lock.targetScrollTop = targetScrollTop;
     setTrailingSpacerPx(requiredTrailingSpacerPx(container, targetScrollTop, realContentHeightPx));
     setShowScrollToBottom(false);
@@ -195,7 +213,7 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
       scrollToAnchor(targetScrollTop, 'auto');
     }
   }, [
-    measureMessageTargetScrollTop,
+    measureMessageAnchor,
     releasePostSendLock,
     scrollToAnchor,
     scrollElementRef,
