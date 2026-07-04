@@ -52,6 +52,13 @@ function displayRuntime(
   return config?.provider || config?.model || "Bridge Runtime";
 }
 
+function resolveEffectiveAgentRuntime(
+  agentRuntime: AgentRuntimeType,
+  agentMode: AgentModeSelection,
+): AgentRuntimeType {
+  return agentMode === null ? agentRuntime : "codex";
+}
+
 function resolveLocalProvider(providerList: ProviderListPayload | undefined, settings: StoredSettings) {
   return providerList?.providers.find((provider) => provider.provider_id === settings.localProviderId)
     ?? providerList?.providers.find((provider) => !provider.deleted_at);
@@ -134,7 +141,8 @@ function App() {
   const chatConfig = settings.remoteExecutionEnabled ? config : localRuntimeConfig;
   const chatProviderList = providerList;
   const activeCodexModel = normalizeCodexModel(codexModel);
-  const effectiveAgentRuntime = agentMode === "plan" ? "ghost" : agentRuntime;
+  const effectiveAgentRuntime = resolveEffectiveAgentRuntime(agentRuntime, agentMode);
+  const effectiveRuntimeConfig = effectiveAgentRuntime === "codex" ? config : chatConfig;
   const sendAgentMessageForRuntime = useCallback(
     (options: Parameters<typeof sendAgentMessage>[0]) => sendAgentMessage({
       ...options,
@@ -153,17 +161,17 @@ function App() {
       if (!selection) {
         return;
       }
-      if (selection.runtime === "codex") {
+      if (selection.runtime === "codex" || selection.mode === "plan") {
         setAgentRuntime("codex");
-        setAgentMode("normal");
-        if (selection.model?.trim()) {
+        setAgentMode(selection.mode === "plan" ? "plan" : "normal");
+        if (selection.runtime === "codex" && selection.model?.trim()) {
           setCodexModel(normalizeCodexModel(selection.model));
         }
         return;
       }
 
       setAgentRuntime("ghost");
-      setAgentMode(selection.mode === "plan" ? "plan" : null);
+      setAgentMode(null);
       await switchRuntimeSelection(selection);
     },
     [switchRuntimeSelection],
@@ -177,9 +185,7 @@ function App() {
     onSessionRuntimeSelection: applySessionRuntimeSelection,
     pinnedHistoryIds,
     persistComputerSessionsEnabled: settings.persistComputerSessionsEnabled,
-    sendAvailable: agentMode === "plan"
-      ? Boolean(config)
-      : agentRuntime === "codex"
+    sendAvailable: effectiveAgentRuntime === "codex"
       ? Boolean(config)
       : settings.remoteExecutionEnabled
       ? Boolean(config)
@@ -190,11 +196,11 @@ function App() {
     stopAgentRun: stopAgentRunForRuntime,
   });
   const displayStatus = mobileSessions.activeStatus.tone === "idle" ? status : mobileSessions.activeStatus;
-  const supportsComposerSkills = Boolean(config) && (agentMode === "plan" || agentRuntime === "codex" || settings.remoteExecutionEnabled);
+  const supportsComposerSkills = Boolean(config) && (effectiveAgentRuntime === "codex" || settings.remoteExecutionEnabled);
   const canSubmit = isNonEmptyMessage(message) || selectedSkill !== null;
   const runtimeLabel = useMemo(
-    () => displayRuntime(agentRuntime, agentRuntime === "codex" ? config : chatConfig, activeCodexModel),
-    [activeCodexModel, agentRuntime, chatConfig, config],
+    () => displayRuntime(effectiveAgentRuntime, effectiveRuntimeConfig, activeCodexModel),
+    [activeCodexModel, effectiveAgentRuntime, effectiveRuntimeConfig],
   );
   const isModalOpen = isSidebarOpen || isSearchOpen || isConnectionOpen || isSettingsOpen || isMoreMenuOpen;
   const hasLocalConversation = mobileSessions.hasConversation;
@@ -256,6 +262,13 @@ function App() {
     if (!sent) {
       setMessage(previousMessage);
       setSelectedSkill(previousSkill);
+    }
+  }
+
+  function switchAgentRuntime(runtime: AgentRuntimeType): void {
+    setAgentRuntime(runtime);
+    if (runtime !== "codex") {
+      setAgentMode(null);
     }
   }
 
@@ -393,9 +406,9 @@ function App() {
       >
         <ChatHeader
           runtimeLabel={runtimeLabel}
-          agentRuntime={agentRuntime}
+          agentRuntime={effectiveAgentRuntime}
           codexModel={activeCodexModel}
-          config={agentRuntime === "codex" ? config : chatConfig}
+          config={effectiveRuntimeConfig}
           codexPermissionMode={config?.external_codex_permission_mode}
           providerList={chatProviderList}
           status={displayStatus}
@@ -405,7 +418,7 @@ function App() {
           onToggleRuntimeMenu={() => setIsRuntimeMenuOpen((current) => !current)}
           onCloseRuntimeMenu={() => setIsRuntimeMenuOpen(false)}
           onSwitchModel={switchModel}
-          onSwitchAgentRuntime={setAgentRuntime}
+          onSwitchAgentRuntime={switchAgentRuntime}
           onSwitchCodexModel={setCodexModel}
           onOpenConnection={openConnection}
           onOpenMoreMenu={() => {
@@ -446,7 +459,7 @@ function App() {
           canSubmit={canSubmit}
           disabled={!mobileSessions.canSend}
           value={message}
-          canStop={(settings.remoteExecutionEnabled || agentRuntime === "codex" || agentMode === "plan") && mobileSessions.canStop}
+          canStop={(settings.remoteExecutionEnabled || effectiveAgentRuntime === "codex") && mobileSessions.canStop}
           loading={mobileSessions.activeStatus.tone === "loading"}
           selectedSkill={selectedSkill}
           skills={supportsComposerSkills ? skillList : undefined}
@@ -455,7 +468,7 @@ function App() {
           onSelectSkill={supportsComposerSkills ? (skill) => setSelectedSkill({ id: skill.id, name: skill.name }) : undefined}
           onChangeAgentMode={setAgentMode}
           onSubmit={sendMessage}
-          onStop={(settings.remoteExecutionEnabled || agentRuntime === "codex" || agentMode === "plan") ? async () => {
+          onStop={(settings.remoteExecutionEnabled || effectiveAgentRuntime === "codex") ? async () => {
             await mobileSessions.stopCurrentRun();
           } : undefined}
           onChange={setMessage}
