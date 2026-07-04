@@ -333,6 +333,90 @@ describe('components/message/useMessageListScroll', () => {
     expect(requireLatestHook(latestHook).showScrollToBottom).toBe(false);
   });
 
+  it('keeps the latest requested user message anchored through post-send layout changes', async () => {
+    jest.useFakeTimers();
+    const scrollElement = createScrollElement({
+      clientHeight: 500,
+      scrollHeight: 420,
+      scrollTop: 0,
+    });
+    let latestUserOffset = 180;
+    const oldUserRow = createMeasuredElement(() => 40 + scrollElement.scrollTop);
+    const latestUserRow = createMeasuredElement(() => latestUserOffset + scrollElement.scrollTop);
+    const loadOlderHistory = jest.fn(async () => undefined);
+    const messages = [
+      { id: 'user-old', kind: 'user' as const, content: 'old question' },
+      { id: 'user-latest', kind: 'user' as const, content: 'latest question' },
+    ];
+    let renderer!: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        React.createElement(HookProbe, {
+          hasOlderHistory: false,
+          layoutSignature: 'session:post-send',
+          loadOlderHistory,
+          postSendFocusRequest: { messageId: 'user-latest', token: 1 },
+          rowCount: 2,
+          scrollElement,
+          userRows: {
+            'user-old': oldUserRow,
+            'user-latest': latestUserRow,
+          },
+          visibleCommittedMessages: messages,
+        }),
+        {
+          createNodeMock: createNodeMock(scrollElement, {
+            'user-old': oldUserRow,
+            'user-latest': latestUserRow,
+          }),
+        },
+      );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      jest.runOnlyPendingTimers();
+      await Promise.resolve();
+    });
+
+    expect(scrollElement.scrollTo).toHaveBeenLastCalledWith({
+      behavior: 'smooth',
+      top: -180,
+    });
+
+    scrollElement.scrollTo = jest.fn((options) => {
+      scrollElement.scrollTop = Number(options.top ?? scrollElement.scrollTop);
+    });
+    scrollElement.scrollTop = -180;
+    latestUserOffset = 240;
+
+    await act(async () => {
+      renderer.update(
+        React.createElement(HookProbe, {
+          hasOlderHistory: false,
+          layoutSignature: 'session:post-send:assistant-started',
+          loadOlderHistory,
+          postSendFocusRequest: { messageId: 'user-latest', token: 1 },
+          rowCount: 2,
+          scrollElement,
+          userRows: {
+            'user-old': oldUserRow,
+            'user-latest': latestUserRow,
+          },
+          visibleCommittedMessages: messages,
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(scrollElement.scrollTo).not.toHaveBeenCalledWith({
+      behavior: 'auto',
+      top: -240,
+    });
+    expect(scrollElement.scrollTop).toBe(-180);
+  });
+
   function triggerHistoryIntersection() {
     if (!intersectionCallback) {
       throw new Error('IntersectionObserver callback was not registered');
@@ -370,6 +454,7 @@ function HookProbe(props: {
   rowCount: number;
   scrollElement: ScrollElement;
   userRowElement?: MeasuredElement;
+  userRows?: Record<string, MeasuredElement>;
   visibleCommittedMessages?: Array<{ id: string; kind: 'user'; content: string }>;
 }) {
   const hook = useMessageListScroll({
@@ -392,6 +477,16 @@ function HookProbe(props: {
   return React.createElement(
     'div',
     { ref: hook.scrollElementRef, 'data-node': 'scroll' },
+    props.userRows
+      ? Object.keys(props.userRows).map((messageId) => (
+        React.createElement('div', {
+          key: messageId,
+          ref: hook.registerMessageRow(messageId),
+          'data-message-id': messageId,
+          'data-node': 'user-row',
+        })
+      ))
+      : null,
     props.userRowElement
       ? React.createElement('div', { ref: hook.registerMessageRow('user-1'), 'data-node': 'user-row' })
       : null,
@@ -451,12 +546,19 @@ function createMeasuredElement(resolveTop: () => number): MeasuredElement {
   };
 }
 
-function createNodeMock(scrollElement: ScrollElement, userRowElement?: MeasuredElement) {
+function createNodeMock(
+  scrollElement: ScrollElement,
+  userRowElement?: MeasuredElement | Record<string, MeasuredElement>,
+) {
   return (element: React.ReactElement) => {
     if (element.props['data-node'] === 'scroll') {
       return scrollElement;
     }
     if (element.props['data-node'] === 'user-row') {
+      const messageId = element.props['data-message-id'];
+      if (typeof messageId === 'string' && userRowElement && !('getBoundingClientRect' in userRowElement)) {
+        return userRowElement[messageId] ?? {};
+      }
       return userRowElement ?? {};
     }
     if (element.props['data-node'] === 'sentinel') {

@@ -164,13 +164,11 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
     }
     lock.programmaticScrollTarget = null;
 
-    const targetScrollTop = measureMessageTargetScrollTop(lock.messageId);
-    if (targetScrollTop === null) {
+    if (!messageRowsRef.current.has(lock.messageId)) {
       releasePostSendLock(false);
       return;
     }
 
-    lock.targetScrollTop = targetScrollTop;
     const realContentHeightPx = measureRealContentHeight(container, trailingSpacerPxRef);
     if (shouldReleasePostSendLock({
       baselineContentHeightPx: lock.baselineContentHeightPx,
@@ -181,19 +179,18 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
         streamingRows,
       ),
       realContentHeightPx,
-      targetScrollTop,
+      targetScrollTop: lock.targetScrollTop,
     })) {
       releasePostSendLock(lock.autoFollowOnRelease);
       return;
     }
 
-    setTrailingSpacerPx(requiredTrailingSpacerPx(container, targetScrollTop, realContentHeightPx));
+    setTrailingSpacerPx(requiredTrailingSpacerPx(container, lock.targetScrollTop, realContentHeightPx));
     setShowScrollToBottom(false);
-    if (Math.abs(container.scrollTop - targetScrollTop) > SCROLL_ANCHOR_TOLERANCE_PX) {
-      scrollToAnchor(targetScrollTop, 'auto');
+    if (Math.abs(container.scrollTop - lock.targetScrollTop) > SCROLL_ANCHOR_TOLERANCE_PX) {
+      scrollToAnchor(lock.targetScrollTop, 'auto');
     }
   }, [
-    measureMessageTargetScrollTop,
     releasePostSendLock,
     scrollToAnchor,
     scrollElementRef,
