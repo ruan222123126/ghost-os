@@ -1,6 +1,5 @@
 import type { MutableRefObject } from 'react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { StreamingMessageRow } from '@/lib/chat-view/types';
 import type { ChatMessage } from '@/lib/types';
 import type { PostSendFocusRequest } from '@/hooks/chat/types';
 
@@ -9,8 +8,7 @@ const POST_SEND_ANCHOR_TOP_OFFSET_PX = 32;
 type ScrollFrameHandle = number | ReturnType<typeof setTimeout>;
 
 interface PostSendLock {
-  autoFollowOnRelease: boolean;
-  baselineContentHeightPx: number;
+  anchorTopOffsetPx: number;
   messageId: string;
   programmaticScrollTarget: number | null;
   targetScrollTop: number;
@@ -24,7 +22,6 @@ export interface UseMessageListPostSendFocusOptions {
   scheduleBottomFollow: () => void;
   scrollElementRef: MutableRefObject<HTMLDivElement | null>;
   setShowScrollToBottom: (value: boolean) => void;
-  streamingRows: StreamingMessageRow[];
   syncCurrentBottomAffordance: () => void;
   visibleCommittedMessages: ChatMessage[];
 }
@@ -38,7 +35,6 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
     scheduleBottomFollow,
     scrollElementRef,
     setShowScrollToBottom,
-    streamingRows,
     syncCurrentBottomAffordance,
     visibleCommittedMessages,
   } = options;
@@ -97,7 +93,10 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
     syncCurrentBottomAffordance();
   }, [autoFollowRef, scheduleBottomFollow, setTrailingSpacerPx, syncCurrentBottomAffordance]);
 
-  const measureMessageTargetScrollTop = useCallback((messageId: string): number | null => {
+  const measureMessageTargetScrollTop = useCallback((
+    messageId: string,
+    anchorTopOffsetPx = POST_SEND_ANCHOR_TOP_OFFSET_PX,
+  ): number | null => {
     const container = scrollElementRef.current;
     const row = messageRowsRef.current.get(messageId);
     if (!container || !row) {
@@ -105,7 +104,7 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
     }
 
     const rowTopPx = row.getBoundingClientRect().top - container.getBoundingClientRect().top;
-    return Math.min(0, container.scrollTop - rowTopPx + POST_SEND_ANCHOR_TOP_OFFSET_PX);
+    return Math.min(0, container.scrollTop - rowTopPx + anchorTopOffsetPx);
   }, [scrollElementRef]);
 
   const scrollToAnchor = useCallback((scrollTop: number, behavior: ScrollBehavior) => {
@@ -129,8 +128,7 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
 
     const realContentHeightPx = measureRealContentHeight(container, trailingSpacerPxRef);
     postSendLockRef.current = {
-      autoFollowOnRelease: true,
-      baselineContentHeightPx: realContentHeightPx,
+      anchorTopOffsetPx: POST_SEND_ANCHOR_TOP_OFFSET_PX,
       messageId,
       programmaticScrollTarget: targetScrollTop,
       targetScrollTop,
@@ -172,34 +170,37 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
     }
 
     const realContentHeightPx = measureRealContentHeight(container, trailingSpacerPxRef);
-    if (shouldReleasePostSendLock({
-      baselineContentHeightPx: lock.baselineContentHeightPx,
-      clientHeight: container.clientHeight,
-      hasVisibleContent: hasVisibleContentAfterPostSendAnchor(
-        visibleCommittedMessages,
-        lock.messageId,
-        streamingRows,
-      ),
-      realContentHeightPx,
-      targetScrollTop: lock.targetScrollTop,
-    })) {
-      releasePostSendLock(lock.autoFollowOnRelease);
+    const spacerForCurrentTarget = requiredTrailingSpacerPx(container, lock.targetScrollTop, realContentHeightPx);
+    if (spacerForCurrentTarget > 0) {
+      setTrailingSpacerPx(spacerForCurrentTarget);
+      setShowScrollToBottom(false);
+      if (Math.abs(container.scrollTop - lock.targetScrollTop) > SCROLL_ANCHOR_TOLERANCE_PX) {
+        lock.programmaticScrollTarget = lock.targetScrollTop;
+        scrollToAnchor(lock.targetScrollTop, 'auto');
+      }
       return;
     }
 
-    setTrailingSpacerPx(requiredTrailingSpacerPx(container, lock.targetScrollTop, realContentHeightPx));
+    const targetScrollTop = measureMessageTargetScrollTop(lock.messageId, lock.anchorTopOffsetPx);
+    if (targetScrollTop === null) {
+      releasePostSendLock(false);
+      return;
+    }
+
+    lock.targetScrollTop = targetScrollTop;
+    setTrailingSpacerPx(requiredTrailingSpacerPx(container, targetScrollTop, realContentHeightPx));
     setShowScrollToBottom(false);
-    if (Math.abs(container.scrollTop - lock.targetScrollTop) > SCROLL_ANCHOR_TOLERANCE_PX) {
-      scrollToAnchor(lock.targetScrollTop, 'auto');
+    if (Math.abs(container.scrollTop - targetScrollTop) > SCROLL_ANCHOR_TOLERANCE_PX) {
+      lock.programmaticScrollTarget = targetScrollTop;
+      scrollToAnchor(targetScrollTop, 'auto');
     }
   }, [
+    measureMessageTargetScrollTop,
     releasePostSendLock,
     scrollToAnchor,
     scrollElementRef,
     setShowScrollToBottom,
     setTrailingSpacerPx,
-    streamingRows,
-    visibleCommittedMessages,
   ]);
 
   usePostSendFocusRequest({
@@ -325,18 +326,6 @@ function requiredTrailingSpacerPx(
   return Math.max(0, Math.abs(targetScrollTop) + container.clientHeight - realContentHeightPx);
 }
 
-function shouldReleasePostSendLock(options: {
-  baselineContentHeightPx: number;
-  clientHeight: number;
-  hasVisibleContent: boolean;
-  realContentHeightPx: number;
-  targetScrollTop: number;
-}): boolean {
-  return options.hasVisibleContent
-    && options.realContentHeightPx > options.baselineContentHeightPx
-    && options.realContentHeightPx > Math.abs(options.targetScrollTop) + options.clientHeight;
-}
-
 function isProgrammaticScrollInProgress(container: HTMLElement, lock: PostSendLock): boolean {
   if (lock.programmaticScrollTarget === null) {
     return false;
@@ -347,23 +336,6 @@ function isProgrammaticScrollInProgress(container: HTMLElement, lock: PostSendLo
 
 function hasUserMessage(messages: ChatMessage[], messageId: string): boolean {
   return messages.some((message) => message.id === messageId && message.kind === 'user');
-}
-
-function hasVisibleContentAfterPostSendAnchor(
-  messages: ChatMessage[],
-  messageId: string,
-  streamingRows: StreamingMessageRow[],
-): boolean {
-  const anchorIndex = messages.findIndex((message) => message.id === messageId);
-  if (anchorIndex >= 0 && messages.slice(anchorIndex + 1).some(hasVisibleMessageContent)) {
-    return true;
-  }
-
-  return streamingRows.some((row) => hasVisibleMessageContent(row.message));
-}
-
-function hasVisibleMessageContent(message: ChatMessage): boolean {
-  return message.content.trim().length > 0;
 }
 
 function requestScrollFrame(callback: FrameRequestCallback): ScrollFrameHandle {

@@ -1,6 +1,5 @@
 import type { MutableRefObject } from 'react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { StreamingMessageRow } from '@/lib/chat-view/types';
 import type { ChatMessage } from '@/lib/types';
 import type { PostSendFocusRequest } from '@/hooks/chat/types';
 import { resolveMessageListAutoFollow } from './messageListScroll';
@@ -21,7 +20,6 @@ export interface UseMessageListScrollOptions {
   layoutSignature: string;
   postSendFocusRequest?: PostSendFocusRequest | null;
   rowCount: number;
-  streamingRows: StreamingMessageRow[];
   visibleCommittedMessages: ChatMessage[];
 }
 
@@ -69,7 +67,6 @@ export function useMessageListScroll(options: UseMessageListScrollOptions) {
     scheduleBottomFollow,
     scrollElementRef,
     setShowScrollToBottom,
-    streamingRows: options.streamingRows,
     syncCurrentBottomAffordance,
     visibleCommittedMessages: options.visibleCommittedMessages,
   });

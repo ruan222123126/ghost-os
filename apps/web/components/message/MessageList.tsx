@@ -72,7 +72,6 @@ export const MessageList: FC<MessageListProps> = ({
     loadingOlderHistory,
     postSendFocusRequest,
     rowCount,
-    streamingRows,
     visibleCommittedMessages,
   });
   const showHistoryLoading = olderHistoryLoadingPaused || loadingOlderHistory;
