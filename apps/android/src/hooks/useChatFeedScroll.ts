@@ -3,9 +3,7 @@ import type { AgentPayload, MobileConversationMessage, StatusMessage } from "../
 
 const SCROLL_DOWN_THRESHOLD_PX = 50;
 const LOAD_OLDER_THRESHOLD_PX = 32;
-const OLDER_LOAD_STABILIZATION_FRAMES = 2;
 const CHAT_FEED_CONTENT_SELECTOR = "[data-chat-feed-content]";
-const CHAT_FEED_ITEM_SELECTOR = "[data-chat-feed-item]";
 
 interface UseChatFeedScrollOptions {
   hasOlderHistory?: boolean;
@@ -22,25 +20,17 @@ interface PostSendScrollRequest {
   token: number;
 }
 
-interface OlderLoadAnchor {
-  element: HTMLElement | null;
-  elementTop: number | null;
-  stabilizationFramesRemaining: number;
-  scrollHeight: number;
-  scrollTop: number;
-}
-
 export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
+  const historySentinelRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLElement>(null);
   const handledPostSendTokenRef = useRef<number | null>(null);
   const autoFollowRef = useRef(true);
   const olderLoadPendingRef = useRef(false);
-  const olderLoadAnchorRef = useRef<OlderLoadAnchor | null>(null);
-  const olderLoadStabilizationFrameRef = useRef<number | null>(null);
   const pendingBottomScrollFrameRef = useRef<number | null>(null);
   const pendingBottomScrollBehaviorRef = useRef<ScrollBehavior>("auto");
   const pendingBottomScrollTokenRef = useRef(0);
   const previousSessionIdRef = useRef<string | undefined>(undefined);
+  const userScrollSeenRef = useRef(false);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const reply = options.reply;
   const hasReply = Boolean(reply);
@@ -53,8 +43,8 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
 
     previousSessionIdRef.current = currentSessionId;
     olderLoadPendingRef.current = false;
-    clearOlderLoadAnchor();
     autoFollowRef.current = true;
+    userScrollSeenRef.current = false;
     setShowScrollDown(false);
     if (scrollRef.current) {
       scrollRef.current.scrollTop = 0;
@@ -62,9 +52,6 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   }, [options.sessionId]);
 
   useLayoutEffect(() => {
-    if (restoreOlderLoadAnchor()) {
-      return;
-    }
     const request = options.postSendScrollRequest;
     if (!request || handledPostSendTokenRef.current === request.token) {
       return;
@@ -75,26 +62,19 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   }, [options.messages, options.postSendScrollRequest]);
 
   useLayoutEffect(() => {
-    if (restoreOlderLoadAnchor()) {
-      return;
-    }
-    if (autoFollowRef.current && (options.messages.length > 0 || hasReply)) {
+    if (!options.loadingOlderHistory && autoFollowRef.current && (options.messages.length > 0 || hasReply)) {
       scheduleScrollToBottom(options.statusTone === "loading" ? "auto" : "smooth");
     }
-  }, [hasReply, options.messages, options.statusTone, reply]);
+  }, [hasReply, options.loadingOlderHistory, options.messages, options.statusTone, reply]);
 
   useLayoutEffect(() => {
-    if (!options.loadingOlderHistory && olderLoadPendingRef.current) {
+    if (!options.loadingOlderHistory) {
       olderLoadPendingRef.current = false;
-      if (!restoreOlderLoadAnchor()) {
-        clearOlderLoadAnchor();
-      }
     }
   }, [options.loadingOlderHistory]);
 
   useLayoutEffect(() => {
     return () => {
-      clearOlderLoadAnchor();
       cancelPendingBottomScroll();
     };
   }, []);
@@ -106,20 +86,12 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     }
 
     const resizeObserver = new ResizeObserver(() => {
-      if (olderLoadAnchorRef.current && options.loadingOlderHistory) {
-        return;
-      }
-      if (restoreOlderLoadAnchor()) {
-        return;
-      }
-      if (autoFollowRef.current && (options.messages.length > 0 || hasReply)) {
+      if (!options.loadingOlderHistory && autoFollowRef.current && (options.messages.length > 0 || hasReply)) {
         scheduleScrollToBottom("auto");
         return;
       }
 
-      const shouldShow = shouldShowScrollDown(element);
-      autoFollowRef.current = !shouldShow;
-      setShowScrollDown(shouldShow);
+      syncBottomAffordance(element);
     });
 
     resizeObserver.observe(element);
@@ -132,27 +104,51 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     };
   }, [hasReply, options.loadingOlderHistory, options.messages.length, options.statusTone, reply]);
 
+  useLayoutEffect(() => {
+    const root = scrollRef.current;
+    const target = historySentinelRef.current;
+    if (!root || !target || typeof IntersectionObserver === "undefined") {
+      return;
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries[0]?.isIntersecting || !userScrollSeenRef.current) {
+        return;
+      }
+
+      maybeLoadOlderHistory(root);
+    }, {
+      root,
+      threshold: 0.1,
+    });
+
+    observer.observe(target);
+    return () => {
+      observer.disconnect();
+    };
+  }, [options.hasOlderHistory, options.loadingOlderHistory, options.onLoadOlderHistory]);
+
   function handleScroll(): void {
     const element = scrollRef.current;
     if (!element) {
       return;
     }
 
+    userScrollSeenRef.current = true;
     cancelPendingBottomScroll();
     maybeLoadOlderHistory(element);
-    if (olderLoadAnchorRef.current || options.loadingOlderHistory) {
+    if (options.loadingOlderHistory) {
       autoFollowRef.current = false;
-      setShowScrollDown(false);
+      setShowScrollDown(true);
       return;
     }
 
-    const shouldShow = shouldShowScrollDown(element);
-    autoFollowRef.current = !shouldShow;
-    setShowScrollDown(shouldShow);
+    syncBottomAffordance(element);
   }
 
   function resetScrollDown(): void {
     autoFollowRef.current = true;
+    userScrollSeenRef.current = false;
     setShowScrollDown(false);
   }
 
@@ -186,10 +182,11 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
 
   function commitScrollToBottom(behavior: ScrollBehavior): void {
     autoFollowRef.current = true;
+    userScrollSeenRef.current = false;
     setShowScrollDown(false);
     if (scrollRef.current) {
       scrollRef.current.scrollTo({
-        top: scrollRef.current.scrollHeight,
+        top: 0,
         behavior,
       });
     }
@@ -210,135 +207,35 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
       !options.hasOlderHistory
       || options.loadingOlderHistory
       || olderLoadPendingRef.current
-      || olderLoadAnchorRef.current
-      || element.scrollTop > LOAD_OLDER_THRESHOLD_PX
+      || distanceFromHistoryTop(element) > LOAD_OLDER_THRESHOLD_PX
       || !options.onLoadOlderHistory
     ) {
       return;
     }
 
     olderLoadPendingRef.current = true;
-    olderLoadAnchorRef.current = {
-      ...captureVisibleAnchor(element),
-      stabilizationFramesRemaining: OLDER_LOAD_STABILIZATION_FRAMES,
-      scrollHeight: element.scrollHeight,
-      scrollTop: element.scrollTop,
-    };
     autoFollowRef.current = false;
     cancelPendingBottomScroll();
+    setShowScrollDown(true);
     void options.onLoadOlderHistory().catch(() => {
       olderLoadPendingRef.current = false;
-      clearOlderLoadAnchor();
     });
   }
 
-  function restoreOlderLoadAnchor(): boolean {
-    const anchor = olderLoadAnchorRef.current;
-    const element = scrollRef.current;
-    if (!anchor || !element) {
-      return false;
-    }
-
-    const previousScrollTop = element.scrollTop;
-    const restored = anchor.scrollHeight === element.scrollHeight && anchor.scrollTop === element.scrollTop
-      ? true
-      : restoreAnchorPosition(element, anchor);
-    if (!restored) {
-      return false;
-    }
-
-    autoFollowRef.current = false;
-    setShowScrollDown(shouldShowScrollDown(element));
-    const stabilizationFramesRemaining = anchor.scrollHeight !== element.scrollHeight
-      || Math.abs(element.scrollTop - previousScrollTop) > 0.5
-      ? OLDER_LOAD_STABILIZATION_FRAMES
-      : anchor.stabilizationFramesRemaining;
-
-    if (options.loadingOlderHistory) {
-      olderLoadAnchorRef.current = {
-        ...anchor,
-        stabilizationFramesRemaining,
-        scrollHeight: element.scrollHeight,
-        scrollTop: element.scrollTop,
-      };
-      return true;
-    }
-
-    if (stabilizationFramesRemaining > 0) {
-      olderLoadAnchorRef.current = {
-        ...anchor,
-        stabilizationFramesRemaining,
-        scrollHeight: element.scrollHeight,
-        scrollTop: element.scrollTop,
-      };
-      scheduleOlderLoadAnchorStabilization();
-      return true;
-    }
-
-    clearOlderLoadAnchor();
-    return true;
-  }
-
-  function restoreAnchorPosition(element: HTMLElement, anchor: OlderLoadAnchor): boolean {
-    if (anchor.element && anchor.element.isConnected && anchor.elementTop !== null) {
-      const topDelta = anchor.element.getBoundingClientRect().top - anchor.elementTop;
-      if (Math.abs(topDelta) > 0.5) {
-        setScrollTopInstant(element, element.scrollTop + topDelta);
-      }
-      return true;
-    }
-    if (element.scrollHeight <= anchor.scrollHeight) {
-      return false;
-    }
-
-    const delta = element.scrollHeight - anchor.scrollHeight;
-    setScrollTopInstant(element, anchor.scrollTop + delta);
-    return true;
-  }
-
-  function scheduleOlderLoadAnchorStabilization(): void {
-    if (olderLoadStabilizationFrameRef.current !== null) {
-      return;
-    }
-
-    olderLoadStabilizationFrameRef.current = window.requestAnimationFrame(() => {
-      olderLoadStabilizationFrameRef.current = null;
-      const anchor = olderLoadAnchorRef.current;
-      if (!anchor) {
-        return;
-      }
-
-      olderLoadAnchorRef.current = {
-        ...anchor,
-        stabilizationFramesRemaining: Math.max(anchor.stabilizationFramesRemaining - 1, 0),
-      };
-      if (!restoreOlderLoadAnchor()) {
-        clearOlderLoadAnchor();
-      }
-    });
-  }
-
-  function clearOlderLoadAnchor(): void {
-    olderLoadAnchorRef.current = null;
-    if (olderLoadStabilizationFrameRef.current === null) {
-      return;
-    }
-
-    window.cancelAnimationFrame(olderLoadStabilizationFrameRef.current);
-    olderLoadStabilizationFrameRef.current = null;
+  function syncBottomAffordance(element: HTMLElement): void {
+    const shouldShow = shouldShowScrollDown(element);
+    autoFollowRef.current = !shouldShow;
+    setShowScrollDown(shouldShow);
   }
 
   return {
     handleScroll,
+    historySentinelRef,
     resetScrollDown,
     scrollRef,
     scrollToBottom,
     showScrollDown,
   };
-}
-
-function setScrollTopInstant(element: HTMLElement, scrollTop: number): void {
-  element.scrollTop = scrollTop;
 }
 
 function resolvePendingBottomScrollBehavior(previous: ScrollBehavior, next: ScrollBehavior): ScrollBehavior {
@@ -348,24 +245,10 @@ function resolvePendingBottomScrollBehavior(previous: ScrollBehavior, next: Scro
   return next;
 }
 
-function captureVisibleAnchor(element: HTMLElement): Pick<OlderLoadAnchor, "element" | "elementTop"> {
-  const feedTop = element.getBoundingClientRect().top;
-  const items = element.querySelectorAll<HTMLElement>(CHAT_FEED_ITEM_SELECTOR);
-  for (const item of items) {
-    const rect = item.getBoundingClientRect();
-    if (rect.bottom > feedTop) {
-      return {
-        element: item,
-        elementTop: rect.top,
-      };
-    }
-  }
-  return {
-    element: null,
-    elementTop: null,
-  };
+function shouldShowScrollDown(element: HTMLElement): boolean {
+  return Math.abs(element.scrollTop) > SCROLL_DOWN_THRESHOLD_PX;
 }
 
-function shouldShowScrollDown(element: HTMLElement): boolean {
-  return element.scrollHeight - element.scrollTop - element.clientHeight > SCROLL_DOWN_THRESHOLD_PX;
+function distanceFromHistoryTop(element: HTMLElement): number {
+  return element.scrollHeight - element.clientHeight + element.scrollTop;
 }

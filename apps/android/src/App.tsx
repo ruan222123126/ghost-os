@@ -202,6 +202,7 @@ function App() {
   const showTopLoadingBar = mobileSessions.loadingSessionMessages || mobileSessions.loadingOlderHistory;
   const {
     handleScroll,
+    historySentinelRef,
     resetScrollDown,
     scrollRef,
     scrollToBottom,
@@ -419,7 +420,7 @@ function App() {
         <main
           ref={setChatFeedRef}
           onScroll={handleScroll}
-          className={`chat-feed ${showEmptyIntro ? "is-empty" : ""}`}
+          className={`chat-feed ${showEmptyIntro ? "is-empty" : "is-reverse-flow"}`}
         >
           {showEmptyIntro ? (
             <AssistantIntro onSelectSuggestion={setMessage} />
@@ -431,6 +432,10 @@ function App() {
             reply={mobileSessions.activeReply}
             status={displayStatus}
           />
+
+          {!showEmptyIntro ? (
+            <div ref={historySentinelRef} className="chat-feed-history-sentinel" aria-hidden="true" />
+          ) : null}
         </main>
 
         {showScrollDown ? <ScrollDownButton onClick={() => scrollToBottom()} /> : null}

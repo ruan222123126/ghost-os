@@ -50,7 +50,7 @@ describe("useChatFeedScroll", () => {
   });
 
   it("scrolls to the bottom when a post-send request arrives", () => {
-    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 200 });
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: -200 });
     const userMessage = message("pending:user:1710000000000", "user");
     const { rerender } = render(<ScrollHarness messages={[]} metrics={metrics} />);
     vi.mocked(feedElement().scrollTo).mockClear();
@@ -64,12 +64,12 @@ describe("useChatFeedScroll", () => {
       />,
     );
 
-    expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: "auto" });
+    expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 0, behavior: "auto" });
     expect(latestSnapshot().showScrollDown).toBe(false);
   });
 
   it("keeps streaming replies at the bottom after sending", () => {
-    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 200 });
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: -200 });
     const userMessage = message("pending:user:1710000000000", "user");
     const { rerender } = render(<ScrollHarness messages={[]} metrics={metrics} />);
 
@@ -94,11 +94,11 @@ describe("useChatFeedScroll", () => {
     );
     flushRaf();
 
-    expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 1240, behavior: "auto" });
+    expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 0, behavior: "auto" });
   });
 
   it("does not pull the viewport down while the user is reading older messages", () => {
-    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 500 });
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 0 });
     const { rerender } = render(
       <ScrollHarness
         messages={[message("session-1:0:user", "user")]}
@@ -107,7 +107,7 @@ describe("useChatFeedScroll", () => {
     );
     vi.mocked(feedElement().scrollTo).mockClear();
 
-    metrics.scrollTop = 120;
+    metrics.scrollTop = -120;
     fireEvent.scroll(feedElement());
     expect(latestSnapshot().showScrollDown).toBe(true);
 
@@ -125,13 +125,13 @@ describe("useChatFeedScroll", () => {
   });
 
   it("resumes bottom follow when sending from a scrolled-up conversation", () => {
-    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 500 });
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 0 });
     const existingMessage = message("session-1:0:user", "user");
     const followUp = message("session-1:1:user", "user");
     const { rerender } = render(<ScrollHarness messages={[existingMessage]} metrics={metrics} />);
     vi.mocked(feedElement().scrollTo).mockClear();
 
-    metrics.scrollTop = 120;
+    metrics.scrollTop = -120;
     fireEvent.scroll(feedElement());
     expect(latestSnapshot().showScrollDown).toBe(true);
 
@@ -145,12 +145,12 @@ describe("useChatFeedScroll", () => {
       />,
     );
 
-    expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 1180, behavior: "auto" });
+    expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 0, behavior: "auto" });
     expect(latestSnapshot().showScrollDown).toBe(false);
   });
 
-  it("loads older history at the top and preserves the current viewport", async () => {
-    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 0 });
+  it("loads older history at the reverse-flow top without compensating scrollTop", async () => {
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: -500 });
     const loadOlderHistory = vi.fn(async () => undefined);
     const latest = message("session-1:1:user", "user");
     const older = message("session-1:0:user", "user");
@@ -163,7 +163,7 @@ describe("useChatFeedScroll", () => {
       />,
     );
     vi.mocked(feedElement().scrollTo).mockClear();
-    metrics.scrollTop = 0;
+    metrics.scrollTop = -500;
 
     fireEvent.scroll(feedElement());
 
@@ -180,12 +180,12 @@ describe("useChatFeedScroll", () => {
     );
     flushRaf();
 
-    expect(metrics.scrollTop).toBe(300);
+    expect(metrics.scrollTop).toBe(-500);
     expect(feedElement().scrollTo).not.toHaveBeenCalled();
   });
 
-  it("preserves the visible message anchor when total feed height changes elsewhere", async () => {
-    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 0 });
+  it("keeps reverse-flow scrollTop stable when prepended history changes total height", async () => {
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: -500 });
     const loadOlderHistory = vi.fn(async () => undefined);
     const latest = message("session-1:1:user", "user");
     const older = message("session-1:0:user", "user");
@@ -200,7 +200,7 @@ describe("useChatFeedScroll", () => {
       />,
     );
     vi.mocked(feedElement().scrollTo).mockClear();
-    metrics.scrollTop = 0;
+    metrics.scrollTop = -500;
 
     fireEvent.scroll(feedElement());
 
@@ -220,12 +220,12 @@ describe("useChatFeedScroll", () => {
       />,
     );
 
-    expect(metrics.scrollTop).toBe(260);
+    expect(metrics.scrollTop).toBe(-500);
     expect(feedElement().scrollTo).not.toHaveBeenCalled();
   });
 
-  it("keeps the visible anchor stable when prepended history resizes after render", async () => {
-    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 0 });
+  it("does not adjust scrollTop when prepended history resizes after render", async () => {
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: -500 });
     const loadOlderHistory = vi.fn(async () => undefined);
     const latest = message("session-1:1:user", "user");
     const older = message("session-1:0:user", "user");
@@ -240,7 +240,7 @@ describe("useChatFeedScroll", () => {
       />,
     );
     vi.mocked(feedElement().scrollTo).mockClear();
-    metrics.scrollTop = 0;
+    metrics.scrollTop = -500;
 
     fireEvent.scroll(feedElement());
 
@@ -258,7 +258,7 @@ describe("useChatFeedScroll", () => {
       />,
     );
 
-    expect(metrics.scrollTop).toBe(260);
+    expect(metrics.scrollTop).toBe(-500);
 
     metrics.scrollHeight = 1420;
     rerender(
@@ -275,11 +275,11 @@ describe("useChatFeedScroll", () => {
     );
     notifyResize(feedContentElement());
 
-    expect(metrics.scrollTop).toBe(380);
+    expect(metrics.scrollTop).toBe(-500);
   });
 
   it("keeps the older-history anchor while the load request is still pending", async () => {
-    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 0 });
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: -500 });
     const loadOlderHistory = vi.fn(() => new Promise<void>(() => undefined));
     const latest = message("session-1:1:user", "user");
     const older = message("session-1:0:user", "user");
@@ -294,7 +294,7 @@ describe("useChatFeedScroll", () => {
       />,
     );
     vi.mocked(feedElement().scrollTo).mockClear();
-    metrics.scrollTop = 0;
+    metrics.scrollTop = -500;
 
     fireEvent.scroll(feedElement());
 
@@ -328,16 +328,15 @@ describe("useChatFeedScroll", () => {
       />,
     );
 
-    expect(metrics.scrollTop).toBe(260);
+    expect(metrics.scrollTop).toBe(-500);
     expect(feedElement().scrollTo).not.toHaveBeenCalled();
   });
 
-  it("does not apply height-delta compensation when the visible anchor is already stable", async () => {
-    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 0 });
+  it("does not load older history while away from the reverse-flow top", async () => {
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: -300 });
     const loadOlderHistory = vi.fn(async () => undefined);
     const latest = message("session-1:1:user", "user");
-    const older = message("session-1:0:user", "user");
-    const { rerender } = render(
+    render(
       <ScrollHarness
         feedItems={[feedItem("latest", 0, 80)]}
         hasOlderHistory
@@ -347,25 +346,10 @@ describe("useChatFeedScroll", () => {
       />,
     );
     vi.mocked(feedElement().scrollTo).mockClear();
-    metrics.scrollTop = 0;
 
     fireEvent.scroll(feedElement());
 
-    metrics.scrollHeight = 1300;
-    rerender(
-      <ScrollHarness
-        feedItems={[
-          feedItem("older", -300, -80),
-          feedItem("latest", 0, 80),
-        ]}
-        hasOlderHistory={false}
-        messages={[older, latest]}
-        metrics={metrics}
-        onLoadOlderHistory={loadOlderHistory}
-      />,
-    );
-
-    expect(metrics.scrollTop).toBe(0);
+    expect(loadOlderHistory).not.toHaveBeenCalled();
     expect(feedElement().scrollTo).not.toHaveBeenCalled();
   });
 
@@ -379,7 +363,7 @@ describe("useChatFeedScroll", () => {
       />,
     );
     vi.mocked(feedElement().scrollTo).mockClear();
-    metrics.scrollTop = 0;
+    metrics.scrollTop = -500;
     fireEvent.scroll(feedElement());
 
     metrics.scrollHeight = 1200;
@@ -392,11 +376,11 @@ describe("useChatFeedScroll", () => {
     );
     flushRaf();
 
-    expect(metrics.scrollTop).toBe(1200);
+    expect(metrics.scrollTop).toBe(0);
   });
 
   it("keeps following the bottom when the feed resizes during streaming", () => {
-    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 1000 });
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 0 });
     render(
       <ScrollHarness
         messages={[message("session-1:0:user", "user")]}
@@ -411,7 +395,7 @@ describe("useChatFeedScroll", () => {
     notifyResize(feedElement());
     flushRaf();
 
-    expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 1120, behavior: "auto" });
+    expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 0, behavior: "auto" });
   });
 });
 
@@ -492,6 +476,7 @@ function ScrollHarness(props: {
           />
         ))}
       </div>
+      <div data-testid="history-sentinel" ref={scroll.historySentinelRef} />
     </main>
   );
 }
