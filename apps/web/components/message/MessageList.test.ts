@@ -9,6 +9,18 @@ jest.mock('./MessageRow', () => ({
   MessageRow: () => React.createElement('div', { className: 'message-row' }),
 }));
 
+jest.mock('@tanstack/react-virtual', () => ({
+  useVirtualizer: ({ count }: { count: number }) => ({
+    getTotalSize: () => count * 112,
+    getVirtualItems: () => Array.from({ length: count }, (_, index) => ({
+      index,
+      key: `virtual-${index}`,
+      start: index * 112,
+    })),
+    measureElement: jest.fn(),
+  }),
+}));
+
 jest.mock('./useMessageListScroll', () => ({
   useMessageListScroll: jest.fn(),
 }));

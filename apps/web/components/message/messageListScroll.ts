@@ -4,6 +4,8 @@ import type { StreamingMessageRow } from '@/lib/chat-view/types';
 export const MESSAGE_LIST_BOTTOM_FOLLOW_THRESHOLD_PX = 120;
 
 interface ScrollMetrics {
+  clientHeight: number;
+  scrollHeight: number;
   scrollTop: number;
 }
 
@@ -17,11 +19,15 @@ interface MessageListLayoutSignatureOptions {
 }
 
 export function isMessageListNearBottom(metrics: ScrollMetrics): boolean {
-  return Math.abs(metrics.scrollTop) <= MESSAGE_LIST_BOTTOM_FOLLOW_THRESHOLD_PX;
+  return bottomDistancePx(metrics) <= MESSAGE_LIST_BOTTOM_FOLLOW_THRESHOLD_PX;
 }
 
 export function resolveMessageListAutoFollow(metrics: ScrollMetrics): boolean {
   return isMessageListNearBottom(metrics);
+}
+
+function bottomDistancePx(metrics: ScrollMetrics): number {
+  return Math.max(0, metrics.scrollHeight - metrics.clientHeight - metrics.scrollTop);
 }
 
 export function buildMessageListLayoutSignature(

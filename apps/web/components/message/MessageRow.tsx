@@ -24,9 +24,17 @@ const USER_MESSAGE_HEIGHT_EPSILON = 1;
 const USER_MESSAGE_EXPAND_LABEL = '展开用户消息';
 const USER_MESSAGE_COLLAPSE_LABEL = '收起用户消息';
 
-const UserMessageRow: FC<{ message: UserChatMessage }> = ({ message }) => {
+const UserMessageRow: FC<{
+  expanded: boolean;
+  message: UserChatMessage;
+  onToggle?: (messageId: string) => void;
+}> = ({ expanded, message, onToggle }) => {
   const contentRef = useRef<HTMLDivElement | null>(null);
-  const { collapsed, expanded, overflowing, setExpanded } = useUserMessageOverflow(message, contentRef);
+  const { collapsed, overflowing } = useUserMessageOverflow({
+    contentRef,
+    expanded,
+    message,
+  });
   const contentClassName = [
     'message-content',
     'message-user-content',
@@ -65,7 +73,7 @@ const UserMessageRow: FC<{ message: UserChatMessage }> = ({ message }) => {
                 className="message-user-expand-toggle"
                 aria-expanded={expanded}
                 aria-label={expanded ? USER_MESSAGE_COLLAPSE_LABEL : USER_MESSAGE_EXPAND_LABEL}
-                onClick={() => setExpanded((value) => !value)}
+                onClick={() => onToggle?.(message.id)}
               >
                 <span className={iconClassName} aria-hidden="true" />
               </button>
@@ -77,11 +85,12 @@ const UserMessageRow: FC<{ message: UserChatMessage }> = ({ message }) => {
   );
 };
 
-function useUserMessageOverflow(
-  message: UserChatMessage,
-  contentRef: RefObject<HTMLDivElement>,
-) {
-  const [expanded, setExpanded] = useState(false);
+function useUserMessageOverflow(options: {
+  contentRef: RefObject<HTMLDivElement>;
+  expanded: boolean;
+  message: UserChatMessage;
+}) {
+  const { contentRef, expanded, message } = options;
   const [overflowing, setOverflowing] = useState<boolean | null>(null);
   const collapsed = overflowing !== false && !expanded;
   const measureOverflow = useCallback(() => {
@@ -96,14 +105,13 @@ function useUserMessageOverflow(
   }, [contentRef]);
 
   useClientLayoutEffect(() => {
-    setExpanded(false);
     setOverflowing(null);
     measureOverflow();
     window.addEventListener('resize', measureOverflow);
     return () => window.removeEventListener('resize', measureOverflow);
   }, [measureOverflow, message.content, message.id]);
 
-  return { collapsed, expanded, overflowing: overflowing === true, setExpanded };
+  return { collapsed, overflowing: overflowing === true };
 }
 
 const useClientLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
@@ -238,16 +246,24 @@ const MessageRowBase: FC<MessageRowProps> = ({
   hasTrailingTool = false,
   isToolCardOpen = false,
   isThinkingPanelOpen = false,
+  isUserMessageExpanded = false,
   thinkingStartedAtMs = null,
   loading,
   onAnswerQuestion,
   onCancelQuestion,
   onToggleThinkingPanel,
   onToggleToolCard,
+  onToggleUserMessage,
 }) => {
   switch (message.kind) {
     case 'user':
-      return <UserMessageRow message={message} />;
+      return (
+        <UserMessageRow
+          expanded={isUserMessageExpanded}
+          message={message}
+          onToggle={onToggleUserMessage}
+        />
+      );
     case 'assistant':
       return (
         <AssistantMessageRow

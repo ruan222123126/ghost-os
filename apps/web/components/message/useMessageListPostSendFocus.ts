@@ -3,8 +3,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import type { ChatMessage } from '@/lib/types';
 import type { PostSendFocusRequest } from '@/hooks/chat/types';
 
-const SCROLL_ANCHOR_TOLERANCE_PX = 2;
 const POST_SEND_ANCHOR_TOP_OFFSET_PX = 32;
+const SCROLL_ANCHOR_TOLERANCE_PX = 2;
 type ScrollFrameHandle = number | ReturnType<typeof setTimeout>;
 
 interface PostSendLock {
@@ -81,6 +81,27 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
     cancelScrollFrame(anchorScrollFrameRef);
   }, []);
 
+  const measureMessageAnchor = useCallback((
+    messageId: string,
+    anchorTopOffsetPx = POST_SEND_ANCHOR_TOP_OFFSET_PX,
+  ): AnchorMeasurement | null => {
+    const container = scrollElementRef.current;
+    const row = messageRowsRef.current.get(messageId);
+    if (!container || !row) {
+      return null;
+    }
+
+    const topPx = row.getBoundingClientRect().top - container.getBoundingClientRect().top;
+    return {
+      targetScrollTop: Math.max(0, container.scrollTop + topPx - anchorTopOffsetPx),
+      topPx,
+    };
+  }, [scrollElementRef]);
+
+  const scrollToAnchor = useCallback((scrollTop: number, behavior: ScrollBehavior) => {
+    scrollElementRef.current?.scrollTo({ top: scrollTop, behavior });
+  }, [scrollElementRef]);
+
   const releasePostSendLock = useCallback((restoreBottom: boolean) => {
     if (!postSendLockRef.current && trailingSpacerPxRef.current === 0) {
       return;
@@ -98,34 +119,6 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
     syncCurrentBottomAffordance();
   }, [autoFollowRef, scheduleBottomFollow, setTrailingSpacerPx, syncCurrentBottomAffordance]);
 
-  const measureMessageAnchor = useCallback((
-    messageId: string,
-    anchorTopOffsetPx = POST_SEND_ANCHOR_TOP_OFFSET_PX,
-  ): AnchorMeasurement | null => {
-    const container = scrollElementRef.current;
-    const row = messageRowsRef.current.get(messageId);
-    if (!container || !row) {
-      return null;
-    }
-
-    const topPx = row.getBoundingClientRect().top - container.getBoundingClientRect().top;
-    return {
-      targetScrollTop: Math.min(0, container.scrollTop - topPx + anchorTopOffsetPx),
-      topPx,
-    };
-  }, [scrollElementRef]);
-
-  const measureMessageTargetScrollTop = useCallback((
-    messageId: string,
-    anchorTopOffsetPx = POST_SEND_ANCHOR_TOP_OFFSET_PX,
-  ): number | null => {
-    return measureMessageAnchor(messageId, anchorTopOffsetPx)?.targetScrollTop ?? null;
-  }, [measureMessageAnchor]);
-
-  const scrollToAnchor = useCallback((scrollTop: number, behavior: ScrollBehavior) => {
-    scrollElementRef.current?.scrollTo({ top: scrollTop, behavior });
-  }, [scrollElementRef]);
-
   const scheduleAnchorScroll = useCallback((callback: () => void) => {
     cancelScrollFrame(anchorScrollFrameRef);
     anchorScrollFrameRef.current = requestScrollFrame(() => {
@@ -135,34 +128,35 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
   }, []);
 
   const focusPostSendMessage = useCallback((messageId: string, behavior: ScrollBehavior): boolean => {
-    const targetScrollTop = measureMessageTargetScrollTop(messageId);
+    const anchor = measureMessageAnchor(messageId);
     const container = scrollElementRef.current;
-    if (targetScrollTop === null || !container) {
+    if (!anchor || !container) {
       return false;
     }
 
     const realContentHeightPx = measureRealContentHeight(container, trailingSpacerPxRef);
+    const trailingSpacer = requiredTrailingSpacerPx(container, anchor.targetScrollTop, realContentHeightPx);
     postSendLockRef.current = {
       anchorTopOffsetPx: POST_SEND_ANCHOR_TOP_OFFSET_PX,
       messageId,
-      programmaticScrollTarget: targetScrollTop,
-      targetScrollTop,
+      programmaticScrollTarget: anchor.targetScrollTop,
+      targetScrollTop: anchor.targetScrollTop,
     };
     postSendLockJustStartedRef.current = true;
     autoFollowRef.current = false;
-    setTrailingSpacerPx(requiredTrailingSpacerPx(container, targetScrollTop, realContentHeightPx));
+    setTrailingSpacerPx(trailingSpacer);
     setShowScrollToBottom(false);
     scheduleAnchorScroll(() => {
       postSendLockJustStartedRef.current = false;
-      scrollToAnchor(targetScrollTop, behavior);
+      scrollToAnchor(anchor.targetScrollTop, behavior);
     });
     return true;
   }, [
     autoFollowRef,
-    measureMessageTargetScrollTop,
+    measureMessageAnchor,
     scheduleAnchorScroll,
-    scrollToAnchor,
     scrollElementRef,
+    scrollToAnchor,
     setShowScrollToBottom,
     setTrailingSpacerPx,
   ]);
@@ -193,9 +187,7 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
     const realContentHeightPx = measureRealContentHeight(container, trailingSpacerPxRef);
     const spacerForLockedTarget = requiredTrailingSpacerPx(container, lock.targetScrollTop, realContentHeightPx);
     if (spacerForLockedTarget > 0) {
-      const anchorDriftPx = lock.anchorTopOffsetPx - anchor.topPx;
-      const spacerForVisibleAnchor = trailingSpacerPxRef.current - anchorDriftPx;
-      setTrailingSpacerPx(Math.min(spacerForLockedTarget, spacerForVisibleAnchor));
+      setTrailingSpacerPx(spacerForLockedTarget);
       setShowScrollToBottom(false);
       if (Math.abs(container.scrollTop - lock.targetScrollTop) > SCROLL_ANCHOR_TOLERANCE_PX) {
         lock.programmaticScrollTarget = lock.targetScrollTop;
@@ -204,19 +196,18 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
       return;
     }
 
-    const { targetScrollTop } = anchor;
-    lock.targetScrollTop = targetScrollTop;
-    setTrailingSpacerPx(requiredTrailingSpacerPx(container, targetScrollTop, realContentHeightPx));
+    lock.targetScrollTop = anchor.targetScrollTop;
+    setTrailingSpacerPx(0);
     setShowScrollToBottom(false);
-    if (Math.abs(container.scrollTop - targetScrollTop) > SCROLL_ANCHOR_TOLERANCE_PX) {
-      lock.programmaticScrollTarget = targetScrollTop;
-      scrollToAnchor(targetScrollTop, 'auto');
+    if (Math.abs(container.scrollTop - anchor.targetScrollTop) > SCROLL_ANCHOR_TOLERANCE_PX) {
+      lock.programmaticScrollTarget = anchor.targetScrollTop;
+      scrollToAnchor(anchor.targetScrollTop, 'auto');
     }
   }, [
     measureMessageAnchor,
     releasePostSendLock,
-    scrollToAnchor,
     scrollElementRef,
+    scrollToAnchor,
     setShowScrollToBottom,
     setTrailingSpacerPx,
   ]);
@@ -314,12 +305,10 @@ function usePostSendLockSync(options: {
   } = options;
 
   useLayoutEffect(() => {
-    if (loadingOlderHistory || !postSendLockRef.current) {
+    if (loadingOlderHistory || !postSendLockRef.current || postSendLockJustStartedRef.current) {
       return;
     }
-    if (!postSendLockJustStartedRef.current) {
-      syncPostSendLock();
-    }
+    syncPostSendLock();
   }, [
     layoutSignature,
     loadingOlderHistory,
@@ -341,7 +330,7 @@ function requiredTrailingSpacerPx(
   targetScrollTop: number,
   realContentHeightPx: number,
 ): number {
-  return Math.max(0, Math.abs(targetScrollTop) + container.clientHeight - realContentHeightPx);
+  return Math.max(0, targetScrollTop + container.clientHeight - realContentHeightPx);
 }
 
 function isProgrammaticScrollInProgress(container: HTMLElement, lock: PostSendLock): boolean {

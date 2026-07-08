@@ -5,12 +5,13 @@ import type { PostSendFocusRequest } from '@/hooks/chat/types';
 import { resolveMessageListAutoFollow } from './messageListScroll';
 import { useMessageListPostSendFocus } from './useMessageListPostSendFocus';
 
-const OLDER_HISTORY_LOADING_PAUSE_MS = 1500;
+const OLDER_HISTORY_TOP_THRESHOLD_PX = 240;
+const HARD_BOTTOM_TOLERANCE_PX = 2;
 type ScrollFrameHandle = number | ReturnType<typeof setTimeout>;
 
-interface OlderLoadPauseHandle {
-  resolve: ((completed: boolean) => void) | null;
-  timer: ReturnType<typeof setTimeout> | null;
+interface OlderHistoryAnchorSnapshot {
+  scrollHeight: number;
+  scrollTop: number;
 }
 
 export interface UseMessageListScrollOptions {
@@ -26,12 +27,12 @@ export interface UseMessageListScrollOptions {
 export function useMessageListScroll(options: UseMessageListScrollOptions) {
   const historySentinelRef = useRef<HTMLDivElement>(null);
   const scrollElementRef = useRef<HTMLDivElement>(null);
-  const [olderHistoryLoadingPaused, setOlderHistoryLoadingPaused] = useState(false);
+  const [olderHistoryLoadingPaused] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const autoFollowRef = useRef(true);
   const mountedRef = useRef(false);
   const olderLoadPendingRef = useRef(false);
-  const olderLoadPauseRef = useRef<OlderLoadPauseHandle>({ resolve: null, timer: null });
+  const olderHistoryAnchorRef = useRef<OlderHistoryAnchorSnapshot | null>(null);
   const scrollFrameRef = useRef<ScrollFrameHandle | null>(null);
   const skipOlderHistoryLoadOnceRef = useRef(false);
 
@@ -52,17 +53,17 @@ export function useMessageListScroll(options: UseMessageListScrollOptions) {
 
   useInitialBottomPlacement({
     autoFollowRef,
-    loadingOlderHistory: options.loadingOlderHistory || olderHistoryLoadingPaused,
+    loadingOlderHistory: options.loadingOlderHistory,
     rowCount: options.rowCount,
     scrollElementRef,
     skipOlderHistoryLoadOnceRef,
   });
-  useMountedFlag(mountedRef, olderLoadPauseRef);
+  useMountedFlag(mountedRef);
 
   const postSendFocus = useMessageListPostSendFocus({
     autoFollowRef,
     layoutSignature: options.layoutSignature,
-    loadingOlderHistory: options.loadingOlderHistory || olderHistoryLoadingPaused,
+    loadingOlderHistory: options.loadingOlderHistory,
     postSendFocusRequest: options.postSendFocusRequest ?? null,
     scheduleBottomFollow,
     scrollElementRef,
@@ -79,12 +80,12 @@ export function useMessageListScroll(options: UseMessageListScrollOptions) {
 
     cancelScrollFrame(scrollFrameRef);
     postSendFocus.cancelAnchorScroll();
-    postSendFocus.releasePostSendLock(false);
+    postSendFocus.releasePostSendLock(true);
     autoFollowRef.current = true;
     setShowScrollToBottom(false);
     container.scrollTo({
       behavior: 'smooth',
-      top: 0,
+      top: bottomScrollTop(container),
     });
   }, [postSendFocus]);
 
@@ -92,26 +93,29 @@ export function useMessageListScroll(options: UseMessageListScrollOptions) {
     autoFollowRef,
     postSendLockJustStartedRef: postSendFocus.postSendLockJustStartedRef,
     postSendLockRef: postSendFocus.postSendLockRef,
+    releasePostSendLock: postSendFocus.releasePostSendLock,
     scrollElementRef,
     setShowScrollToBottom,
-    syncPostSendLock: postSendFocus.syncPostSendLock,
   });
   useBottomFollowOnLayoutChange({
     autoFollowRef,
     layoutSignature: options.layoutSignature,
-    loadingOlderHistory: options.loadingOlderHistory || olderHistoryLoadingPaused,
+    loadingOlderHistory: options.loadingOlderHistory,
+    postSendLockRef: postSendFocus.postSendLockRef,
     scheduleBottomFollow,
   });
-  useOlderHistoryObserver({
+  useOlderHistoryLoader({
     ...options,
-    historySentinelRef,
     mountedRef,
-    olderHistoryLoadingPaused,
+    olderHistoryAnchorRef,
     olderLoadPendingRef,
-    olderLoadPauseRef,
     scrollElementRef,
-    setOlderHistoryLoadingPaused,
     skipOlderHistoryLoadOnceRef,
+  });
+  useOlderHistoryAnchorCompensation({
+    layoutSignature: options.layoutSignature,
+    olderHistoryAnchorRef,
+    scrollElementRef,
   });
   useScrollFrameCleanup(scrollFrameRef);
 
@@ -145,7 +149,7 @@ function useInitialBottomPlacement(options: {
       return;
     }
 
-    container.scrollTop = 0;
+    container.scrollTop = bottomScrollTop(container);
     options.autoFollowRef.current = true;
     options.skipOlderHistoryLoadOnceRef.current = true;
     completedRef.current = true;
@@ -162,18 +166,19 @@ function useAutoFollowTracking(options: {
   autoFollowRef: MutableRefObject<boolean>;
   postSendLockJustStartedRef: MutableRefObject<boolean>;
   postSendLockRef: MutableRefObject<unknown | null>;
+  releasePostSendLock: (restoreBottom: boolean) => void;
   scrollElementRef: MutableRefObject<HTMLDivElement | null>;
   setShowScrollToBottom: (value: boolean) => void;
-  syncPostSendLock: () => void;
 }) {
   const {
     autoFollowRef,
     postSendLockJustStartedRef,
     postSendLockRef,
+    releasePostSendLock,
     scrollElementRef,
     setShowScrollToBottom,
-    syncPostSendLock,
   } = options;
+  const userScrollIntentRef = useRef(false);
   const syncAutoFollow = useCallback(() => {
     const container = scrollElementRef.current;
     if (!container) {
@@ -185,20 +190,38 @@ function useAutoFollowTracking(options: {
         return;
       }
 
-      syncPostSendLock();
+      const atBottom = isAtHardBottom(container);
+      if (atBottom && userScrollIntentRef.current) {
+        userScrollIntentRef.current = false;
+        releasePostSendLock(true);
+        autoFollowRef.current = true;
+        setShowScrollToBottom(false);
+        return;
+      }
+      if (userScrollIntentRef.current) {
+        userScrollIntentRef.current = false;
+        releasePostSendLock(false);
+        autoFollowRef.current = false;
+        setShowScrollToBottom(true);
+        return;
+      }
       setShowScrollToBottom(false);
       return;
     }
 
+    userScrollIntentRef.current = false;
     syncBottomAffordance(container, autoFollowRef, setShowScrollToBottom);
   }, [
     autoFollowRef,
     postSendLockJustStartedRef,
     postSendLockRef,
+    releasePostSendLock,
     scrollElementRef,
     setShowScrollToBottom,
-    syncPostSendLock,
   ]);
+  const markUserScrollIntent = useCallback(() => {
+    userScrollIntentRef.current = true;
+  }, []);
 
   useEffect(() => {
     const container = scrollElementRef.current;
@@ -208,27 +231,33 @@ function useAutoFollowTracking(options: {
 
     syncAutoFollow();
     container.addEventListener('scroll', syncAutoFollow, { passive: true });
+    container.addEventListener('wheel', markUserScrollIntent, { passive: true });
+    container.addEventListener('touchmove', markUserScrollIntent, { passive: true });
     return () => {
       container.removeEventListener('scroll', syncAutoFollow);
+      container.removeEventListener('wheel', markUserScrollIntent);
+      container.removeEventListener('touchmove', markUserScrollIntent);
     };
-  }, [scrollElementRef, syncAutoFollow]);
+  }, [markUserScrollIntent, scrollElementRef, syncAutoFollow]);
 }
 
 function useBottomFollowOnLayoutChange(options: {
   autoFollowRef: MutableRefObject<boolean>;
   layoutSignature: string;
   loadingOlderHistory: boolean;
+  postSendLockRef: MutableRefObject<unknown | null>;
   scheduleBottomFollow: () => void;
 }) {
   const {
     autoFollowRef,
     layoutSignature,
     loadingOlderHistory,
+    postSendLockRef,
     scheduleBottomFollow,
   } = options;
 
   useLayoutEffect(() => {
-    if (loadingOlderHistory || !autoFollowRef.current) {
+    if (loadingOlderHistory || postSendLockRef.current || !autoFollowRef.current) {
       return;
     }
 
@@ -237,49 +266,48 @@ function useBottomFollowOnLayoutChange(options: {
     autoFollowRef,
     layoutSignature,
     loadingOlderHistory,
+    postSendLockRef,
     scheduleBottomFollow,
   ]);
 }
 
-function useOlderHistoryObserver(options: UseOlderHistoryObserverOptions) {
+function useOlderHistoryLoader(options: UseOlderHistoryLoaderOptions) {
   const {
     hasOlderHistory,
-    historySentinelRef,
     loadingOlderHistory,
     mountedRef,
-    olderHistoryLoadingPaused,
+    olderHistoryAnchorRef,
     olderLoadPendingRef,
-    olderLoadPauseRef,
     loadOlderHistory,
     scrollElementRef,
-    setOlderHistoryLoadingPaused,
     skipOlderHistoryLoadOnceRef,
   } = options;
+
   const handleLoadOlderHistory = useCallback(async () => {
     if (skipOlderHistoryLoadOnceRef.current) {
       skipOlderHistoryLoadOnceRef.current = false;
       return;
     }
-    if (loadingOlderHistory || olderHistoryLoadingPaused || olderLoadPendingRef.current) {
+    if (loadingOlderHistory || olderLoadPendingRef.current || !hasOlderHistory) {
       return;
     }
-    if (!hasOlderHistory) {
+
+    const container = scrollElementRef.current;
+    if (!container || container.scrollTop > OLDER_HISTORY_TOP_THRESHOLD_PX) {
       return;
     }
 
     olderLoadPendingRef.current = true;
-    setOlderHistoryLoadingPaused(true);
+    olderHistoryAnchorRef.current = {
+      scrollHeight: container.scrollHeight,
+      scrollTop: container.scrollTop,
+    };
     try {
-      const completedPause = await pauseOlderHistoryLoading(olderLoadPauseRef);
-      if (!completedPause) {
-        return;
-      }
-
       await loadOlderHistory();
     } finally {
       olderLoadPendingRef.current = false;
-      if (mountedRef.current) {
-        setOlderHistoryLoadingPaused(false);
+      if (!mountedRef.current) {
+        olderHistoryAnchorRef.current = null;
       }
     }
   }, [
@@ -287,36 +315,48 @@ function useOlderHistoryObserver(options: UseOlderHistoryObserverOptions) {
     loadOlderHistory,
     loadingOlderHistory,
     mountedRef,
-    olderHistoryLoadingPaused,
+    olderHistoryAnchorRef,
     olderLoadPendingRef,
-    olderLoadPauseRef,
-    setOlderHistoryLoadingPaused,
+    scrollElementRef,
     skipOlderHistoryLoadOnceRef,
   ]);
 
   useEffect(() => {
-    const root = scrollElementRef.current;
-    const target = historySentinelRef.current;
-    if (!root || !target) {
+    const container = scrollElementRef.current;
+    if (!container) {
       return;
     }
 
-    const observer = new IntersectionObserver((entries) => {
-      if (!entries[0]?.isIntersecting) {
-        return;
-      }
-
+    const handleScroll = () => {
       void handleLoadOlderHistory();
-    }, {
-      root,
-      threshold: 0.1,
-    });
-
-    observer.observe(target);
-    return () => {
-      observer.disconnect();
     };
-  }, [handleLoadOlderHistory, historySentinelRef, scrollElementRef]);
+
+    handleScroll();
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+    };
+  }, [handleLoadOlderHistory, scrollElementRef]);
+}
+
+function useOlderHistoryAnchorCompensation(options: {
+  layoutSignature: string;
+  olderHistoryAnchorRef: MutableRefObject<OlderHistoryAnchorSnapshot | null>;
+  scrollElementRef: MutableRefObject<HTMLDivElement | null>;
+}) {
+  const { layoutSignature, olderHistoryAnchorRef, scrollElementRef } = options;
+
+  useLayoutEffect(() => {
+    const snapshot = olderHistoryAnchorRef.current;
+    const container = scrollElementRef.current;
+    if (!snapshot || !container) {
+      return;
+    }
+
+    const heightDelta = container.scrollHeight - snapshot.scrollHeight;
+    container.scrollTop = snapshot.scrollTop + heightDelta;
+    olderHistoryAnchorRef.current = null;
+  }, [layoutSignature, olderHistoryAnchorRef, scrollElementRef]);
 }
 
 function useScrollFrameCleanup(scrollFrameRef: MutableRefObject<ScrollFrameHandle | null>) {
@@ -327,54 +367,21 @@ function useScrollFrameCleanup(scrollFrameRef: MutableRefObject<ScrollFrameHandl
   }, [scrollFrameRef]);
 }
 
-function useMountedFlag(
-  mountedRef: MutableRefObject<boolean>,
-  pauseRef: MutableRefObject<OlderLoadPauseHandle>,
-) {
+function useMountedFlag(mountedRef: MutableRefObject<boolean>) {
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      cancelOlderHistoryLoadingPause(pauseRef);
     };
-  }, [mountedRef, pauseRef]);
+  }, [mountedRef]);
 }
 
-interface UseOlderHistoryObserverOptions extends UseMessageListScrollOptions {
-  historySentinelRef: MutableRefObject<HTMLDivElement | null>;
+interface UseOlderHistoryLoaderOptions extends UseMessageListScrollOptions {
   mountedRef: MutableRefObject<boolean>;
-  olderHistoryLoadingPaused: boolean;
+  olderHistoryAnchorRef: MutableRefObject<OlderHistoryAnchorSnapshot | null>;
   olderLoadPendingRef: MutableRefObject<boolean>;
-  olderLoadPauseRef: MutableRefObject<OlderLoadPauseHandle>;
   scrollElementRef: MutableRefObject<HTMLDivElement | null>;
-  setOlderHistoryLoadingPaused: (value: boolean) => void;
   skipOlderHistoryLoadOnceRef: MutableRefObject<boolean>;
-}
-
-function pauseOlderHistoryLoading(
-  pauseRef: MutableRefObject<OlderLoadPauseHandle>,
-) {
-  return new Promise<boolean>((resolve) => {
-    pauseRef.current.resolve = resolve;
-    pauseRef.current.timer = setTimeout(() => {
-      pauseRef.current.resolve = null;
-      pauseRef.current.timer = null;
-      resolve(true);
-    }, OLDER_HISTORY_LOADING_PAUSE_MS);
-  });
-}
-
-function cancelOlderHistoryLoadingPause(
-  pauseRef: MutableRefObject<OlderLoadPauseHandle>,
-) {
-  if (pauseRef.current.timer !== null) {
-    clearTimeout(pauseRef.current.timer);
-    pauseRef.current.timer = null;
-  }
-
-  const resolve = pauseRef.current.resolve;
-  pauseRef.current.resolve = null;
-  resolve?.(false);
 }
 
 function syncBottomAffordance(
@@ -413,7 +420,15 @@ function scrollToBottomIfStillFollowing(options: {
     return;
   }
 
-  container.scrollTop = 0;
+  container.scrollTop = bottomScrollTop(container);
+}
+
+function bottomScrollTop(container: HTMLElement): number {
+  return Math.max(0, container.scrollHeight - container.clientHeight);
+}
+
+function isAtHardBottom(container: HTMLElement): boolean {
+  return Math.abs(bottomScrollTop(container) - container.scrollTop) <= HARD_BOTTOM_TOLERANCE_PX;
 }
 
 function requestScrollFrame(callback: FrameRequestCallback): ScrollFrameHandle {

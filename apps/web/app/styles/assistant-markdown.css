@@ -12,6 +12,15 @@
   margin-bottom: 0;
 }
 
+.assistant-markdown-block {
+  width: 100%;
+}
+
+.assistant-markdown-block.is-active-streaming-block {
+  contain: layout paint;
+  overflow-anchor: none;
+}
+
 .assistant-markdown h1,
 .assistant-markdown h2,
 .assistant-markdown h3,

@@ -26,21 +26,35 @@ function buildToolMessage(overrides?: Partial<ToolChatMessage>): ToolChatMessage
 }
 
 describe('components/message/messageListScroll', () => {
-  it('treats reverse-flow scroll positions near zero as bottom-following', () => {
-    expect(isMessageListNearBottom({ scrollTop: 0 })).toBe(true);
-    expect(isMessageListNearBottom({ scrollTop: -MESSAGE_LIST_BOTTOM_FOLLOW_THRESHOLD_PX })).toBe(true);
-    expect(isMessageListNearBottom({ scrollTop: MESSAGE_LIST_BOTTOM_FOLLOW_THRESHOLD_PX })).toBe(true);
+  it('treats standard scroll positions near the bottom as bottom-following', () => {
+    const metrics = {
+      clientHeight: 400,
+      scrollHeight: 1600,
+      scrollTop: 1600 - 400 - MESSAGE_LIST_BOTTOM_FOLLOW_THRESHOLD_PX,
+    };
+
+    expect(isMessageListNearBottom(metrics)).toBe(true);
   });
 
-  it('treats large reverse-flow offsets as away from the bottom', () => {
+  it('treats standard scroll positions beyond the bottom threshold as away from the bottom', () => {
     expect(isMessageListNearBottom({
-      scrollTop: -(MESSAGE_LIST_BOTTOM_FOLLOW_THRESHOLD_PX + 1),
+      clientHeight: 400,
+      scrollHeight: 1600,
+      scrollTop: 1600 - 400 - MESSAGE_LIST_BOTTOM_FOLLOW_THRESHOLD_PX - 1,
     })).toBe(false);
   });
 
-  it('resolves auto-follow from the reverse-flow bottom threshold', () => {
-    expect(resolveMessageListAutoFollow({ scrollTop: 0 })).toBe(true);
-    expect(resolveMessageListAutoFollow({ scrollTop: -240 })).toBe(false);
+  it('resolves auto-follow from the standard bottom threshold', () => {
+    expect(resolveMessageListAutoFollow({
+      clientHeight: 400,
+      scrollHeight: 1600,
+      scrollTop: 1200,
+    })).toBe(true);
+    expect(resolveMessageListAutoFollow({
+      clientHeight: 400,
+      scrollHeight: 1600,
+      scrollTop: 900,
+    })).toBe(false);
   });
 
   it('changes the layout signature when streaming text or tool state changes', () => {

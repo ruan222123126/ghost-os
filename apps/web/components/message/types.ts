@@ -21,6 +21,8 @@ export interface MessageRowProps {
   isThinkingPanelOpen?: boolean;
   thinkingStartedAtMs?: number | null;
   loading: boolean;
+  isUserMessageExpanded?: boolean;
+  onToggleUserMessage?: (messageId: string) => void;
   onToggleToolCard?: (messageId: string) => void;
   onToggleThinkingPanel?: (messageId: string) => void;
   onAnswerQuestion: (questionId: string, answer: string) => Promise<void>;

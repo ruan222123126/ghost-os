@@ -5,82 +5,17 @@ import { useMessageListScroll } from './useMessageListScroll';
 const EMPTY_VISIBLE_MESSAGES: [] = [];
 
 describe('components/message/useMessageListScroll', () => {
-  let intersectionCallback: IntersectionObserverCallback | null = null;
-  let originalIntersectionObserver: typeof IntersectionObserver | undefined;
-
-  beforeEach(() => {
-    originalIntersectionObserver = globalThis.IntersectionObserver;
-    intersectionCallback = null;
-    globalThis.IntersectionObserver = class MockIntersectionObserver {
-      readonly root: Element | Document | null = null;
-      readonly rootMargin = '0px';
-      readonly thresholds = [0.1];
-
-      constructor(callback: IntersectionObserverCallback) {
-        intersectionCallback = callback;
-      }
-
-      disconnect() {}
-      observe() {}
-      takeRecords(): IntersectionObserverEntry[] {
-        return [];
-      }
-      unobserve() {}
-    };
-  });
-
   afterEach(() => {
     jest.useRealTimers();
-    if (originalIntersectionObserver) {
-      globalThis.IntersectionObserver = originalIntersectionObserver;
-      return;
-    }
-
-    delete (globalThis as Partial<typeof globalThis>).IntersectionObserver;
   });
 
-  it('starts reverse-flow history at the bottom without immediately loading older messages', async () => {
-    const scrollElement = createScrollElement({
-      clientHeight: 400,
-      scrollHeight: 1600,
-      scrollTop: -600,
-    });
-    const loadOlderHistory = jest.fn(async () => undefined);
-
-    await act(async () => {
-      TestRenderer.create(
-        React.createElement(HookProbe, {
-          hasOlderHistory: true,
-          layoutSignature: 'session:ready',
-          loadOlderHistory,
-          rowCount: 12,
-          scrollElement,
-        }),
-        {
-          createNodeMock: createNodeMock(scrollElement),
-        },
-      );
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      triggerHistoryIntersection();
-      await Promise.resolve();
-    });
-
-    expect(scrollElement.scrollTop).toBe(0);
-    expect(loadOlderHistory).not.toHaveBeenCalled();
-  });
-
-  it('loads older messages after the top sentinel intersects following initial placement', async () => {
-    jest.useFakeTimers();
+  it('starts standard-flow history at the latest message bottom without loading older messages', async () => {
     const scrollElement = createScrollElement({
       clientHeight: 400,
       scrollHeight: 1600,
       scrollTop: 0,
     });
     const loadOlderHistory = jest.fn(async () => undefined);
-    let latestHook: HookProbeRenderState | null = null;
 
     await act(async () => {
       TestRenderer.create(
@@ -88,9 +23,6 @@ describe('components/message/useMessageListScroll', () => {
           hasOlderHistory: true,
           layoutSignature: 'session:ready',
           loadOlderHistory,
-          onRender: (state) => {
-            latestHook = state;
-          },
           rowCount: 12,
           scrollElement,
         }),
@@ -101,41 +33,15 @@ describe('components/message/useMessageListScroll', () => {
       await Promise.resolve();
     });
 
-    await act(async () => {
-      triggerHistoryIntersection();
-      await Promise.resolve();
-    });
+    expect(scrollElement.scrollTop).toBe(1200);
     expect(loadOlderHistory).not.toHaveBeenCalled();
-
-    await act(async () => {
-      triggerHistoryIntersection();
-      await Promise.resolve();
-    });
-
-    expect(requireLatestHook(latestHook).olderHistoryLoadingPaused).toBe(true);
-    expect(loadOlderHistory).not.toHaveBeenCalled();
-
-    await act(async () => {
-      jest.advanceTimersByTime(1499);
-      await Promise.resolve();
-    });
-
-    expect(loadOlderHistory).not.toHaveBeenCalled();
-
-    await act(async () => {
-      jest.advanceTimersByTime(1);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(loadOlderHistory).toHaveBeenCalledTimes(1);
   });
 
-  it('does not compensate scrollTop when older rows are prepended in reverse flow', async () => {
+  it('loads older messages near the top and compensates prepended height', async () => {
     const scrollElement = createScrollElement({
       clientHeight: 300,
       scrollHeight: 900,
-      scrollTop: -420,
+      scrollTop: 0,
     });
     const loadOlderHistory = jest.fn(async () => undefined);
     let renderer!: TestRenderer.ReactTestRenderer;
@@ -156,9 +62,15 @@ describe('components/message/useMessageListScroll', () => {
       await Promise.resolve();
     });
 
-    scrollElement.scrollTop = -420;
-    scrollElement.scrollHeight = 1200;
+    await act(async () => {
+      scrollElement.scrollTop = 100;
+      scrollElement.dispatchEvent(new Event('scroll'));
+      await Promise.resolve();
+    });
 
+    expect(loadOlderHistory).toHaveBeenCalledTimes(1);
+
+    scrollElement.scrollHeight = 1200;
     await act(async () => {
       renderer.update(
         React.createElement(HookProbe, {
@@ -172,7 +84,7 @@ describe('components/message/useMessageListScroll', () => {
       await Promise.resolve();
     });
 
-    expect(scrollElement.scrollTop).toBe(-420);
+    expect(scrollElement.scrollTop).toBe(400);
   });
 
   it('shows a bottom affordance after upward scroll and scrolls back to the bottom', async () => {
@@ -206,7 +118,7 @@ describe('components/message/useMessageListScroll', () => {
     expect(requireLatestHook(latestHook).showScrollToBottom).toBe(false);
 
     await act(async () => {
-      scrollElement.scrollTop = -800;
+      scrollElement.scrollTop = 800;
       scrollElement.dispatchEvent(new Event('scroll'));
       await Promise.resolve();
     });
@@ -220,20 +132,20 @@ describe('components/message/useMessageListScroll', () => {
 
     expect(scrollElement.scrollTo).toHaveBeenLastCalledWith({
       behavior: 'smooth',
-      top: 0,
+      top: 1200,
     });
-    expect(scrollElement.scrollTop).toBe(0);
+    expect(scrollElement.scrollTop).toBe(1200);
     expect(requireLatestHook(latestHook).showScrollToBottom).toBe(false);
   });
 
-  it('focuses the requested user message immediately and adds reverse-flow trailing space', async () => {
+  it('focuses the requested user message and adds standard-flow trailing space', async () => {
     jest.useFakeTimers();
     const scrollElement = createScrollElement({
       clientHeight: 500,
       scrollHeight: 300,
       scrollTop: 0,
     });
-    const userRowElement = createMeasuredElement(() => 120 + scrollElement.scrollTop);
+    const userRowElement = createMeasuredElement(() => 120 - scrollElement.scrollTop);
     const loadOlderHistory = jest.fn(async () => undefined);
     let latestHook: HookProbeRenderState | null = null;
 
@@ -269,20 +181,100 @@ describe('components/message/useMessageListScroll', () => {
 
     expect(scrollElement.scrollTo).toHaveBeenLastCalledWith({
       behavior: 'auto',
-      top: -88,
+      top: 88,
     });
-    expect(scrollElement.scrollTop).toBe(-88);
-    expect(requireLatestHook(latestHook).showScrollToBottom).toBe(false);
   });
 
-  it('does not interrupt immediate post-send focus while the programmatic scroll is in progress', async () => {
+  it('consumes trailing space as streamed content fills the reserved viewport', async () => {
+    jest.useFakeTimers();
+    let realContentHeight = 420;
+    const scrollElement = createScrollElement({
+      clientHeight: 500,
+      scrollHeight: realContentHeight,
+      scrollTop: 0,
+    });
+    const latestUserRow = createMeasuredElement(() => 120 - scrollElement.scrollTop);
+    const loadOlderHistory = jest.fn(async () => undefined);
+    const messages = [
+      { id: 'user-latest', kind: 'user' as const, content: 'latest question' },
+    ];
+    let latestHook: HookProbeRenderState | null = null;
+    let renderer!: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        React.createElement(HookProbe, {
+          hasOlderHistory: false,
+          layoutSignature: 'session:post-send',
+          loadOlderHistory,
+          onRender: (state) => {
+            scrollElement.scrollHeight = realContentHeight + state.trailingSpacerPx;
+            latestHook = state;
+          },
+          postSendFocusRequest: { messageId: 'user-latest', token: 1 },
+          rowCount: 1,
+          scrollElement,
+          userRows: {
+            'user-latest': latestUserRow,
+          },
+          visibleCommittedMessages: messages,
+        }),
+        {
+          createNodeMock: createNodeMock(scrollElement, {
+            'user-latest': latestUserRow,
+          }),
+        },
+      );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      jest.runOnlyPendingTimers();
+      await Promise.resolve();
+    });
+
+    expect(requireLatestHook(latestHook).trailingSpacerPx).toBe(168);
+
+    scrollElement.scrollTo = jest.fn((options) => {
+      scrollElement.scrollTop = Number(options.top ?? scrollElement.scrollTop);
+    });
+    scrollElement.scrollTop = 88;
+    realContentHeight = 500;
+
+    await act(async () => {
+      renderer.update(
+        React.createElement(HookProbe, {
+          hasOlderHistory: false,
+          layoutSignature: 'session:post-send:assistant-grew',
+          loadOlderHistory,
+          onRender: (state) => {
+            scrollElement.scrollHeight = realContentHeight + state.trailingSpacerPx;
+            latestHook = state;
+          },
+          postSendFocusRequest: { messageId: 'user-latest', token: 1 },
+          rowCount: 1,
+          scrollElement,
+          userRows: {
+            'user-latest': latestUserRow,
+          },
+          visibleCommittedMessages: messages,
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(scrollElement.scrollTo).not.toHaveBeenCalled();
+    expect(requireLatestHook(latestHook).trailingSpacerPx).toBe(88);
+  });
+
+  it('keeps post-send space through programmatic scroll but releases it after user scroll intent', async () => {
     jest.useFakeTimers();
     const scrollElement = createScrollElement({
       clientHeight: 500,
       scrollHeight: 300,
       scrollTop: 0,
     });
-    const userRowElement = createMeasuredElement(() => 120 + scrollElement.scrollTop);
+    const userRowElement = createMeasuredElement(() => 120 - scrollElement.scrollTop);
     const loadOlderHistory = jest.fn(async () => undefined);
     let latestHook: HookProbeRenderState | null = null;
 
@@ -309,244 +301,25 @@ describe('components/message/useMessageListScroll', () => {
       await Promise.resolve();
     });
 
-    scrollElement.scrollTo = jest.fn();
-
     await act(async () => {
       jest.runOnlyPendingTimers();
-      await Promise.resolve();
-    });
-
-    expect(scrollElement.scrollTo).toHaveBeenCalledTimes(1);
-    expect(scrollElement.scrollTo).toHaveBeenLastCalledWith({
-      behavior: 'auto',
-      top: -88,
-    });
-
-    await act(async () => {
-      scrollElement.scrollTop = -40;
       scrollElement.dispatchEvent(new Event('scroll'));
       await Promise.resolve();
     });
 
-    expect(scrollElement.scrollTo).toHaveBeenCalledTimes(1);
+    expect(requireLatestHook(latestHook).trailingSpacerPx).toBe(288);
     expect(requireLatestHook(latestHook).showScrollToBottom).toBe(false);
-  });
-
-  it('consumes trailing space when streamed content visually pushes the focused user message upward', async () => {
-    jest.useFakeTimers();
-    let realContentHeight = 420;
-    const scrollElement = createScrollElement({
-      clientHeight: 500,
-      scrollHeight: realContentHeight,
-      scrollTop: 0,
-    });
-    let latestUserTop = 180;
-    const latestUserRow = createMeasuredElement(() => latestUserTop);
-    const loadOlderHistory = jest.fn(async () => undefined);
-    const messages = [
-      { id: 'user-latest', kind: 'user' as const, content: 'latest question' },
-    ];
-    let latestHook: HookProbeRenderState | null = null;
-    let renderer!: TestRenderer.ReactTestRenderer;
 
     await act(async () => {
-      renderer = TestRenderer.create(
-        React.createElement(HookProbe, {
-          hasOlderHistory: false,
-          layoutSignature: 'session:post-send',
-          loadOlderHistory,
-          onRender: (state) => {
-            scrollElement.scrollHeight = realContentHeight + state.trailingSpacerPx;
-            latestHook = state;
-          },
-          postSendFocusRequest: { messageId: 'user-latest', token: 1 },
-          rowCount: 1,
-          scrollElement,
-          userRows: {
-            'user-latest': latestUserRow,
-          },
-          visibleCommittedMessages: messages,
-        }),
-        {
-          createNodeMock: createNodeMock(scrollElement, {
-            'user-latest': latestUserRow,
-          }),
-        },
-      );
+      scrollElement.dispatchEvent(new Event('wheel'));
+      scrollElement.scrollTop = 48;
+      scrollElement.dispatchEvent(new Event('scroll'));
       await Promise.resolve();
     });
 
-    await act(async () => {
-      jest.runOnlyPendingTimers();
-      await Promise.resolve();
-    });
-
-    expect(requireLatestHook(latestHook).trailingSpacerPx).toBe(228);
-
-    scrollElement.scrollTo = jest.fn((options) => {
-      scrollElement.scrollTop = Number(options.top ?? scrollElement.scrollTop);
-    });
-    scrollElement.scrollTop = -148;
-    latestUserTop = -48;
-    realContentHeight = 460;
-
-    await act(async () => {
-      renderer.update(
-        React.createElement(HookProbe, {
-          hasOlderHistory: false,
-          layoutSignature: 'session:post-send:assistant-grew',
-          loadOlderHistory,
-          onRender: (state) => {
-            scrollElement.scrollHeight = realContentHeight + state.trailingSpacerPx;
-            latestHook = state;
-          },
-          postSendFocusRequest: { messageId: 'user-latest', token: 1 },
-          rowCount: 1,
-          scrollElement,
-          userRows: {
-            'user-latest': latestUserRow,
-          },
-          visibleCommittedMessages: messages,
-        }),
-      );
-      await Promise.resolve();
-    });
-
-    expect(scrollElement.scrollTo).not.toHaveBeenCalled();
-    expect(requireLatestHook(latestHook).trailingSpacerPx).toBe(148);
-  });
-
-  it('keeps the requested user message anchored when streamed content exhausts the trailing spacer', async () => {
-    jest.useFakeTimers();
-    let realContentHeight = 420;
-    const scrollElement = createScrollElement({
-      clientHeight: 500,
-      scrollHeight: realContentHeight,
-      scrollTop: 0,
-    });
-    let latestUserTop = 180;
-    const latestUserRow = createMeasuredElement(() => latestUserTop);
-    const loadOlderHistory = jest.fn(async () => undefined);
-    const messages = [
-      { id: 'user-latest', kind: 'user' as const, content: 'latest question' },
-    ];
-    let latestHook: HookProbeRenderState | null = null;
-    let renderer!: TestRenderer.ReactTestRenderer;
-
-    await act(async () => {
-      renderer = TestRenderer.create(
-        React.createElement(HookProbe, {
-          hasOlderHistory: false,
-          layoutSignature: 'session:post-send',
-          loadOlderHistory,
-          onRender: (state) => {
-            scrollElement.scrollHeight = realContentHeight + state.trailingSpacerPx;
-            latestHook = state;
-          },
-          postSendFocusRequest: { messageId: 'user-latest', token: 1 },
-          rowCount: 1,
-          scrollElement,
-          userRows: {
-            'user-latest': latestUserRow,
-          },
-          visibleCommittedMessages: messages,
-        }),
-        {
-          createNodeMock: createNodeMock(scrollElement, {
-            'user-latest': latestUserRow,
-          }),
-        },
-      );
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      jest.runOnlyPendingTimers();
-      await Promise.resolve();
-    });
-
-    expect(scrollElement.scrollTo).toHaveBeenLastCalledWith({
-      behavior: 'auto',
-      top: -148,
-    });
-
-    expect(requireLatestHook(latestHook).trailingSpacerPx).toBe(228);
-
-    scrollElement.scrollTo = jest.fn((options) => {
-      scrollElement.scrollTop = Number(options.top ?? scrollElement.scrollTop);
-    });
-    scrollElement.scrollTop = -148;
-    latestUserTop = 32;
-    realContentHeight = 520;
-
-    await act(async () => {
-      renderer.update(
-        React.createElement(HookProbe, {
-          hasOlderHistory: false,
-          layoutSignature: 'session:post-send:assistant-started',
-          loadOlderHistory,
-          onRender: (state) => {
-            scrollElement.scrollHeight = realContentHeight + state.trailingSpacerPx;
-            latestHook = state;
-          },
-          postSendFocusRequest: { messageId: 'user-latest', token: 1 },
-          rowCount: 1,
-          scrollElement,
-          userRows: {
-            'user-latest': latestUserRow,
-          },
-          visibleCommittedMessages: messages,
-        }),
-      );
-      await Promise.resolve();
-    });
-
-    expect(scrollElement.scrollTo).not.toHaveBeenCalled();
-    expect(requireLatestHook(latestHook).trailingSpacerPx).toBe(128);
-
-    latestUserTop = -12;
-    realContentHeight = 760;
-
-    await act(async () => {
-      renderer.update(
-        React.createElement(HookProbe, {
-          hasOlderHistory: false,
-          layoutSignature: 'session:post-send:assistant-overflowed',
-          loadOlderHistory,
-          onRender: (state) => {
-            scrollElement.scrollHeight = realContentHeight + state.trailingSpacerPx;
-            latestHook = state;
-          },
-          postSendFocusRequest: { messageId: 'user-latest', token: 1 },
-          rowCount: 1,
-          scrollElement,
-          userRows: {
-            'user-latest': latestUserRow,
-          },
-          visibleCommittedMessages: messages,
-        }),
-      );
-      await Promise.resolve();
-    });
-
-    expect(scrollElement.scrollTo).toHaveBeenLastCalledWith({
-      behavior: 'auto',
-      top: -104,
-    });
-    expect(scrollElement.scrollTop).toBe(-104);
     expect(requireLatestHook(latestHook).trailingSpacerPx).toBe(0);
+    expect(requireLatestHook(latestHook).showScrollToBottom).toBe(true);
   });
-
-  function triggerHistoryIntersection() {
-    if (!intersectionCallback) {
-      throw new Error('IntersectionObserver callback was not registered');
-    }
-
-    intersectionCallback(
-      [{ isIntersecting: true } as IntersectionObserverEntry],
-      {} as IntersectionObserver,
-    );
-  }
 });
 
 interface HookProbeRenderState {

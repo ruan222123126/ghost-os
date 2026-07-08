@@ -17,16 +17,24 @@ interface StreamingMarkdownBlock {
 }
 
 const AssistantMarkdownBlock = memo((props: {
+  active?: boolean;
   content: string;
   final: boolean;
   showCopyButton: boolean;
-}) => (
-  <AssistantMarkdownRenderer
-    content={props.content}
-    final={props.final}
-    showCopyButton={props.showCopyButton}
-  />
-));
+}) => {
+  const className = props.active
+    ? 'assistant-markdown-block is-active-streaming-block'
+    : 'assistant-markdown-block';
+  return (
+    <div className={className}>
+      <AssistantMarkdownRenderer
+        content={props.content}
+        final={props.final}
+        showCopyButton={props.showCopyButton}
+      />
+    </div>
+  );
+});
 AssistantMarkdownBlock.displayName = 'AssistantMarkdownBlock';
 
 const AssistantMarkdownContentBase: FC<AssistantMarkdownContentProps> = ({
@@ -79,7 +87,8 @@ const StreamingAssistantMarkdownContent: FC<{
       ))}
       {blocks.activeBlock ? (
         <AssistantMarkdownBlock
-          content={blocks.activeBlock}
+          active
+          content={completeUnclosedFenceBlock(blocks.activeBlock)}
           final={false}
           showCopyButton={showCopyButton}
         />
@@ -126,4 +135,38 @@ function splitStreamingMarkdownBlocks(content: string): {
     activeBlock: content.slice(blockStart),
     stableBlocks,
   };
+}
+
+function completeUnclosedFenceBlock(content: string): string {
+  const fence = findUnclosedFence(content);
+  if (!fence) {
+    return content;
+  }
+
+  const newline = content.endsWith('\n') ? '' : '\n';
+  return `${content}${newline}${fence.marker}`;
+}
+
+function findUnclosedFence(content: string): { marker: string } | null {
+  let openFence: { marker: string } | null = null;
+  const lines = content.split('\n');
+
+  for (const line of lines) {
+    const match = /^(\s{0,3})(`{3,}|~{3,})/.exec(line);
+    if (!match) {
+      continue;
+    }
+
+    const marker = match[2][0].repeat(match[2].length);
+    if (!openFence) {
+      openFence = { marker };
+      continue;
+    }
+
+    if (marker[0] === openFence.marker[0] && marker.length >= openFence.marker.length) {
+      openFence = null;
+    }
+  }
+
+  return openFence;
 }

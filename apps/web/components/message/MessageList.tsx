@@ -1,6 +1,7 @@
 'use client';
 import type { FC } from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import type { MessageListRow } from '@/lib/chat-view/types';
 import { useWebLocale } from '@/lib/i18n/provider';
 import { TopLoadingBar } from '@/components/TopLoadingBar';
@@ -23,6 +24,7 @@ export const MessageList: FC<MessageListProps> = ({
   const { copy } = useWebLocale();
   const [openToolCards, setOpenToolCards] = useState<Record<string, boolean>>({});
   const [openThinkingPanels, setOpenThinkingPanels] = useState<Record<string, boolean>>({});
+  const [expandedUserMessages, setExpandedUserMessages] = useState<Record<string, boolean>>({});
   const latestStreamingThinkingIdRef = useRef('');
   const previousHasAssistantTextRef = useRef(false);
   const thinkingAutoCollapsedRef = useRef(false);
@@ -44,11 +46,6 @@ export const MessageList: FC<MessageListProps> = ({
     : false;
   const effectiveRows = rows;
   const effectiveRowCount = effectiveRows.length;
-  const renderedRows = useMemo(() => {
-    return effectiveRows
-      .map((row, index) => ({ index, row }))
-      .reverse();
-  }, [effectiveRows]);
   const layoutSignature = buildMessageListLayoutSignature({
     committedMessages: visibleCommittedMessages,
     latestStreamingThinkingId,
@@ -74,7 +71,16 @@ export const MessageList: FC<MessageListProps> = ({
     rowCount,
     visibleCommittedMessages,
   });
+  const rowVirtualizer = useVirtualizer({
+    count: effectiveRowCount,
+    estimateSize: estimateMessageRowHeight,
+    getItemKey: (index) => effectiveRows[index]?.key ?? index,
+    getScrollElement: () => scrollElementRef.current,
+    overscan: 8,
+  });
   const showHistoryLoading = olderHistoryLoadingPaused || loadingOlderHistory;
+  const virtualItems = rowVirtualizer.getVirtualItems();
+  const virtualContentHeight = rowVirtualizer.getTotalSize() + trailingSpacerPx;
 
   const handleToggleToolCard = useCallback((messageId: string) => {
     setOpenToolCards((previous) => ({
@@ -85,6 +91,13 @@ export const MessageList: FC<MessageListProps> = ({
 
   const handleToggleThinkingPanel = useCallback((messageId: string) => {
     setOpenThinkingPanels((previous) => ({
+      ...previous,
+      [messageId]: !previous[messageId],
+    }));
+  }, []);
+
+  const handleToggleUserMessage = useCallback((messageId: string) => {
+    setExpandedUserMessages((previous) => ({
       ...previous,
       [messageId]: !previous[messageId],
     }));
@@ -134,47 +147,70 @@ export const MessageList: FC<MessageListProps> = ({
       {showHistoryLoading ? (
         <TopLoadingBar className="messages-history-loading-overlay" label={copy.chat.loadingOlderMessages} />
       ) : null}
-      <div ref={scrollElementRef} className="messages ui-scroll is-reverse-flow" aria-live="polite">
-        {trailingSpacerPx > 0 ? (
-          <div
-            className="messages-trailing-spacer"
-            style={{ height: trailingSpacerPx }}
-            aria-hidden="true"
-          />
-        ) : null}
-        {renderedRows.map(({ index, row }) => {
-          const hasTrailingTool = shouldPlaceAssistantCopyInline({
-            currentRow: row,
-            currentIndex: index,
-            rowCount: effectiveRowCount,
-            getRowAtIndex: (index) => effectiveRows[index],
-          });
+      <div ref={scrollElementRef} className="messages ui-scroll" aria-live="polite">
+        <div
+          className="messages-virtual-flow"
+          style={{ height: virtualContentHeight }}
+        >
+          {virtualItems.map((virtualItem) => {
+            const index = virtualItem.index;
+            const row = effectiveRows[index];
+            if (!row) {
+              return null;
+            }
+            const hasTrailingTool = shouldPlaceAssistantCopyInline({
+              currentRow: row,
+              currentIndex: index,
+              rowCount: effectiveRowCount,
+              getRowAtIndex: (index) => effectiveRows[index],
+            });
+            const registerUserRow = row.kind === 'message' && row.message.kind === 'user'
+              ? registerMessageRow(row.message.id)
+              : undefined;
 
-          return (
+            return (
+              <div
+                key={row.key}
+                data-index={index}
+                data-virtual-index={virtualItem.index}
+                className="messages-flow-row"
+                ref={(node) => {
+                  rowVirtualizer.measureElement(node);
+                  registerUserRow?.(node);
+                }}
+                style={{
+                  transform: `translateY(${virtualItem.start}px)`,
+                }}
+              >
+                {renderRow(row, {
+                  assistantMarkdownEnabled,
+                  expandedUserMessages,
+                  hasTrailingTool,
+                  loading,
+                  thinkingStartedAtMs,
+                  openToolCards,
+                  onAnswerQuestion,
+                  onCancelQuestion,
+                  onToggleThinkingPanel: handleToggleThinkingPanel,
+                  onToggleToolCard: handleToggleToolCard,
+                  onToggleUserMessage: handleToggleUserMessage,
+                  openThinkingPanels,
+                })}
+              </div>
+            );
+          })}
+          {trailingSpacerPx > 0 ? (
             <div
-              key={row.key}
-              data-index={index}
-              className="messages-flow-row"
-              ref={row.kind === 'message' && row.message.kind === 'user'
-                ? registerMessageRow(row.message.id)
-                : undefined}
-            >
-              {renderRow(row, {
-                assistantMarkdownEnabled,
-                hasTrailingTool,
-                loading,
-                thinkingStartedAtMs,
-                openToolCards,
-                onAnswerQuestion,
-                onCancelQuestion,
-                onToggleThinkingPanel: handleToggleThinkingPanel,
-                onToggleToolCard: handleToggleToolCard,
-                openThinkingPanels,
-              })}
-            </div>
-          );
-        })}
-        <div ref={historySentinelRef} className="messages-history-sentinel" aria-hidden="true" />
+              className="messages-trailing-spacer"
+              style={{
+                height: trailingSpacerPx,
+                transform: `translateY(${rowVirtualizer.getTotalSize()}px)`,
+              }}
+              aria-hidden="true"
+            />
+          ) : null}
+          <div ref={historySentinelRef} className="messages-history-sentinel" aria-hidden="true" />
+        </div>
       </div>
       {showScrollToBottom ? (
         <button
@@ -190,10 +226,15 @@ export const MessageList: FC<MessageListProps> = ({
   );
 };
 
+function estimateMessageRowHeight(): number {
+  return 112;
+}
+
 function renderRow(
   row: MessageListRow,
   options: {
     assistantMarkdownEnabled: boolean;
+    expandedUserMessages: Record<string, boolean>;
     hasTrailingTool: boolean;
     loading: boolean;
     thinkingStartedAtMs: number | null;
@@ -201,6 +242,7 @@ function renderRow(
     onCancelQuestion: MessageListProps['onCancelQuestion'];
     onToggleThinkingPanel: (messageId: string) => void;
     onToggleToolCard: (messageId: string) => void;
+    onToggleUserMessage: (messageId: string) => void;
     openThinkingPanels: Record<string, boolean>;
     openToolCards: Record<string, boolean>;
   },
@@ -217,12 +259,14 @@ function renderRow(
           hasTrailingTool={options.hasTrailingTool}
           isToolCardOpen={Boolean(options.openToolCards[row.message.id])}
           isThinkingPanelOpen={Boolean(options.openThinkingPanels[row.message.id])}
+          isUserMessageExpanded={Boolean(options.expandedUserMessages[row.message.id])}
           thinkingStartedAtMs={options.thinkingStartedAtMs}
           loading={options.loading}
           onAnswerQuestion={options.onAnswerQuestion}
           onCancelQuestion={options.onCancelQuestion}
           onToggleThinkingPanel={options.onToggleThinkingPanel}
           onToggleToolCard={options.onToggleToolCard}
+          onToggleUserMessage={options.onToggleUserMessage}
         />
       );
     default:
