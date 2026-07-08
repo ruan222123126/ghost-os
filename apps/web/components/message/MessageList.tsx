@@ -260,7 +260,7 @@ function usePostSendVirtualAnchor(options: {
 
     options.rowVirtualizer.scrollToIndex(rowIndex, {
       align: 'start',
-      behavior: 'smooth',
+      behavior: 'auto',
     });
   }, [options.postSendFocusRequest, options.rowVirtualizer, options.rows]);
 }

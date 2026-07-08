@@ -103,7 +103,7 @@ describe('components/message/MessageList', () => {
     expect(mockScrollToIndex).not.toHaveBeenCalled();
   });
 
-  it('smoothly scrolls the virtual list to render an offscreen post-send user message', async () => {
+  it('materializes an offscreen post-send user message without competing with anchor scroll', async () => {
     mockVisibleVirtualIndexes = [0, 1];
 
     await act(async () => {
@@ -127,7 +127,7 @@ describe('components/message/MessageList', () => {
 
     expect(mockScrollToIndex).toHaveBeenCalledWith(2, {
       align: 'start',
-      behavior: 'smooth',
+      behavior: 'auto',
     });
   });
 });
