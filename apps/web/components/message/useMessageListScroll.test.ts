@@ -222,6 +222,64 @@ describe('components/message/useMessageListScroll', () => {
     expect(requireLatestHook(latestHook).trailingSpacerPx).toBe(468);
   });
 
+  it('clears previous post-send space before reserving a new turn', async () => {
+    jest.useFakeTimers();
+    const scrollElement = createScrollElement({
+      clientHeight: 500,
+      scrollHeight: 3000,
+      scrollTop: 900,
+    });
+    const loadOlderHistory = jest.fn(async () => undefined);
+    let latestHook: HookProbeRenderState | null = null;
+    let renderer!: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        React.createElement(HookProbe, {
+          hasOlderHistory: false,
+          layoutSignature: 'session:post-send:first-pending-row',
+          loadOlderHistory,
+          onRender: (state) => {
+            scrollElement.scrollHeight = 3000 + state.trailingSpacerPx;
+            latestHook = state;
+          },
+          postSendFocusRequest: { messageId: 'user-first', token: 1 },
+          rowCount: 20,
+          scrollElement,
+          visibleCommittedMessages: [{ id: 'user-first', kind: 'user', content: 'first question' }],
+        }),
+        {
+          createNodeMock: createNodeMock(scrollElement),
+        },
+      );
+      await Promise.resolve();
+    });
+
+    expect(requireLatestHook(latestHook).trailingSpacerPx).toBe(468);
+
+    scrollElement.clientHeight = 200;
+    await act(async () => {
+      renderer.update(
+        React.createElement(HookProbe, {
+          hasOlderHistory: false,
+          layoutSignature: 'session:post-send:second-pending-row',
+          loadOlderHistory,
+          onRender: (state) => {
+            scrollElement.scrollHeight = 3000 + state.trailingSpacerPx;
+            latestHook = state;
+          },
+          postSendFocusRequest: { messageId: 'user-second', token: 2 },
+          rowCount: 21,
+          scrollElement,
+          visibleCommittedMessages: [{ id: 'user-second', kind: 'user', content: 'second question' }],
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(requireLatestHook(latestHook).trailingSpacerPx).toBe(168);
+  });
+
   it('consumes trailing space as streamed content fills the reserved viewport', async () => {
     jest.useFakeTimers();
     let realContentHeight = 420;

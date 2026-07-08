@@ -48,6 +48,7 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
   } = options;
   const anchorScrollFrameRef = useRef<ScrollFrameHandle | null>(null);
   const messageRowsRef = useRef(new Map<string, HTMLDivElement>());
+  const activePostSendTokenRef = useRef<number | null>(null);
   const handledPostSendTokenRef = useRef<number | null>(null);
   const pendingPostSendRequestRef = useRef<PostSendFocusRequest | null>(null);
   const postSendLockRef = useRef<PostSendLock | null>(null);
@@ -121,6 +122,14 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
 
     syncCurrentBottomAffordance();
   }, [autoFollowRef, scheduleBottomFollow, setTrailingSpacerPx, syncCurrentBottomAffordance]);
+
+  const resetPostSendSpace = useCallback(() => {
+    cancelScrollFrame(anchorScrollFrameRef);
+    postSendLockRef.current = null;
+    postSendLockJustStartedRef.current = false;
+    setTrailingSpacerPx(0);
+    setShowScrollToBottom(false);
+  }, [setShowScrollToBottom, setTrailingSpacerPx]);
 
   const reservePendingPostSendViewport = useCallback(() => {
     const container = scrollElementRef.current;
@@ -258,10 +267,12 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
 
   usePostSendFocusRequest({
     focusPostSendMessage,
+    activePostSendTokenRef,
     handledPostSendTokenRef,
     pendingPostSendRequestRef,
     postSendFocusRequest,
     reservePendingPostSendViewport,
+    resetPostSendSpace,
     registeredMessageRowVersion,
     visibleCommittedMessages,
   });
@@ -291,20 +302,24 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
 }
 
 function usePostSendFocusRequest(options: {
+  activePostSendTokenRef: MutableRefObject<number | null>;
   focusPostSendMessage: (messageId: string, behavior: ScrollBehavior) => boolean;
   handledPostSendTokenRef: MutableRefObject<number | null>;
   pendingPostSendRequestRef: MutableRefObject<PostSendFocusRequest | null>;
   postSendFocusRequest: PostSendFocusRequest | null;
   reservePendingPostSendViewport: () => void;
+  resetPostSendSpace: () => void;
   registeredMessageRowVersion: number;
   visibleCommittedMessages: ChatMessage[];
 }) {
   const {
+    activePostSendTokenRef,
     focusPostSendMessage,
     handledPostSendTokenRef,
     pendingPostSendRequestRef,
     postSendFocusRequest,
     reservePendingPostSendViewport,
+    resetPostSendSpace,
     registeredMessageRowVersion,
     visibleCommittedMessages,
   } = options;
@@ -314,6 +329,10 @@ function usePostSendFocusRequest(options: {
     if (!request || handledPostSendTokenRef.current === request.token) {
       pendingPostSendRequestRef.current = null;
       return;
+    }
+    if (activePostSendTokenRef.current !== request.token) {
+      activePostSendTokenRef.current = request.token;
+      resetPostSendSpace();
     }
     if (!hasUserMessage(visibleCommittedMessages, request.messageId)) {
       pendingPostSendRequestRef.current = null;
@@ -330,10 +349,12 @@ function usePostSendFocusRequest(options: {
     pendingPostSendRequestRef.current = request;
   }, [
     focusPostSendMessage,
+    activePostSendTokenRef,
     handledPostSendTokenRef,
     pendingPostSendRequestRef,
     postSendFocusRequest,
     reservePendingPostSendViewport,
+    resetPostSendSpace,
     registeredMessageRowVersion,
     visibleCommittedMessages,
   ]);
