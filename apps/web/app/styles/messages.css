@@ -13,6 +13,7 @@
   overflow-y: auto;
   overflow-x: hidden;
   overflow-anchor: auto;
+  scrollbar-gutter: stable;
   overscroll-behavior: contain;
   padding: 32px 22px 84px;
   background: rgb(255 255 255);
