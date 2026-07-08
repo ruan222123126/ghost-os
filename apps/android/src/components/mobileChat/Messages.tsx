@@ -1,4 +1,5 @@
-import { forwardRef, memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { forwardRef, memo, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type {
   AgentPayload,
   ChatSelectedSkill,
@@ -141,28 +142,65 @@ export const ConversationMessageList = memo(function ConversationMessageList(pro
   onApproveExternalAgent?: (input: ExternalApprovalActionInput) => Promise<boolean>;
   registerUserMessageRow: (messageId: string) => (node: HTMLDivElement | null) => void;
   reply: AgentPayload | undefined;
+  scrollElementRef?: RefObject<HTMLElement | null>;
   status: StatusMessage;
 }) {
   const listItems = useMemo(
     () => conversationListItems(props.messages, props.reply, props.status),
     [props.messages, props.reply, props.status],
   );
-  const renderedListItems = useMemo(() => [...listItems].reverse(), [listItems]);
+  const virtualizer = useVirtualizer({
+    count: listItems.length,
+    estimateSize: estimateConversationRowSize,
+    getItemKey: (index) => conversationListItemKey(listItems[index]),
+    getScrollElement: () => props.scrollElementRef?.current ?? null,
+    overscan: 8,
+  });
+  const virtualItems = virtualizer.getVirtualItems();
 
   if (listItems.length === 0) {
     return null;
   }
 
+  if (!props.scrollElementRef) {
+    return (
+      <div className="conversation-list" data-chat-feed-content="">
+        {listItems.map((item) => (
+          <ConversationListItemRow
+            key={conversationListItemKey(item)}
+            item={item}
+            onApproveExternalAgent={props.onApproveExternalAgent}
+            registerUserMessageRow={props.registerUserMessageRow}
+          />
+        ))}
+      </div>
+    );
+  }
+
   return (
-    <div className="conversation-list" data-chat-feed-content="">
-      {renderedListItems.map((item) => (
-        <ConversationListItemRow
-          key={conversationListItemKey(item)}
-          item={item}
-          onApproveExternalAgent={props.onApproveExternalAgent}
-          registerUserMessageRow={props.registerUserMessageRow}
-        />
-      ))}
+    <div
+      className="conversation-list"
+      data-chat-feed-content=""
+      style={{ height: virtualizer.getTotalSize() }}
+    >
+      {virtualItems.map((virtualItem) => {
+        const item = listItems[virtualItem.index];
+        return (
+          <div
+            key={virtualItem.key}
+            ref={virtualizer.measureElement}
+            className="conversation-virtual-row"
+            data-index={virtualItem.index}
+            style={{ transform: `translateY(${virtualItem.start}px)` }}
+          >
+            <ConversationListItemRow
+              item={item}
+              onApproveExternalAgent={props.onApproveExternalAgent}
+              registerUserMessageRow={props.registerUserMessageRow}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 });
@@ -188,6 +226,10 @@ function conversationListItemKey(item: ConversationListItem): string {
     return item.message.id;
   }
   return `active-reply:${item.reply?.session_id ?? "status"}`;
+}
+
+function estimateConversationRowSize(index: number): number {
+  return index === 0 ? 96 : 132;
 }
 
 function ConversationListItemRow(props: {

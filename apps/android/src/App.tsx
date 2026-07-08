@@ -435,10 +435,14 @@ function App() {
         <main
           ref={setChatFeedRef}
           onScroll={handleScroll}
-          className={`chat-feed ${showEmptyIntro ? "is-empty" : "is-reverse-flow"}`}
+          className={`chat-feed ${showEmptyIntro ? "is-empty" : ""}`}
         >
           {showEmptyIntro ? (
             <AssistantIntro onSelectSuggestion={setMessage} />
+          ) : null}
+
+          {!showEmptyIntro ? (
+            <div ref={historySentinelRef} className="chat-feed-history-sentinel" aria-hidden="true" />
           ) : null}
 
           <ConversationMessageList
@@ -446,13 +450,10 @@ function App() {
             onApproveExternalAgent={approveExternalAgent}
             registerUserMessageRow={registerUserMessageRow}
             reply={mobileSessions.activeReply}
+            scrollElementRef={scrollRef}
             status={displayStatus}
           />
           <div aria-hidden="true" className="chat-feed-trailing-spacer" style={{ height: trailingSpacerPx }} />
-
-          {!showEmptyIntro ? (
-            <div ref={historySentinelRef} className="chat-feed-history-sentinel" aria-hidden="true" />
-          ) : null}
         </main>
 
         {showScrollDown ? <ScrollDownButton onClick={() => scrollToBottom()} /> : null}

@@ -1,9 +1,9 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import type { AgentPayload, MobileConversationMessage, StatusMessage } from "../mobileTypes";
 
-const SCROLL_DOWN_THRESHOLD_PX = 50;
-const SCROLL_ANCHOR_TOLERANCE_PX = 2;
+const BOTTOM_THRESHOLD_PX = 48;
 const LOAD_OLDER_THRESHOLD_PX = 32;
+const SCROLL_ANCHOR_TOLERANCE_PX = 2;
 const CHAT_FEED_CONTENT_SELECTOR = "[data-chat-feed-content]";
 
 interface UseChatFeedScrollOptions {
@@ -22,9 +22,12 @@ interface PostSendFocusRequest {
   token: number;
 }
 
-interface PostSendLock {
-  autoFollowOnRelease: boolean;
-  baselineContentHeightPx: number;
+interface HistoryAnchorSnapshot {
+  scrollHeight: number;
+  scrollTop: number;
+}
+
+interface PostSendAnchor {
   messageId: string;
   targetScrollTop: number;
 }
@@ -35,27 +38,20 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   const userMessageRowsRef = useRef(new Map<string, HTMLDivElement>());
   const handledPostSendTokenRef = useRef<number | null>(null);
   const pendingPostSendRequestRef = useRef<PostSendFocusRequest | null>(null);
-  const postSendLockRef = useRef<PostSendLock | null>(null);
-  const postSendLockJustStartedRef = useRef(false);
-  const autoFollowRef = useRef(true);
+  const postSendAnchorRef = useRef<PostSendAnchor | null>(null);
+  const postSendAnchorJustFocusedRef = useRef(false);
+  const historyAnchorRef = useRef<HistoryAnchorSnapshot | null>(null);
   const olderLoadPendingRef = useRef(false);
-  const pendingBottomScrollFrameRef = useRef<number | null>(null);
-  const pendingBottomScrollBehaviorRef = useRef<ScrollBehavior>("auto");
-  const pendingBottomScrollTokenRef = useRef(0);
-  const pendingAnchorScrollFrameRef = useRef<number | null>(null);
   const previousSessionIdRef = useRef<string | undefined>(undefined);
-  const trailingSpacerPxRef = useRef(0);
-  const userScrollSeenRef = useRef(false);
+  const previousScrollTopRef = useRef(0);
+  const autoScrollRef = useRef(false);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const [trailingSpacerPx, setTrailingSpacerPxState] = useState(0);
   const [registeredUserRowVersion, setRegisteredUserRowVersion] = useState(0);
-  const reply = options.reply;
-  const hasReply = Boolean(reply);
+  const hasReply = Boolean(options.reply);
 
   const setTrailingSpacerPx = useCallback((value: number) => {
-    const nextValue = Math.max(0, Math.ceil(value));
-    trailingSpacerPxRef.current = nextValue;
-    setTrailingSpacerPxState(nextValue);
+    setTrailingSpacerPxState(Math.max(0, Math.ceil(value)));
   }, []);
 
   const registerUserMessageRow = useCallback((messageId: string) => {
@@ -77,18 +73,19 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
       return;
     }
 
+    const hadPreviousSession = previousSessionIdRef.current !== undefined;
     previousSessionIdRef.current = currentSessionId;
-    cancelPendingAnchorScroll();
     pendingPostSendRequestRef.current = null;
-    postSendLockRef.current = null;
-    postSendLockJustStartedRef.current = false;
+    postSendAnchorRef.current = null;
+    postSendAnchorJustFocusedRef.current = false;
+    historyAnchorRef.current = null;
     olderLoadPendingRef.current = false;
-    autoFollowRef.current = true;
-    userScrollSeenRef.current = false;
+    autoScrollRef.current = false;
     setTrailingSpacerPx(0);
     setShowScrollDown(false);
-    if (scrollRef.current) {
+    if (hadPreviousSession && scrollRef.current) {
       scrollRef.current.scrollTop = 0;
+      previousScrollTopRef.current = 0;
     }
   }, [options.sessionId, setTrailingSpacerPx]);
 
@@ -103,7 +100,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
       return;
     }
 
-    if (focusUserMessage(request.messageId, "smooth")) {
+    if (focusUserMessage(request.messageId)) {
       handledPostSendTokenRef.current = request.token;
       pendingPostSendRequestRef.current = null;
       return;
@@ -113,18 +110,21 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   }, [options.messages, options.postSendFocusRequest, registeredUserRowVersion, setTrailingSpacerPx]);
 
   useLayoutEffect(() => {
-    if (postSendLockRef.current) {
-      if (postSendLockJustStartedRef.current) {
-        postSendLockJustStartedRef.current = false;
-        return;
-      }
-      syncPostSendLock();
+    compensateHistoryAnchor();
+    syncPostSendAnchor();
+
+    if (!options.loadingOlderHistory && autoScrollRef.current && (options.messages.length > 0 || hasReply)) {
+      scrollToBottom("auto");
       return;
     }
-    if (!options.loadingOlderHistory && autoFollowRef.current && (options.messages.length > 0 || hasReply)) {
-      scheduleScrollToBottom(options.statusTone === "loading" ? "auto" : "smooth");
+
+    if (postSendAnchorRef.current) {
+      setShowScrollDown(false);
+      return;
     }
-  }, [hasReply, options.loadingOlderHistory, options.messages, options.statusTone, reply]);
+
+    syncBottomAffordance();
+  }, [hasReply, options.loadingOlderHistory, options.messages, options.reply, options.statusTone]);
 
   useLayoutEffect(() => {
     if (!options.loadingOlderHistory) {
@@ -133,30 +133,19 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   }, [options.loadingOlderHistory]);
 
   useLayoutEffect(() => {
-    return () => {
-      cancelPendingAnchorScroll();
-      cancelPendingBottomScroll();
-    };
-  }, []);
-
-  useLayoutEffect(() => {
     const element = scrollRef.current;
     if (!element || typeof ResizeObserver === "undefined") {
       return;
     }
 
     const resizeObserver = new ResizeObserver(() => {
-      if (postSendLockRef.current) {
-        syncPostSendLock();
+      compensateHistoryAnchor();
+      syncPostSendAnchor();
+      if (autoScrollRef.current) {
+        scrollToBottom("auto");
         return;
       }
-
-      if (!options.loadingOlderHistory && autoFollowRef.current && (options.messages.length > 0 || hasReply)) {
-        scheduleScrollToBottom("auto");
-        return;
-      }
-
-      syncBottomAffordance(element);
+      syncBottomAffordance();
     });
 
     resizeObserver.observe(element);
@@ -167,7 +156,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     return () => {
       resizeObserver.disconnect();
     };
-  }, [hasReply, options.loadingOlderHistory, options.messages.length, options.statusTone, reply]);
+  }, []);
 
   useLayoutEffect(() => {
     const root = scrollRef.current;
@@ -177,11 +166,9 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     }
 
     const observer = new IntersectionObserver((entries) => {
-      if (!entries[0]?.isIntersecting || !userScrollSeenRef.current) {
-        return;
+      if (entries[0]?.isIntersecting) {
+        maybeLoadOlderHistory(root);
       }
-
-      maybeLoadOlderHistory(root);
     }, {
       root,
       threshold: 0.1,
@@ -199,151 +186,83 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
       return;
     }
 
-    userScrollSeenRef.current = true;
-    cancelPendingBottomScroll();
+    const previousScrollTop = previousScrollTopRef.current;
+    previousScrollTopRef.current = element.scrollTop;
+    if (autoScrollRef.current && element.scrollTop < previousScrollTop - SCROLL_ANCHOR_TOLERANCE_PX) {
+      autoScrollRef.current = false;
+    }
+
     maybeLoadOlderHistory(element);
-    const lock = postSendLockRef.current;
-    if (lock) {
-      const targetScrollTop = measureUserMessageTargetScrollTop(lock.messageId);
-      if (targetScrollTop === null) {
-        releasePostSendLock(false);
-        return;
-      }
-      lock.targetScrollTop = targetScrollTop;
-      if (Math.abs(element.scrollTop - targetScrollTop) > SCROLL_ANCHOR_TOLERANCE_PX) {
-        scrollToAnchor(targetScrollTop, "auto");
-      }
+    if (isAtBottom(element)) {
+      autoScrollRef.current = true;
       setShowScrollDown(false);
       return;
     }
 
-    if (options.loadingOlderHistory) {
-      autoFollowRef.current = false;
-      setShowScrollDown(true);
-      return;
-    }
-
-    syncBottomAffordance(element);
+    setShowScrollDown(distanceFromBottom(element) > BOTTOM_THRESHOLD_PX);
   }
 
   function resetScrollDown(): void {
-    autoFollowRef.current = true;
-    userScrollSeenRef.current = false;
-    releasePostSendLock(false);
+    autoScrollRef.current = false;
+    postSendAnchorRef.current = null;
+    historyAnchorRef.current = null;
+    setTrailingSpacerPx(0);
     setShowScrollDown(false);
   }
 
   function scrollToBottom(behavior: ScrollBehavior = "smooth"): void {
-    cancelPendingBottomScroll();
-    commitScrollToBottom(behavior);
-  }
-
-  function scheduleScrollToBottom(behavior: ScrollBehavior): void {
-    autoFollowRef.current = true;
-    setShowScrollDown(false);
-    pendingBottomScrollBehaviorRef.current = resolvePendingBottomScrollBehavior(
-      pendingBottomScrollBehaviorRef.current,
-      behavior,
-    );
-    if (pendingBottomScrollFrameRef.current !== null) {
+    const element = scrollRef.current;
+    if (!element) {
       return;
     }
 
-    const scheduleToken = pendingBottomScrollTokenRef.current + 1;
-    pendingBottomScrollTokenRef.current = scheduleToken;
-    pendingBottomScrollFrameRef.current = window.requestAnimationFrame(() => {
-      if (pendingBottomScrollTokenRef.current !== scheduleToken) {
-        return;
-      }
-      pendingBottomScrollFrameRef.current = null;
-      commitScrollToBottom(pendingBottomScrollBehaviorRef.current);
-      pendingBottomScrollBehaviorRef.current = "auto";
-    });
-  }
-
-  function commitScrollToBottom(behavior: ScrollBehavior): void {
-    releasePostSendLock(false);
-    autoFollowRef.current = true;
-    userScrollSeenRef.current = false;
+    autoScrollRef.current = true;
+    postSendAnchorRef.current = null;
     setShowScrollDown(false);
-    if (scrollRef.current) {
-      scrollRef.current.scrollTo({
-        top: 0,
-        behavior,
-      });
-    }
+    const nextScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
+    element.scrollTo({ top: nextScrollTop, behavior });
+    previousScrollTopRef.current = nextScrollTop;
   }
 
-  function focusUserMessage(messageId: string, behavior: ScrollBehavior): boolean {
-    const targetScrollTop = measureUserMessageTargetScrollTop(messageId);
+  function focusUserMessage(messageId: string): boolean {
     const element = scrollRef.current;
-    if (targetScrollTop === null || !element) {
+    const targetScrollTop = measureUserMessageTargetScrollTop(messageId);
+    if (!element || targetScrollTop === null) {
       return false;
     }
 
-    const realContentHeightPx = measureRealContentHeight(element);
-    postSendLockRef.current = {
-      autoFollowOnRelease: true,
-      baselineContentHeightPx: realContentHeightPx,
-      messageId,
-      targetScrollTop,
-    };
-    postSendLockJustStartedRef.current = true;
-    autoFollowRef.current = false;
-    setTrailingSpacerPx(requiredTrailingSpacerPx(element, targetScrollTop, realContentHeightPx));
+    autoScrollRef.current = false;
+    postSendAnchorRef.current = { messageId, targetScrollTop };
+    postSendAnchorJustFocusedRef.current = true;
+    setTrailingSpacerPx(requiredTrailingSpacerPx(element, targetScrollTop));
+    element.scrollTo({ top: targetScrollTop, behavior: "auto" });
+    previousScrollTopRef.current = targetScrollTop;
     setShowScrollDown(false);
-    scheduleAnchorScroll(() => scrollToAnchor(targetScrollTop, behavior));
     return true;
   }
 
-  function syncPostSendLock(): void {
-    const lock = postSendLockRef.current;
+  function syncPostSendAnchor(): void {
+    const anchor = postSendAnchorRef.current;
     const element = scrollRef.current;
-    if (!lock || !element) {
+    if (!anchor || !element || autoScrollRef.current) {
+      return;
+    }
+    if (postSendAnchorJustFocusedRef.current) {
+      postSendAnchorJustFocusedRef.current = false;
       return;
     }
 
-    const targetScrollTop = measureUserMessageTargetScrollTop(lock.messageId);
+    const targetScrollTop = measureUserMessageTargetScrollTop(anchor.messageId);
     if (targetScrollTop === null) {
-      releasePostSendLock(false);
+      postSendAnchorRef.current = null;
       return;
     }
 
-    lock.targetScrollTop = targetScrollTop;
-    const realContentHeightPx = measureRealContentHeight(element);
-    const nextSpacerPx = requiredTrailingSpacerPx(element, targetScrollTop, realContentHeightPx);
-    if (shouldReleasePostSendLock({
-      baselineContentHeightPx: lock.baselineContentHeightPx,
-      clientHeight: element.clientHeight,
-      hasVisibleContent: hasVisibleContentAfterPostSendAnchor(options.messages, lock.messageId, reply),
-      realContentHeightPx,
-      targetScrollTop,
-    })) {
-      releasePostSendLock(lock.autoFollowOnRelease);
-      return;
-    }
-
-    setTrailingSpacerPx(nextSpacerPx);
-    setShowScrollDown(false);
+    anchor.targetScrollTop = targetScrollTop;
+    setTrailingSpacerPx(requiredTrailingSpacerPx(element, targetScrollTop));
     if (Math.abs(element.scrollTop - targetScrollTop) > SCROLL_ANCHOR_TOLERANCE_PX) {
-      scrollToAnchor(targetScrollTop, "auto");
-    }
-  }
-
-  function releasePostSendLock(restoreBottom: boolean): void {
-    if (!postSendLockRef.current && trailingSpacerPxRef.current === 0) {
-      return;
-    }
-
-    postSendLockRef.current = null;
-    postSendLockJustStartedRef.current = false;
-    setTrailingSpacerPx(0);
-    if (restoreBottom) {
-      scheduleScrollToBottom("smooth");
-      return;
-    }
-    if (scrollRef.current) {
-      syncBottomAffordance(scrollRef.current);
+      element.scrollTo({ top: targetScrollTop, behavior: "auto" });
+      previousScrollTopRef.current = targetScrollTop;
     }
   }
 
@@ -353,41 +272,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     if (!element || !row) {
       return null;
     }
-    return element.scrollTop - (row.getBoundingClientRect().top - element.getBoundingClientRect().top);
-  }
-
-  function measureRealContentHeight(element: HTMLElement): number {
-    return Math.max(0, element.scrollHeight - trailingSpacerPxRef.current);
-  }
-
-  function scrollToAnchor(scrollTop: number, behavior: ScrollBehavior): void {
-    scrollRef.current?.scrollTo({ top: scrollTop, behavior });
-  }
-
-  function scheduleAnchorScroll(callback: () => void): void {
-    cancelPendingAnchorScroll();
-    pendingAnchorScrollFrameRef.current = window.requestAnimationFrame(() => {
-      pendingAnchorScrollFrameRef.current = null;
-      callback();
-    });
-  }
-
-  function cancelPendingAnchorScroll(): void {
-    if (pendingAnchorScrollFrameRef.current === null) {
-      return;
-    }
-    window.cancelAnimationFrame(pendingAnchorScrollFrameRef.current);
-    pendingAnchorScrollFrameRef.current = null;
-  }
-
-  function cancelPendingBottomScroll(): void {
-    if (pendingBottomScrollFrameRef.current === null) {
-      return;
-    }
-    window.cancelAnimationFrame(pendingBottomScrollFrameRef.current);
-    pendingBottomScrollFrameRef.current = null;
-    pendingBottomScrollBehaviorRef.current = "auto";
-    pendingBottomScrollTokenRef.current += 1;
+    return element.scrollTop + (row.getBoundingClientRect().top - element.getBoundingClientRect().top);
   }
 
   function maybeLoadOlderHistory(element: HTMLElement): void {
@@ -395,25 +280,52 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
       !options.hasOlderHistory
       || options.loadingOlderHistory
       || olderLoadPendingRef.current
-      || distanceFromHistoryTop(element) > LOAD_OLDER_THRESHOLD_PX
+      || element.scrollTop > LOAD_OLDER_THRESHOLD_PX
       || !options.onLoadOlderHistory
     ) {
       return;
     }
 
     olderLoadPendingRef.current = true;
-    autoFollowRef.current = false;
-    cancelPendingBottomScroll();
+    autoScrollRef.current = false;
+    historyAnchorRef.current = {
+      scrollHeight: element.scrollHeight,
+      scrollTop: element.scrollTop,
+    };
     setShowScrollDown(true);
     void options.onLoadOlderHistory().catch(() => {
       olderLoadPendingRef.current = false;
+      historyAnchorRef.current = null;
     });
   }
 
-  function syncBottomAffordance(element: HTMLElement): void {
-    const shouldShow = shouldShowScrollDown(element);
-    autoFollowRef.current = !shouldShow;
-    setShowScrollDown(shouldShow);
+  function compensateHistoryAnchor(): void {
+    const element = scrollRef.current;
+    const anchor = historyAnchorRef.current;
+    if (!element || !anchor) {
+      return;
+    }
+
+    const delta = element.scrollHeight - anchor.scrollHeight;
+    if (delta <= 0) {
+      return;
+    }
+
+    const nextScrollTop = anchor.scrollTop + delta;
+    element.scrollTop = nextScrollTop;
+    previousScrollTopRef.current = nextScrollTop;
+    historyAnchorRef.current = {
+      scrollHeight: element.scrollHeight,
+      scrollTop: nextScrollTop,
+    };
+  }
+
+  function syncBottomAffordance(): void {
+    const element = scrollRef.current;
+    if (!element) {
+      return;
+    }
+    setShowScrollDown(distanceFromBottom(element) > BOTTOM_THRESHOLD_PX);
   }
 
   return {
@@ -428,63 +340,18 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   };
 }
 
-function resolvePendingBottomScrollBehavior(previous: ScrollBehavior, next: ScrollBehavior): ScrollBehavior {
-  if (previous === "auto" || next === "auto") {
-    return "auto";
-  }
-  return next;
+function distanceFromBottom(element: HTMLElement): number {
+  return Math.max(0, element.scrollHeight - element.scrollTop - element.clientHeight);
 }
 
-function shouldShowScrollDown(element: HTMLElement): boolean {
-  return Math.abs(element.scrollTop) > SCROLL_DOWN_THRESHOLD_PX;
-}
-
-function distanceFromHistoryTop(element: HTMLElement): number {
-  return element.scrollHeight - element.clientHeight + element.scrollTop;
+function isAtBottom(element: HTMLElement): boolean {
+  return distanceFromBottom(element) <= BOTTOM_THRESHOLD_PX;
 }
 
 function hasUserMessage(messages: MobileConversationMessage[], messageId: string): boolean {
   return messages.some((message) => message.id === messageId && message.role === "user");
 }
 
-function requiredTrailingSpacerPx(element: HTMLElement, targetScrollTop: number, realContentHeightPx: number): number {
-  return Math.max(0, Math.abs(targetScrollTop) + element.clientHeight - realContentHeightPx);
-}
-
-function shouldReleasePostSendLock(options: {
-  baselineContentHeightPx: number;
-  clientHeight: number;
-  hasVisibleContent: boolean;
-  realContentHeightPx: number;
-  targetScrollTop: number;
-}): boolean {
-  return options.hasVisibleContent
-    && options.realContentHeightPx > options.baselineContentHeightPx
-    && options.realContentHeightPx > Math.abs(options.targetScrollTop) + options.clientHeight;
-}
-
-function hasVisibleContentAfterPostSendAnchor(
-  messages: MobileConversationMessage[],
-  messageId: string,
-  reply: AgentPayload | undefined,
-): boolean {
-  const anchorIndex = messages.findIndex((message) => message.id === messageId);
-  if (anchorIndex >= 0 && messages.slice(anchorIndex + 1).some(hasVisibleConversationMessageContent)) {
-    return true;
-  }
-  return Boolean(reply && hasVisibleAgentPayloadContent(reply));
-}
-
-function hasVisibleConversationMessageContent(message: MobileConversationMessage): boolean {
-  return message.text.trim().length > 0
-    || Boolean(message.thinking?.trim())
-    || Boolean(message.parts?.length)
-    || Boolean(message.tools?.length);
-}
-
-function hasVisibleAgentPayloadContent(reply: AgentPayload): boolean {
-  return reply.message.trim().length > 0
-    || Boolean(reply.thinking?.trim())
-    || Boolean(reply.parts?.length)
-    || Boolean(reply.tools?.length);
+function requiredTrailingSpacerPx(element: HTMLElement, targetScrollTop: number): number {
+  return Math.max(0, targetScrollTop + element.clientHeight - element.scrollHeight);
 }

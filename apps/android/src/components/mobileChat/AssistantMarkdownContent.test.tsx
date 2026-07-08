@@ -58,18 +58,20 @@ describe("AssistantMarkdownContent", () => {
     expect(screen.getByTestId("markstream-renderer").textContent).toBe("先检查项目。\n\n测试通过。");
   });
 
-  it("renders streaming content as plain text before final markdown parse", () => {
+  it("renders streaming content through Markstream with a closed code fence", () => {
     render(<AssistantMarkdownContent content="```ts\nconsole.log(1)" final={false} showCopyButton={false} />);
 
-    expect(screen.queryByTestId("markstream-renderer")).toBeNull();
-    const pre = document.querySelector("pre");
-    expect(pre?.textContent).toContain("```ts");
-    expect(pre?.textContent).toContain("console.log(1)");
+    const renderer = screen.getByTestId("markstream-renderer");
+    expect(renderer.textContent).toContain("```ts");
+    expect(renderer.textContent).toContain("console.log(1)");
+    expect(renderer.textContent?.endsWith("\n```")).toBe(true);
+    expect(renderer.getAttribute("data-final")).toBe("false");
+    expect(renderer.getAttribute("data-typewriter")).toBe("false");
   });
 
-  it("uses the same display spacing for streaming plain text", () => {
+  it("uses the same display spacing for streaming markdown", () => {
     render(<AssistantMarkdownContent content="先检查项目。测试通过。" final={false} showCopyButton={false} />);
 
-    expect(document.querySelector("pre")?.textContent).toBe("先检查项目。\n\n测试通过。");
+    expect(screen.getByTestId("markstream-renderer").textContent).toBe("先检查项目。\n\n测试通过。");
   });
 });

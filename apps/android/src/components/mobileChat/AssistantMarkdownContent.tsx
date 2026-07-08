@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useDeferredValue, useMemo } from "react";
 import MarkdownRender, { setCustomComponents } from "markstream-react";
 import type { CustomComponentMap, NodeComponentProps } from "markstream-react";
 import { formatAssistantTextForDisplay } from "../../../../shared/assistantTextSpacing";
@@ -24,6 +24,7 @@ interface AssistantCodeBlockProps extends NodeComponentProps<AssistantCodeBlockN
 }
 
 const CODE_BLOCK_DEFAULT_LANGUAGE = "text";
+const FENCED_CODE_BLOCK_PATTERN = /(^|\n)(`{3,}|~{3,})[^\n]*(?=\n|$)/g;
 
 function AssistantCodeBlockCard({
   node,
@@ -61,18 +62,14 @@ function AssistantMarkdownContentBase({
   final = true,
   showCopyButton = true,
 }: AssistantMarkdownContentProps) {
-  const displayContent = formatAssistantTextForDisplay(content);
-
-  if (!final) {
-    return (
-      <div className="assistant-markdown assistant-markdown-streaming">
-        <pre>{displayContent}</pre>
-      </div>
-    );
-  }
+  const deferredContent = useDeferredValue(content);
+  const displayContent = useMemo(
+    () => prepareAssistantMarkdownForRender(deferredContent, final),
+    [deferredContent, final],
+  );
 
   return (
-    <div className="assistant-markdown">
+    <div className={final ? "assistant-markdown" : "assistant-markdown assistant-markdown-streaming"}>
       <MarkdownRender
         codeBlockProps={{
           enableFontSizeControl: false,
@@ -91,10 +88,40 @@ function AssistantMarkdownContentBase({
         infographicProps={{ showCopyButton }}
         mermaidProps={{ showCopyButton }}
         showTooltips={false}
-        typewriter={!final}
+        typewriter={false}
       />
     </div>
   );
 }
 
 export const AssistantMarkdownContent = memo(AssistantMarkdownContentBase);
+
+function prepareAssistantMarkdownForRender(content: string, final: boolean): string {
+  const displayContent = formatAssistantTextForDisplay(content);
+  if (final) {
+    return displayContent;
+  }
+  return closeDanglingMarkdownBlocks(displayContent);
+}
+
+function closeDanglingMarkdownBlocks(content: string): string {
+  const openFence = findDanglingFence(content);
+  if (!openFence) {
+    return content;
+  }
+  return `${content}\n${openFence}`;
+}
+
+function findDanglingFence(content: string): string | null {
+  const stack: string[] = [];
+  for (const match of content.matchAll(FENCED_CODE_BLOCK_PATTERN)) {
+    const fence = match[2];
+    const marker = fence[0];
+    if (stack.length > 0 && stack[stack.length - 1]?.startsWith(marker)) {
+      stack.pop();
+      continue;
+    }
+    stack.push(fence);
+  }
+  return stack.length > 0 ? stack[stack.length - 1] : null;
+}

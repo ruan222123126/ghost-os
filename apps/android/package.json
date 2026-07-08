@@ -12,6 +12,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@tanstack/react-virtual": "^3.14.5",
     "@tauri-apps/api": "^2",
     "lucide-react": "^1.18.0",
     "markstream-react": "^0.0.53",

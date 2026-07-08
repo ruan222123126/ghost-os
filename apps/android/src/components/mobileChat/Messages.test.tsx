@@ -215,8 +215,8 @@ describe("ConversationMessageList", () => {
 
     const rows = [...container.querySelectorAll(".conversation-list > .message-row")];
     expect(rows).toHaveLength(2);
-    expect(rows[0]?.textContent).toContain("正在处理");
-    expect(rows[1]?.textContent).toBe("先执行");
+    expect(rows[0]?.textContent).toBe("先执行");
+    expect(rows[1]?.textContent).toContain("正在处理");
   });
 });
 

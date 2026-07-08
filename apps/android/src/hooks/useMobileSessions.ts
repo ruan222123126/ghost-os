@@ -140,9 +140,15 @@ interface PostSendFocusRequest {
   token: number;
 }
 
+interface PendingReplyCommit {
+  reply: AgentPayload;
+  sessionId: string;
+}
+
 const HOME_IDLE_STATUS: StatusMessage = { tone: "idle", text: "首页" };
 const PERSIST_DISABLED_STATUS: StatusMessage = { tone: "idle", text: "未开启" };
 const EXTERNAL_RUNNING_SESSION_POLL_INTERVAL_MS = 1500;
+const STREAM_REPLY_COMMIT_INTERVAL_MS = 64;
 const SESSION_MESSAGES_LOADING_STATUS_TEXT = "正在加载历史会话";
 const SESSION_MESSAGES_LOADED_STATUS_TEXT = "历史会话已加载";
 const COMPUTER_SESSION_SYNC_BATCH_SIZE = 3;
@@ -164,6 +170,8 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
   const lastActiveSessionRestoreAttemptedRef = useRef(false);
   const resumableRunningSessionIdsRef = useRef<Set<string>>(new Set());
   const stoppingRunKeysRef = useRef<Set<string>>(new Set());
+  const pendingReplyCommitRef = useRef<PendingReplyCommit | null>(null);
+  const pendingReplyCommitTimerRef = useRef<number | null>(null);
   const sessionViewsRef = useRef<Record<string, MobileSessionView>>(sessionViews);
   const storedConversationsRef = useRef<StoredMobileConversation[]>(storedConversations);
   const syncRunIdRef = useRef(0);
@@ -176,6 +184,14 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
   useEffect(() => {
     activeSessionIdRef.current = activeSessionId;
   }, [activeSessionId]);
+
+  useEffect(() => {
+    return () => {
+      if (pendingReplyCommitTimerRef.current !== null) {
+        window.clearTimeout(pendingReplyCommitTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     storedConversationsRef.current = storedConversations;
@@ -492,7 +508,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
         message: trimmed,
         history: optimisticMessages,
         onReply: (reply) => {
-          applyReply(targetSessionId, reply);
+          scheduleReplyCommit(targetSessionId, reply);
         },
         onSessionId: (sessionId) => {
           const resolvedSessionId = sessionId.trim();
@@ -521,6 +537,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       }
     }
 
+    flushPendingReplyCommit();
     if (!result.ok) {
       return false;
     }
@@ -753,6 +770,33 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     setHomeReply(undefined);
     setHomeRun(createIdleRunState("本地消息已清空"));
     setPostSendFocusRequest(null);
+  }
+
+  function scheduleReplyCommit(sessionId: string, reply: AgentPayload): void {
+    if (pendingReplyCommitTimerRef.current !== null) {
+      pendingReplyCommitRef.current = { reply, sessionId };
+      return;
+    }
+
+    applyReply(sessionId, reply);
+    pendingReplyCommitTimerRef.current = window.setTimeout(() => {
+      pendingReplyCommitTimerRef.current = null;
+      flushPendingReplyCommit();
+    }, STREAM_REPLY_COMMIT_INTERVAL_MS);
+  }
+
+  function flushPendingReplyCommit(): void {
+    const pending = pendingReplyCommitRef.current;
+    if (!pending) {
+      return;
+    }
+
+    pendingReplyCommitRef.current = null;
+    if (pendingReplyCommitTimerRef.current !== null) {
+      window.clearTimeout(pendingReplyCommitTimerRef.current);
+      pendingReplyCommitTimerRef.current = null;
+    }
+    applyReply(pending.sessionId, pending.reply);
   }
 
   function applyReply(sessionId: string, reply: AgentPayload): void {
