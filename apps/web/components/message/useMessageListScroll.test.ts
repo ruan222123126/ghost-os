@@ -185,6 +185,43 @@ describe('components/message/useMessageListScroll', () => {
     });
   });
 
+  it('reserves post-send viewport space while the requested user row is not virtualized yet', async () => {
+    jest.useFakeTimers();
+    const scrollElement = createScrollElement({
+      clientHeight: 500,
+      scrollHeight: 3000,
+      scrollTop: 900,
+    });
+    const loadOlderHistory = jest.fn(async () => undefined);
+    let latestHook: HookProbeRenderState | null = null;
+
+    await act(async () => {
+      TestRenderer.create(
+        React.createElement(HookProbe, {
+          hasOlderHistory: false,
+          layoutSignature: 'session:post-send:pending-row',
+          loadOlderHistory,
+          onRender: (state) => {
+            scrollElement.scrollHeight = 3000 + state.trailingSpacerPx;
+            latestHook = state;
+          },
+          postSendFocusRequest: { messageId: 'user-latest', token: 1 },
+          rowCount: 20,
+          scrollElement,
+          visibleCommittedMessages: [{ id: 'user-latest', kind: 'user', content: 'latest question' }],
+        }),
+        {
+          createNodeMock: createNodeMock(scrollElement),
+        },
+      );
+      await Promise.resolve();
+    });
+
+    expect(scrollElement.scrollTo).not.toHaveBeenCalled();
+    expect(requireLatestHook(latestHook).showScrollToBottom).toBe(false);
+    expect(requireLatestHook(latestHook).trailingSpacerPx).toBe(468);
+  });
+
   it('consumes trailing space as streamed content fills the reserved viewport', async () => {
     jest.useFakeTimers();
     let realContentHeight = 420;

@@ -120,6 +120,20 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
     syncCurrentBottomAffordance();
   }, [autoFollowRef, scheduleBottomFollow, setTrailingSpacerPx, syncCurrentBottomAffordance]);
 
+  const reservePendingPostSendViewport = useCallback(() => {
+    const container = scrollElementRef.current;
+    if (!container) {
+      return;
+    }
+
+    autoFollowRef.current = false;
+    setTrailingSpacerPx(Math.max(
+      trailingSpacerPxRef.current,
+      container.clientHeight - POST_SEND_ANCHOR_TOP_OFFSET_PX,
+    ));
+    setShowScrollToBottom(false);
+  }, [autoFollowRef, scrollElementRef, setShowScrollToBottom, setTrailingSpacerPx]);
+
   const scheduleAnchorScroll = useCallback((callback: () => void) => {
     cancelScrollFrame(anchorScrollFrameRef);
     anchorScrollFrameRef.current = requestScrollFrame(() => {
@@ -223,6 +237,7 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
     handledPostSendTokenRef,
     pendingPostSendRequestRef,
     postSendFocusRequest,
+    reservePendingPostSendViewport,
     registeredMessageRowVersion,
     visibleCommittedMessages,
   });
@@ -255,6 +270,7 @@ function usePostSendFocusRequest(options: {
   handledPostSendTokenRef: MutableRefObject<number | null>;
   pendingPostSendRequestRef: MutableRefObject<PostSendFocusRequest | null>;
   postSendFocusRequest: PostSendFocusRequest | null;
+  reservePendingPostSendViewport: () => void;
   registeredMessageRowVersion: number;
   visibleCommittedMessages: ChatMessage[];
 }) {
@@ -263,6 +279,7 @@ function usePostSendFocusRequest(options: {
     handledPostSendTokenRef,
     pendingPostSendRequestRef,
     postSendFocusRequest,
+    reservePendingPostSendViewport,
     registeredMessageRowVersion,
     visibleCommittedMessages,
   } = options;
@@ -284,12 +301,14 @@ function usePostSendFocusRequest(options: {
       return;
     }
 
+    reservePendingPostSendViewport();
     pendingPostSendRequestRef.current = request;
   }, [
     focusPostSendMessage,
     handledPostSendTokenRef,
     pendingPostSendRequestRef,
     postSendFocusRequest,
+    reservePendingPostSendViewport,
     registeredMessageRowVersion,
     visibleCommittedMessages,
   ]);

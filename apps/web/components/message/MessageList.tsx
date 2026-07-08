@@ -1,6 +1,6 @@
 'use client';
 import type { FC } from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { MessageListRow } from '@/lib/chat-view/types';
 import { useWebLocale } from '@/lib/i18n/provider';
@@ -77,6 +77,11 @@ export const MessageList: FC<MessageListProps> = ({
     getItemKey: (index) => effectiveRows[index]?.key ?? index,
     getScrollElement: () => scrollElementRef.current,
     overscan: 8,
+  });
+  usePostSendVirtualAnchor({
+    postSendFocusRequest,
+    rowVirtualizer,
+    rows: effectiveRows,
   });
   const showHistoryLoading = olderHistoryLoadingPaused || loadingOlderHistory;
   const virtualItems = rowVirtualizer.getVirtualItems();
@@ -225,6 +230,36 @@ export const MessageList: FC<MessageListProps> = ({
     </div>
   );
 };
+
+function usePostSendVirtualAnchor(options: {
+  postSendFocusRequest: MessageListProps['postSendFocusRequest'];
+  rowVirtualizer: ReturnType<typeof useVirtualizer<HTMLDivElement, Element>>;
+  rows: MessageListRow[];
+}) {
+  const handledTokenRef = useRef<number | null>(null);
+
+  useLayoutEffect(() => {
+    const request = options.postSendFocusRequest;
+    if (!request || handledTokenRef.current === request.token) {
+      return;
+    }
+
+    const rowIndex = options.rows.findIndex((row) => (
+      row.kind === 'message'
+      && row.message.kind === 'user'
+      && row.message.id === request.messageId
+    ));
+    if (rowIndex < 0) {
+      return;
+    }
+
+    handledTokenRef.current = request.token;
+    options.rowVirtualizer.scrollToIndex(rowIndex, {
+      align: 'start',
+      behavior: 'auto',
+    });
+  }, [options.postSendFocusRequest, options.rowVirtualizer, options.rows]);
+}
 
 function estimateMessageRowHeight(): number {
   return 112;
