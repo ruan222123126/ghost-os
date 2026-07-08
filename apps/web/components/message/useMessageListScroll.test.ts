@@ -267,6 +267,88 @@ describe('components/message/useMessageListScroll', () => {
     expect(requireLatestHook(latestHook).trailingSpacerPx).toBe(88);
   });
 
+  it('keeps remaining post-send space after a short response is committed', async () => {
+    jest.useFakeTimers();
+    let realContentHeight = 420;
+    const scrollElement = createScrollElement({
+      clientHeight: 500,
+      scrollHeight: realContentHeight,
+      scrollTop: 0,
+    });
+    const latestUserRow = createMeasuredElement(() => 120 - scrollElement.scrollTop);
+    const loadOlderHistory = jest.fn(async () => undefined);
+    const messages = [
+      { id: 'user-latest', kind: 'user' as const, content: 'latest question' },
+    ];
+    let latestHook: HookProbeRenderState | null = null;
+    let renderer!: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        React.createElement(HookProbe, {
+          hasOlderHistory: false,
+          layoutSignature: 'session:post-send',
+          loadOlderHistory,
+          onRender: (state) => {
+            scrollElement.scrollHeight = realContentHeight + state.trailingSpacerPx;
+            latestHook = state;
+          },
+          postSendFocusRequest: { messageId: 'user-latest', token: 1 },
+          rowCount: 1,
+          scrollElement,
+          userRows: {
+            'user-latest': latestUserRow,
+          },
+          visibleCommittedMessages: messages,
+        }),
+        {
+          createNodeMock: createNodeMock(scrollElement, {
+            'user-latest': latestUserRow,
+          }),
+        },
+      );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      jest.runOnlyPendingTimers();
+      await Promise.resolve();
+    });
+
+    expect(requireLatestHook(latestHook).trailingSpacerPx).toBe(168);
+
+    scrollElement.scrollTo = jest.fn((options) => {
+      scrollElement.scrollTop = Number(options.top ?? scrollElement.scrollTop);
+    });
+    scrollElement.scrollTop = 88;
+    realContentHeight = 470;
+
+    await act(async () => {
+      renderer.update(
+        React.createElement(HookProbe, {
+          hasOlderHistory: false,
+          layoutSignature: 'session:post-send:assistant-committed-short',
+          loadOlderHistory,
+          onRender: (state) => {
+            scrollElement.scrollHeight = realContentHeight + state.trailingSpacerPx;
+            latestHook = state;
+          },
+          postSendFocusRequest: { messageId: 'user-latest', token: 1 },
+          rowCount: 2,
+          scrollElement,
+          userRows: {
+            'user-latest': latestUserRow,
+          },
+          visibleCommittedMessages: messages,
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(scrollElement.scrollTo).not.toHaveBeenCalled();
+    expect(requireLatestHook(latestHook).trailingSpacerPx).toBe(118);
+  });
+
   it('keeps post-send space through programmatic scroll but releases it after user scroll intent', async () => {
     jest.useFakeTimers();
     const scrollElement = createScrollElement({

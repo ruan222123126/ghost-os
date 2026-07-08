@@ -11,6 +11,7 @@ interface PostSendLock {
   anchorTopOffsetPx: number;
   messageId: string;
   programmaticScrollTarget: number | null;
+  reservedViewportBottomScrollTop: number;
   targetScrollTop: number;
 }
 
@@ -135,11 +136,13 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
     }
 
     const realContentHeightPx = measureRealContentHeight(container, trailingSpacerPxRef);
-    const trailingSpacer = requiredTrailingSpacerPx(container, anchor.targetScrollTop, realContentHeightPx);
+    const reservedViewportBottomScrollTop = anchor.targetScrollTop + container.clientHeight;
+    const trailingSpacer = requiredTrailingSpacerPx(realContentHeightPx, reservedViewportBottomScrollTop);
     postSendLockRef.current = {
       anchorTopOffsetPx: POST_SEND_ANCHOR_TOP_OFFSET_PX,
       messageId,
       programmaticScrollTarget: anchor.targetScrollTop,
+      reservedViewportBottomScrollTop,
       targetScrollTop: anchor.targetScrollTop,
     };
     postSendLockJustStartedRef.current = true;
@@ -185,7 +188,10 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
     }
 
     const realContentHeightPx = measureRealContentHeight(container, trailingSpacerPxRef);
-    const spacerForLockedTarget = requiredTrailingSpacerPx(container, lock.targetScrollTop, realContentHeightPx);
+    const spacerForLockedTarget = requiredTrailingSpacerPx(
+      realContentHeightPx,
+      lock.reservedViewportBottomScrollTop,
+    );
     if (spacerForLockedTarget > 0) {
       setTrailingSpacerPx(spacerForLockedTarget);
       setShowScrollToBottom(false);
@@ -326,11 +332,10 @@ function measureRealContentHeight(
 }
 
 function requiredTrailingSpacerPx(
-  container: HTMLElement,
-  targetScrollTop: number,
   realContentHeightPx: number,
+  reservedViewportBottomScrollTop: number,
 ): number {
-  return Math.max(0, targetScrollTop + container.clientHeight - realContentHeightPx);
+  return Math.max(0, reservedViewportBottomScrollTop - realContentHeightPx);
 }
 
 function isProgrammaticScrollInProgress(container: HTMLElement, lock: PostSendLock): boolean {
