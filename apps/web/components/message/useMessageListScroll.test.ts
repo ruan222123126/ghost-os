@@ -386,25 +386,27 @@ describe('components/message/useMessageListScroll', () => {
     expect(requireLatestHook(latestHook).trailingSpacerPx).toBe(118);
   });
 
-  it('keeps post-send space through programmatic scroll but releases it after user scroll intent', async () => {
+  it('keeps post-send space after user scroll and only consumes it when response content grows', async () => {
     jest.useFakeTimers();
+    let realContentHeight = 300;
     const scrollElement = createScrollElement({
       clientHeight: 500,
-      scrollHeight: 300,
+      scrollHeight: realContentHeight,
       scrollTop: 0,
     });
     const userRowElement = createMeasuredElement(() => 120 - scrollElement.scrollTop);
     const loadOlderHistory = jest.fn(async () => undefined);
     let latestHook: HookProbeRenderState | null = null;
+    let renderer!: TestRenderer.ReactTestRenderer;
 
     await act(async () => {
-      TestRenderer.create(
+      renderer = TestRenderer.create(
         React.createElement(HookProbe, {
           hasOlderHistory: false,
           layoutSignature: 'session:post-send',
           loadOlderHistory,
           onRender: (state) => {
-            scrollElement.scrollHeight = 300 + state.trailingSpacerPx;
+            scrollElement.scrollHeight = realContentHeight + state.trailingSpacerPx;
             latestHook = state;
           },
           postSendFocusRequest: { messageId: 'user-1', token: 1 },
@@ -436,8 +438,36 @@ describe('components/message/useMessageListScroll', () => {
       await Promise.resolve();
     });
 
-    expect(requireLatestHook(latestHook).trailingSpacerPx).toBe(0);
+    expect(requireLatestHook(latestHook).trailingSpacerPx).toBe(288);
     expect(requireLatestHook(latestHook).showScrollToBottom).toBe(true);
+
+    scrollElement.scrollTo = jest.fn((options) => {
+      scrollElement.scrollTop = Number(options.top ?? scrollElement.scrollTop);
+    });
+    realContentHeight = 420;
+
+    await act(async () => {
+      renderer.update(
+        React.createElement(HookProbe, {
+          hasOlderHistory: false,
+          layoutSignature: 'session:post-send:assistant-grew-after-user-scroll',
+          loadOlderHistory,
+          onRender: (state) => {
+            scrollElement.scrollHeight = realContentHeight + state.trailingSpacerPx;
+            latestHook = state;
+          },
+          postSendFocusRequest: { messageId: 'user-1', token: 1 },
+          rowCount: 1,
+          scrollElement,
+          userRowElement,
+          visibleCommittedMessages: [{ id: 'user-1', kind: 'user', content: 'hello' }],
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(scrollElement.scrollTo).not.toHaveBeenCalled();
+    expect(requireLatestHook(latestHook).trailingSpacerPx).toBe(168);
   });
 });
 

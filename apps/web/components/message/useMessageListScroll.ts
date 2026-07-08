@@ -91,9 +91,9 @@ export function useMessageListScroll(options: UseMessageListScrollOptions) {
 
   useAutoFollowTracking({
     autoFollowRef,
+    detachPostSendLockFromAnchor: postSendFocus.detachPostSendLockFromAnchor,
     postSendLockJustStartedRef: postSendFocus.postSendLockJustStartedRef,
     postSendLockRef: postSendFocus.postSendLockRef,
-    releasePostSendLock: postSendFocus.releasePostSendLock,
     scrollElementRef,
     setShowScrollToBottom,
   });
@@ -164,17 +164,17 @@ function useInitialBottomPlacement(options: {
 
 function useAutoFollowTracking(options: {
   autoFollowRef: MutableRefObject<boolean>;
+  detachPostSendLockFromAnchor: () => void;
   postSendLockJustStartedRef: MutableRefObject<boolean>;
   postSendLockRef: MutableRefObject<unknown | null>;
-  releasePostSendLock: (restoreBottom: boolean) => void;
   scrollElementRef: MutableRefObject<HTMLDivElement | null>;
   setShowScrollToBottom: (value: boolean) => void;
 }) {
   const {
     autoFollowRef,
+    detachPostSendLockFromAnchor,
     postSendLockJustStartedRef,
     postSendLockRef,
-    releasePostSendLock,
     scrollElementRef,
     setShowScrollToBottom,
   } = options;
@@ -191,18 +191,11 @@ function useAutoFollowTracking(options: {
       }
 
       const atBottom = isAtHardBottom(container);
-      if (atBottom && userScrollIntentRef.current) {
-        userScrollIntentRef.current = false;
-        releasePostSendLock(true);
-        autoFollowRef.current = true;
-        setShowScrollToBottom(false);
-        return;
-      }
       if (userScrollIntentRef.current) {
         userScrollIntentRef.current = false;
-        releasePostSendLock(false);
-        autoFollowRef.current = false;
-        setShowScrollToBottom(true);
+        detachPostSendLockFromAnchor();
+        autoFollowRef.current = atBottom;
+        setShowScrollToBottom(!atBottom);
         return;
       }
       setShowScrollToBottom(false);
@@ -213,9 +206,9 @@ function useAutoFollowTracking(options: {
     syncBottomAffordance(container, autoFollowRef, setShowScrollToBottom);
   }, [
     autoFollowRef,
+    detachPostSendLockFromAnchor,
     postSendLockJustStartedRef,
     postSendLockRef,
-    releasePostSendLock,
     scrollElementRef,
     setShowScrollToBottom,
   ]);
