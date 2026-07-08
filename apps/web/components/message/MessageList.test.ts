@@ -9,6 +9,8 @@ jest.mock('./MessageRow', () => ({
   MessageRow: () => React.createElement('div', { className: 'message-row' }),
 }));
 
+const mockScrollToIndex = jest.fn();
+
 jest.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: ({ count }: { count: number }) => ({
     getTotalSize: () => count * 112,
@@ -18,6 +20,7 @@ jest.mock('@tanstack/react-virtual', () => ({
       start: index * 112,
     })),
     measureElement: jest.fn(),
+    scrollToIndex: mockScrollToIndex,
   }),
 }));
 
@@ -71,6 +74,32 @@ describe('components/message/MessageList', () => {
     })).toHaveLength(1);
     expect(renderer.root.findAllByProps({ className: 'messages-flow-row' })).toHaveLength(1);
   });
+
+  it('smoothly scrolls the virtual list to a requested post-send user message', async () => {
+    await act(async () => {
+      TestRenderer.create(
+        React.createElement(
+          WebLocaleProvider,
+          null,
+          React.createElement(MessageList, {
+            assistantMarkdownEnabled: false,
+            hasOlderHistory: false,
+            loadOlderHistory: jest.fn(async () => undefined),
+            onAnswerQuestion: jest.fn(async () => undefined),
+            onCancelQuestion: jest.fn(async () => undefined),
+            postSendFocusRequest: { messageId: 'user-2', token: 1 },
+            view: buildMessageListViewWithUsers(),
+          }),
+        ),
+      );
+      await Promise.resolve();
+    });
+
+    expect(mockScrollToIndex).toHaveBeenCalledWith(2, {
+      align: 'start',
+      behavior: 'smooth',
+    });
+  });
 });
 
 function buildMessageListView(): MessageListProjection {
@@ -88,5 +117,27 @@ function buildMessageListView(): MessageListProjection {
     showThinkingIndicator: false,
     streamingRows: [],
     visibleCommittedMessages: [message],
+  };
+}
+
+function buildMessageListViewWithUsers(): MessageListProjection {
+  const messages = [
+    { id: 'assistant-1', kind: 'assistant' as const, content: 'previous answer' },
+    { id: 'user-1', kind: 'user' as const, content: 'previous question' },
+    { id: 'user-2', kind: 'user' as const, content: 'latest question' },
+  ];
+
+  return {
+    hasAssistantText: false,
+    hasThinkingText: false,
+    latestStreamingThinkingId: null,
+    loading: true,
+    loadingOlderHistory: false,
+    rowCount: messages.length,
+    rows: messages.map((message) => ({ key: message.id, kind: 'message' as const, message })),
+    shouldAutoCollapseLatestThinkingPanel: false,
+    showThinkingIndicator: false,
+    streamingRows: [],
+    visibleCommittedMessages: messages,
   };
 }

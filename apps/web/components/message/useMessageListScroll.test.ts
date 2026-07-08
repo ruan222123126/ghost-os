@@ -180,7 +180,7 @@ describe('components/message/useMessageListScroll', () => {
     });
 
     expect(scrollElement.scrollTo).toHaveBeenLastCalledWith({
-      behavior: 'auto',
+      behavior: 'smooth',
       top: 88,
     });
   });

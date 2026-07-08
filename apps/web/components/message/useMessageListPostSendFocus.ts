@@ -4,6 +4,7 @@ import type { ChatMessage } from '@/lib/types';
 import type { PostSendFocusRequest } from '@/hooks/chat/types';
 
 const POST_SEND_ANCHOR_TOP_OFFSET_PX = 32;
+const POST_SEND_ANCHOR_SCROLL_BEHAVIOR: ScrollBehavior = 'smooth';
 const SCROLL_ANCHOR_TOLERANCE_PX = 2;
 type ScrollFrameHandle = number | ReturnType<typeof setTimeout>;
 
@@ -319,7 +320,7 @@ function usePostSendFocusRequest(options: {
       return;
     }
 
-    if (focusPostSendMessage(request.messageId, 'auto')) {
+    if (focusPostSendMessage(request.messageId, POST_SEND_ANCHOR_SCROLL_BEHAVIOR)) {
       handledPostSendTokenRef.current = request.token;
       pendingPostSendRequestRef.current = null;
       return;

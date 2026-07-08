@@ -256,7 +256,7 @@ function usePostSendVirtualAnchor(options: {
     handledTokenRef.current = request.token;
     options.rowVirtualizer.scrollToIndex(rowIndex, {
       align: 'start',
-      behavior: 'auto',
+      behavior: 'smooth',
     });
   }, [options.postSendFocusRequest, options.rowVirtualizer, options.rows]);
 }
