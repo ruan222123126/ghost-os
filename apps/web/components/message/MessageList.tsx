@@ -254,11 +254,22 @@ function usePostSendVirtualAnchor(options: {
     }
 
     handledTokenRef.current = request.token;
+    if (isVirtualRowVisible(options.rowVirtualizer.getVirtualItems(), rowIndex)) {
+      return;
+    }
+
     options.rowVirtualizer.scrollToIndex(rowIndex, {
       align: 'start',
       behavior: 'smooth',
     });
   }, [options.postSendFocusRequest, options.rowVirtualizer, options.rows]);
+}
+
+function isVirtualRowVisible(
+  virtualItems: Array<{ index: number }>,
+  rowIndex: number,
+): boolean {
+  return virtualItems.some((item) => item.index === rowIndex);
 }
 
 function estimateMessageRowHeight(): number {

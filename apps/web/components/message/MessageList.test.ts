@@ -10,15 +10,19 @@ jest.mock('./MessageRow', () => ({
 }));
 
 const mockScrollToIndex = jest.fn();
+let mockVisibleVirtualIndexes: number[] | null = null;
 
 jest.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: ({ count }: { count: number }) => ({
     getTotalSize: () => count * 112,
-    getVirtualItems: () => Array.from({ length: count }, (_, index) => ({
-      index,
-      key: `virtual-${index}`,
-      start: index * 112,
-    })),
+    getVirtualItems: () => Array.from(
+      mockVisibleVirtualIndexes ?? Array.from({ length: count }, (_, index) => index),
+      (index) => ({
+        index,
+        key: `virtual-${index}`,
+        start: index * 112,
+      }),
+    ),
     measureElement: jest.fn(),
     scrollToIndex: mockScrollToIndex,
   }),
@@ -45,6 +49,7 @@ describe('components/message/MessageList', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+    mockVisibleVirtualIndexes = null;
   });
 
   it('renders older-history loading as an overlay without adding a virtual row', async () => {
@@ -75,7 +80,32 @@ describe('components/message/MessageList', () => {
     expect(renderer.root.findAllByProps({ className: 'messages-flow-row' })).toHaveLength(1);
   });
 
-  it('smoothly scrolls the virtual list to a requested post-send user message', async () => {
+  it('does not let the virtual list override post-send focus when the requested user message is visible', async () => {
+    await act(async () => {
+      TestRenderer.create(
+        React.createElement(
+          WebLocaleProvider,
+          null,
+          React.createElement(MessageList, {
+            assistantMarkdownEnabled: false,
+            hasOlderHistory: false,
+            loadOlderHistory: jest.fn(async () => undefined),
+            onAnswerQuestion: jest.fn(async () => undefined),
+            onCancelQuestion: jest.fn(async () => undefined),
+            postSendFocusRequest: { messageId: 'user-2', token: 1 },
+            view: buildMessageListViewWithUsers(),
+          }),
+        ),
+      );
+      await Promise.resolve();
+    });
+
+    expect(mockScrollToIndex).not.toHaveBeenCalled();
+  });
+
+  it('smoothly scrolls the virtual list to render an offscreen post-send user message', async () => {
+    mockVisibleVirtualIndexes = [0, 1];
+
     await act(async () => {
       TestRenderer.create(
         React.createElement(
