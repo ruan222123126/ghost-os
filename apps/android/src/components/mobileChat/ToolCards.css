@@ -148,11 +148,18 @@
   color: #991b1b;
 }
 
-.tool-card-status .ui-icon,
-.tool-status-icon {
-  width: 12px;
-  height: 12px;
+.tool-card-status .ui-icon {
+  width: 0.95em;
+  height: 0.95em;
   flex: 0 0 auto;
+}
+
+.tool-status-dot {
+  width: 0.48em;
+  height: 0.48em;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #202124;
 }
 
 .tool-card-status-label {
@@ -199,11 +206,9 @@
 }
 
 .tool-spinner {
-  width: 12px;
-  height: 12px;
-  border: 2px solid #dadce0;
-  border-radius: 999px;
-  border-top-color: #3c4043;
+  width: 1.12em;
+  height: 1.12em;
+  flex: 0 0 auto;
   animation: tool-spin 1s linear infinite;
 }
 
@@ -243,9 +248,8 @@
     color: #fca5a5;
   }
 
-  .tool-spinner {
-    border-color: #303236;
-    border-top-color: #d8e2f0;
+  .tool-status-dot {
+    background: #f1f3f4;
   }
 
   .tool-approval-actions button {

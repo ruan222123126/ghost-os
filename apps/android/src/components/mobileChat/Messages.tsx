@@ -382,11 +382,7 @@ function ToolCard(props: {
             </div>
           ) : null}
           <div className={`tool-card-status is-${viewModel.tone}`}>
-            {viewModel.tone === "running"
-              ? <span className="tool-spinner" />
-              : viewModel.tone === "error"
-                ? <UiIcon name="x" />
-                : <UiIcon name="check" />}
+            <ToolStatusMark tone={viewModel.tone} />
             <span className="tool-card-status-label">{displayStatus}</span>
           </div>
           {props.tool.approvalId ? (
@@ -400,6 +396,36 @@ function ToolCard(props: {
       ) : null}
     </section>
   );
+}
+
+function ToolStatusMark(props: { tone: MobileToolTone }) {
+  if (props.tone === "running") {
+    return (
+      <svg
+        className="tool-spinner"
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden={true}
+      >
+        <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+      </svg>
+    );
+  }
+
+  if (props.tone === "success") {
+    return <span className="tool-status-dot" aria-hidden={true} />;
+  }
+
+  if (props.tone === "error") {
+    return <UiIcon name="x" />;
+  }
+
+  return null;
 }
 
 function ApprovalActions(props: {
