@@ -59,6 +59,73 @@ describe('lib/chatRuntime/eventProjector', () => {
     ]);
   });
 
+  it('normalizes cumulative text chunks to only append unseen assistant text', () => {
+    const runtime = createChatRuntimeState('trace-cumulative', 'session-cumulative');
+    const first = projectAgentEvent({
+      runtime,
+      event: buildEvent(
+        'completion_delta',
+        {
+          kind: 'text',
+          text: 'hello',
+        },
+        { traceId: 'trace-cumulative' },
+      ),
+    });
+    const second = projectAgentEvent({
+      runtime,
+      event: buildEvent(
+        'completion_delta',
+        {
+          kind: 'text',
+          text: 'hello world',
+        },
+        { traceId: 'trace-cumulative' },
+      ),
+    });
+
+    expect(first).toEqual([
+      {
+        type: 'append_streaming_assistant_text',
+        text: 'hello',
+      },
+    ]);
+    expect(second).toEqual([
+      {
+        type: 'append_streaming_assistant_text',
+        text: ' world',
+      },
+    ]);
+  });
+
+  it('ignores exact duplicate text chunks that are already visible', () => {
+    const runtime = createChatRuntimeState('trace-duplicate', 'session-duplicate');
+    projectAgentEvent({
+      runtime,
+      event: buildEvent(
+        'completion_delta',
+        {
+          kind: 'text',
+          text: 'same text',
+        },
+        { traceId: 'trace-duplicate' },
+      ),
+    });
+    const duplicate = projectAgentEvent({
+      runtime,
+      event: buildEvent(
+        'completion_delta',
+        {
+          kind: 'text',
+          text: 'same text',
+        },
+        { traceId: 'trace-duplicate' },
+      ),
+    });
+
+    expect(duplicate).toEqual([]);
+  });
+
   it('maps preview tool message id to tool_call_id lifecycle', () => {
     const runtime = createChatRuntimeState('trace-2', 'session-2');
     projectAgentEvent({

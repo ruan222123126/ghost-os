@@ -87,11 +87,22 @@ function projectThinkingDelta(runtime: ChatRuntimeState, thinking?: string): Cha
 }
 
 function projectTextDelta(runtime: ChatRuntimeState, traceId: string, text?: string): ChatRuntimeAction[] {
-  if (!text) {
+  const delta = normalizeAssistantTextDelta(runtime.assistantBuffer, text);
+  if (!delta) {
     return [];
   }
-  const consumed = consumeToolTagStreamChunk(runtime.toolTagState, text);
+  const consumed = consumeToolTagStreamChunk(runtime.toolTagState, delta);
   return projectToolTagUnits(runtime, traceId, consumed.units);
+}
+
+function normalizeAssistantTextDelta(assistantBuffer: string, text?: string): string {
+  if (!text) {
+    return '';
+  }
+  if (!assistantBuffer || !text.startsWith(assistantBuffer)) {
+    return text;
+  }
+  return text.slice(assistantBuffer.length);
 }
 
 function projectAwaitingHuman({ event, runtime }: ProjectAgentEventOptions): ChatRuntimeAction[] {
