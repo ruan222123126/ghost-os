@@ -16,6 +16,14 @@ interface MockMobileSessionsOptions {
   sendAgentMessage: (options: MockSendAgentMessageOptions) => Promise<{ ok: boolean }>;
 }
 
+interface MockHistoryItem {
+  id: string;
+  pinned: boolean;
+  status?: "running" | "success" | "error";
+  title: string;
+  updatedAt: string;
+}
+
 const mocks = vi.hoisted(() => ({
   bridgeSendAgentMessage: vi.fn(),
   bridgeStopAgentRun: vi.fn(),
@@ -30,12 +38,12 @@ const mocks = vi.hoisted(() => ({
     computerSessionPersistStatus: { tone: "idle", text: "未开启" },
     hasConversation: false,
     hasOlderHistory: false,
-    historyItems: [],
+    historyItems: [] as MockHistoryItem[],
     loadOlderHistory: vi.fn(),
     loadingOlderHistory: false,
     loadingSessionMessages: false,
     postSendFocusRequest: null,
-    selectSession: vi.fn(),
+    selectSession: vi.fn(async (_sessionId: string) => undefined) as (sessionId: string) => Promise<void>,
     sendMessage: async (message: string, selectedSkill?: unknown) => {
       const result = await options.sendAgentMessage({
         history: [],
@@ -163,4 +171,84 @@ describe("App Codex mode routing", () => {
       );
     });
   });
+
+  it("shows a persistent completion card and opens the completed session", async () => {
+    const selectSession = vi.fn(async (_sessionId: string) => undefined);
+    mocks.useMobileSessions.mockImplementation((options: MockMobileSessionsOptions) =>
+      mockMobileSessions(options, {
+        historyItems: [historyItem("session-1", "设计复盘", "running")],
+        selectSession,
+      })
+    );
+
+    const { rerender } = render(<App />);
+
+    expect(screen.queryByText("设计复盘会话已完成")).toBeNull();
+
+    mocks.useMobileSessions.mockImplementation((options: MockMobileSessionsOptions) =>
+      mockMobileSessions(options, {
+        historyItems: [historyItem("session-1", "设计复盘", "success")],
+        selectSession,
+      })
+    );
+    rerender(<App />);
+
+    const card = await screen.findByText("设计复盘会话已完成");
+    fireEvent.click(card);
+
+    expect(selectSession).toHaveBeenCalledWith("session-1");
+    await waitFor(() => {
+      expect(screen.queryByText("设计复盘会话已完成")).toBeNull();
+    });
+  });
 });
+
+function mockMobileSessions(
+  options: MockMobileSessionsOptions,
+  overrides: {
+    historyItems?: MockHistoryItem[];
+    selectSession?: (sessionId: string) => Promise<void>;
+  } = {},
+) {
+  return {
+    activeMessages: [],
+    activeReply: undefined,
+    activeSessionId: undefined,
+    activeStatus: { tone: "idle", text: "首页" },
+    canSend: true,
+    canStop: false,
+    clearCurrentConversation: vi.fn(),
+    computerSessionPersistStatus: { tone: "idle", text: "未开启" },
+    hasConversation: false,
+    hasOlderHistory: false,
+    historyItems: overrides.historyItems ?? [],
+    loadOlderHistory: vi.fn(),
+    loadingOlderHistory: false,
+    loadingSessionMessages: false,
+    postSendFocusRequest: null,
+    selectSession: overrides.selectSession ?? (vi.fn(async (_sessionId: string) => undefined) as (sessionId: string) => Promise<void>),
+    sendMessage: async (message: string, selectedSkill?: unknown) => {
+      const result = await options.sendAgentMessage({
+        history: [],
+        message,
+        onReply: vi.fn(),
+        onSessionId: vi.fn(),
+        onStatus: vi.fn(),
+        selectedSkill,
+      });
+      return result.ok;
+    },
+    startNewSession: vi.fn(),
+    stopCurrentRun: vi.fn(),
+  };
+}
+
+function historyItem(id: string, title: string, status: MockHistoryItem["status"]): MockHistoryItem {
+  return {
+    id,
+    pinned: false,
+    status,
+    title,
+    updatedAt: "2026-07-09T00:00:00.000Z",
+  };
+}

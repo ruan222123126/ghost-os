@@ -1,5 +1,5 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent } from "react";
+import type { CSSProperties, FormEvent, KeyboardEvent } from "react";
 import {
   AssistantIntro,
   ChatComposer,
@@ -9,6 +9,7 @@ import {
   MoreActionSheet,
   ScrollDownButton,
 } from "./components/MobileChatHome";
+import type { SidebarHistoryItem } from "./components/mobileChat/types";
 import { MobileConnectionPanel } from "./components/MobileConnectionPanel";
 import { MobileSearchPage } from "./components/MobileSearchPage";
 import { MobileSettingsPanel } from "./components/MobileSettingsPanel";
@@ -37,6 +38,12 @@ function isNonEmptyMessage(value: string): boolean {
 }
 
 const SIDEBAR_CLOSE_DEFER_MS = 320;
+const COMPLETION_NOTIFICATION_STACK_LIMIT = 8;
+
+interface CompletionNotification {
+  id: string;
+  title: string;
+}
 
 function displayRuntime(
   agentRuntime: AgentRuntimeType,
@@ -136,7 +143,9 @@ function App() {
   const [isRuntimeMenuOpen, setIsRuntimeMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [pinnedHistoryIds, setPinnedHistoryIds] = useState<string[]>([]);
+  const [completionNotifications, setCompletionNotifications] = useState<CompletionNotification[]>([]);
   const pendingSelectHistoryTimeoutRef = useRef<number | null>(null);
+  const previousHistoryStatusRef = useRef<Map<string, SidebarHistoryItem["status"]>>(new Map());
   const localRuntimeConfig = useMemo(() => buildLocalRuntimeConfig(providerList, settings), [providerList, settings]);
   const chatConfig = settings.remoteExecutionEnabled ? config : localRuntimeConfig;
   const chatProviderList = providerList;
@@ -249,6 +258,35 @@ function App() {
     }
   }, [selectedSkill, supportsComposerSkills]);
 
+  useEffect(() => {
+    const previousStatuses = previousHistoryStatusRef.current;
+    const completedItems = mobileSessions.historyItems.filter((item) =>
+      item.status === "success"
+        && previousStatuses.has(item.id)
+        && previousStatuses.get(item.id) !== "success"
+    );
+
+    if (completedItems.length > 0) {
+      setCompletionNotifications((current) => {
+        const existingIds = new Set(current.map((notification) => notification.id));
+        const additions = completedItems
+          .filter((item) => !existingIds.has(item.id))
+          .map((item) => ({
+            id: item.id,
+            title: item.title.trim() || "该会话",
+          }));
+        if (additions.length === 0) {
+          return current;
+        }
+        return [...current, ...additions].slice(-COMPLETION_NOTIFICATION_STACK_LIMIT);
+      });
+    }
+
+    previousHistoryStatusRef.current = new Map(
+      mobileSessions.historyItems.map((item) => [item.id, item.status]),
+    );
+  }, [mobileSessions.historyItems]);
+
   async function sendMessage(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const trimmed = message.trim();
@@ -288,6 +326,15 @@ function App() {
       return;
     }
     startHistorySelection(sessionId);
+  }
+
+  function dismissCompletionNotification(sessionId: string): void {
+    setCompletionNotifications((current) => current.filter((notification) => notification.id !== sessionId));
+  }
+
+  function openCompletionNotification(sessionId: string): void {
+    dismissCompletionNotification(sessionId);
+    selectHistory(sessionId);
   }
 
   function startHistorySelection(sessionId: string): void {
@@ -399,6 +446,12 @@ function App() {
         onClose={() => setIsSearchOpen(false)}
         onSelectHistory={selectHistory}
         onSearchSessions={searchSessions}
+      />
+
+      <CompletionNotificationStack
+        notifications={completionNotifications}
+        onDismiss={dismissCompletionNotification}
+        onOpen={openCompletionNotification}
       />
 
       <div
@@ -539,6 +592,58 @@ function MobileTopLoadingBar(props: { label: string }) {
   return (
     <div className="mobile-top-loading-bar" role="status" aria-label={props.label}>
       <div className="mobile-top-loading-bar-fill" aria-hidden="true" />
+    </div>
+  );
+}
+
+function CompletionNotificationStack(props: {
+  notifications: CompletionNotification[];
+  onDismiss: (sessionId: string) => void;
+  onOpen: (sessionId: string) => void;
+}) {
+  if (props.notifications.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="completion-notification-stack" aria-live="polite">
+      {props.notifications.map((notification, index) => {
+        const depth = props.notifications.length - 1 - index;
+        return (
+          <div
+            key={notification.id}
+            className="completion-notification-card"
+            role="button"
+            style={{
+              left: `${depth * 8}px`,
+              top: `${depth * 8}px`,
+              transform: `scale(${1 - depth * 0.025})`,
+              zIndex: props.notifications.length - depth,
+            } as CSSProperties}
+            tabIndex={0}
+            onClick={() => props.onOpen(notification.id)}
+            onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                props.onOpen(notification.id);
+              }
+            }}
+          >
+            <span>{notification.title}会话已完成</span>
+            <button
+              className="completion-notification-close"
+              type="button"
+              aria-label="关闭"
+              onClick={(event) => {
+                event.stopPropagation();
+                props.onDismiss(notification.id);
+              }}
+            >
+              <span aria-hidden="true">×</span>
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }

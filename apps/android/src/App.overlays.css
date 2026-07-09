@@ -21,6 +21,84 @@
   visibility: visible;
 }
 
+.completion-notification-stack {
+  position: fixed;
+  top: max(14px, env(safe-area-inset-top));
+  left: max(14px, env(safe-area-inset-left));
+  z-index: 120;
+  width: min(76vw, 320px);
+  height: 96px;
+  pointer-events: none;
+}
+
+.completion-notification-card {
+  position: absolute;
+  width: 100%;
+  min-height: 72px;
+  border: 1px solid rgba(218, 220, 224, 0.94);
+  border-radius: 8px;
+  padding: 16px 42px 16px 16px;
+  display: flex;
+  align-items: center;
+  color: #202124;
+  background: #ffffff;
+  box-shadow:
+    0 16px 34px rgba(60, 64, 67, 0.18),
+    0 2px 8px rgba(60, 64, 67, 0.12);
+  cursor: pointer;
+  outline: none;
+  overflow: hidden;
+  pointer-events: auto;
+  transform-origin: top left;
+}
+
+.completion-notification-card:focus-visible {
+  border-color: #1a73e8;
+  box-shadow:
+    0 0 0 3px rgba(26, 115, 232, 0.22),
+    0 16px 34px rgba(60, 64, 67, 0.18),
+    0 2px 8px rgba(60, 64, 67, 0.12);
+}
+
+.completion-notification-card > span {
+  min-width: 0;
+  color: #202124;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.38;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.completion-notification-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #5f6368;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    background 140ms ease;
+}
+
+.completion-notification-close:hover,
+.completion-notification-close:focus-visible {
+  color: #202124;
+  background: #f1f3f4;
+}
+
+.completion-notification-close span {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
 .mobile-sidebar {
   position: fixed;
   top: 0;
