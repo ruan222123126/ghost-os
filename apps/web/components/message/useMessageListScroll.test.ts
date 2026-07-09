@@ -180,9 +180,68 @@ describe('components/message/useMessageListScroll', () => {
     });
 
     expect(scrollElement.scrollTo).toHaveBeenLastCalledWith({
-      behavior: 'smooth',
+      behavior: 'auto',
       top: 88,
     });
+  });
+
+  it('stops auto-follow immediately when the user scrolls upward near the bottom', async () => {
+    const scrollElement = createScrollElement({
+      clientHeight: 400,
+      scrollHeight: 1600,
+      scrollTop: 0,
+    });
+    const loadOlderHistory = jest.fn(async () => undefined);
+    let latestHook: HookProbeRenderState | null = null;
+    let renderer!: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        React.createElement(HookProbe, {
+          hasOlderHistory: false,
+          layoutSignature: 'session:ready',
+          loadOlderHistory,
+          onRender: (state) => {
+            latestHook = state;
+          },
+          rowCount: 12,
+          scrollElement,
+        }),
+        {
+          createNodeMock: createNodeMock(scrollElement),
+        },
+      );
+      await Promise.resolve();
+    });
+
+    expect(scrollElement.scrollTop).toBe(1200);
+
+    await act(async () => {
+      scrollElement.scrollTop = 1190;
+      scrollElement.dispatchEvent(new Event('scroll'));
+      await Promise.resolve();
+    });
+
+    expect(requireLatestHook(latestHook).showScrollToBottom).toBe(true);
+
+    scrollElement.scrollHeight = 1700;
+    await act(async () => {
+      renderer.update(
+        React.createElement(HookProbe, {
+          hasOlderHistory: false,
+          layoutSignature: 'session:streaming-growth',
+          loadOlderHistory,
+          onRender: (state) => {
+            latestHook = state;
+          },
+          rowCount: 12,
+          scrollElement,
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(scrollElement.scrollTop).toBe(1190);
   });
 
   it('reserves post-send viewport space while the requested user row is not virtualized yet', async () => {

@@ -4,7 +4,7 @@ import type { ChatMessage } from '@/lib/types';
 import type { PostSendFocusRequest } from '@/hooks/chat/types';
 
 const POST_SEND_ANCHOR_TOP_OFFSET_PX = 32;
-const POST_SEND_ANCHOR_SCROLL_BEHAVIOR: ScrollBehavior = 'smooth';
+const POST_SEND_ANCHOR_SCROLL_BEHAVIOR: ScrollBehavior = 'auto';
 const SCROLL_ANCHOR_TOLERANCE_PX = 2;
 type ScrollFrameHandle = number | ReturnType<typeof setTimeout>;
 

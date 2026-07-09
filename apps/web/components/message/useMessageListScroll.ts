@@ -7,6 +7,7 @@ import { useMessageListPostSendFocus } from './useMessageListPostSendFocus';
 
 const OLDER_HISTORY_TOP_THRESHOLD_PX = 240;
 const HARD_BOTTOM_TOLERANCE_PX = 2;
+const USER_SCROLL_UP_TOLERANCE_PX = 2;
 type ScrollFrameHandle = number | ReturnType<typeof setTimeout>;
 
 interface OlderHistoryAnchorSnapshot {
@@ -179,11 +180,15 @@ function useAutoFollowTracking(options: {
     setShowScrollToBottom,
   } = options;
   const userScrollIntentRef = useRef(false);
+  const previousScrollTopRef = useRef(0);
   const syncAutoFollow = useCallback(() => {
     const container = scrollElementRef.current;
     if (!container) {
       return;
     }
+    const previousScrollTop = previousScrollTopRef.current;
+    const currentScrollTop = container.scrollTop;
+    previousScrollTopRef.current = currentScrollTop;
     if (postSendLockRef.current) {
       if (postSendLockJustStartedRef.current) {
         setShowScrollToBottom(false);
@@ -203,6 +208,15 @@ function useAutoFollowTracking(options: {
     }
 
     userScrollIntentRef.current = false;
+    if (
+      autoFollowRef.current
+      && currentScrollTop < previousScrollTop - USER_SCROLL_UP_TOLERANCE_PX
+    ) {
+      autoFollowRef.current = false;
+      setShowScrollToBottom(true);
+      return;
+    }
+
     syncBottomAffordance(container, autoFollowRef, setShowScrollToBottom);
   }, [
     autoFollowRef,
@@ -223,6 +237,7 @@ function useAutoFollowTracking(options: {
     }
 
     syncAutoFollow();
+    previousScrollTopRef.current = container.scrollTop;
     container.addEventListener('scroll', syncAutoFollow, { passive: true });
     container.addEventListener('wheel', markUserScrollIntent, { passive: true });
     container.addEventListener('touchmove', markUserScrollIntent, { passive: true });

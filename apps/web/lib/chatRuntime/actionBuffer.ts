@@ -1,6 +1,6 @@
 import type { ChatRuntimeAction } from './actions';
 
-export const CHAT_STREAM_ACTION_FLUSH_INTERVAL_MS = 16;
+export const CHAT_STREAM_ACTION_FLUSH_INTERVAL_MS = 50;
 
 type TimerHandle = ReturnType<typeof setTimeout>;
 
