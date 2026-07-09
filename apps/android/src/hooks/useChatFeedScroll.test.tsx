@@ -255,6 +255,7 @@ describe("useChatFeedScroll", () => {
     );
 
     expect(metrics.scrollTop).toBe(300);
+    expect(feedElement().style.scrollBehavior).toBe("");
 
     metrics.scrollHeight = 1420;
     rerender(
@@ -271,7 +272,38 @@ describe("useChatFeedScroll", () => {
     );
     notifyResize(feedContentElement());
 
-    expect(metrics.scrollTop).toBe(420);
+    expect(metrics.scrollTop).toBe(300);
+  });
+
+  it("temporarily disables smooth behavior while compensating prepended history", async () => {
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 0 });
+    const loadOlderHistory = vi.fn(async () => undefined);
+    const latest = message("session-1:1:user", "user");
+    const older = message("session-1:0:user", "user");
+    const { rerender } = render(
+      <ScrollHarness
+        hasOlderHistory
+        messages={[latest]}
+        metrics={metrics}
+        onLoadOlderHistory={loadOlderHistory}
+      />,
+    );
+    feedElement().style.scrollBehavior = "smooth";
+
+    fireEvent.scroll(feedElement());
+
+    metrics.scrollHeight = 1300;
+    rerender(
+      <ScrollHarness
+        hasOlderHistory={false}
+        messages={[older, latest]}
+        metrics={metrics}
+        onLoadOlderHistory={loadOlderHistory}
+      />,
+    );
+
+    expect(metrics.scrollTop).toBe(300);
+    expect(feedElement().style.scrollBehavior).toBe("smooth");
   });
 
   it("keeps the older-history anchor while the load request is still pending", async () => {

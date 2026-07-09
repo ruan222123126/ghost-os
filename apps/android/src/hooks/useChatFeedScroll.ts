@@ -23,6 +23,7 @@ interface PostSendFocusRequest {
 }
 
 interface HistoryAnchorSnapshot {
+  messageCount: number;
   scrollHeight: number;
   scrollTop: number;
 }
@@ -139,7 +140,6 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     }
 
     const resizeObserver = new ResizeObserver(() => {
-      compensateHistoryAnchor();
       syncPostSendAnchor();
       if (autoScrollRef.current) {
         scrollToBottom("auto");
@@ -293,6 +293,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     olderLoadPendingRef.current = true;
     autoScrollRef.current = false;
     historyAnchorRef.current = {
+      messageCount: options.messages.length,
       scrollHeight: element.scrollHeight,
       scrollTop: element.scrollTop,
     };
@@ -309,19 +310,25 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     if (!element || !anchor) {
       return;
     }
+    if (options.messages.length <= anchor.messageCount) {
+      if (!options.loadingOlderHistory) {
+        historyAnchorRef.current = null;
+      }
+      return;
+    }
 
     const delta = element.scrollHeight - anchor.scrollHeight;
     if (delta <= 0) {
+      historyAnchorRef.current = null;
       return;
     }
 
     const nextScrollTop = anchor.scrollTop + delta;
-    element.scrollTop = nextScrollTop;
+    withAutoScrollBehavior(element, () => {
+      element.scrollTop = nextScrollTop;
+    });
     previousScrollTopRef.current = nextScrollTop;
-    historyAnchorRef.current = {
-      scrollHeight: element.scrollHeight,
-      scrollTop: nextScrollTop,
-    };
+    historyAnchorRef.current = null;
   }
 
   function syncBottomAffordance(): void {
@@ -358,4 +365,14 @@ function hasUserMessage(messages: MobileConversationMessage[], messageId: string
 
 function requiredTrailingSpacerPx(element: HTMLElement, targetScrollTop: number): number {
   return Math.max(0, targetScrollTop + element.clientHeight - element.scrollHeight);
+}
+
+function withAutoScrollBehavior(element: HTMLElement, action: () => void): void {
+  const previousScrollBehavior = element.style.scrollBehavior;
+  element.style.scrollBehavior = "auto";
+  try {
+    action();
+  } finally {
+    element.style.scrollBehavior = previousScrollBehavior;
+  }
 }

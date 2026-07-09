@@ -150,8 +150,10 @@ export const ConversationMessageList = memo(function ConversationMessageList(pro
     [props.messages, props.reply, props.status],
   );
   const virtualizer = useVirtualizer({
+    anchorTo: "end",
     count: listItems.length,
     estimateSize: estimateConversationRowSize,
+    followOnAppend: "auto",
     getItemKey: (index) => conversationListItemKey(listItems[index]),
     getScrollElement: () => props.scrollElementRef?.current ?? null,
     overscan: 8,
