@@ -244,6 +244,60 @@ describe('components/message/useMessageListScroll', () => {
     expect(scrollElement.scrollTop).toBe(1190);
   });
 
+  it('does not follow streaming layout changes while the user scroll lock is active', async () => {
+    jest.useFakeTimers();
+    const scrollElement = createScrollElement({
+      clientHeight: 400,
+      scrollHeight: 1600,
+      scrollTop: 0,
+    });
+    const loadOlderHistory = jest.fn(async () => undefined);
+    let renderer!: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        React.createElement(HookProbe, {
+          hasOlderHistory: false,
+          layoutSignature: 'session:ready',
+          loadOlderHistory,
+          rowCount: 12,
+          scrollElement,
+        }),
+        {
+          createNodeMock: createNodeMock(scrollElement),
+        },
+      );
+      await Promise.resolve();
+    });
+
+    expect(scrollElement.scrollTop).toBe(1200);
+
+    await act(async () => {
+      scrollElement.dispatchEvent(new Event('wheel'));
+      scrollElement.scrollHeight = 1700;
+      renderer.update(
+        React.createElement(HookProbe, {
+          hasOlderHistory: false,
+          layoutSignature: 'session:streaming-growth',
+          loadOlderHistory,
+          rowCount: 12,
+          scrollElement,
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(scrollElement.scrollTop).toBe(1200);
+
+    await act(async () => {
+      jest.advanceTimersByTime(1500);
+      jest.runOnlyPendingTimers();
+      await Promise.resolve();
+    });
+
+    expect(scrollElement.scrollTop).toBe(1300);
+  });
+
   it('reserves post-send viewport space while the requested user row is not virtualized yet', async () => {
     jest.useFakeTimers();
     const scrollElement = createScrollElement({

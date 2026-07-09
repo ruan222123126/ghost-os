@@ -2,6 +2,7 @@
   min-width: 0;
   max-width: 100%;
   position: relative;
+  contain: layout style;
 }
 
 .assistant-reply-parts {
@@ -133,6 +134,7 @@
   color: #3c4043;
   white-space: normal;
   overflow-wrap: anywhere;
+  contain: layout style;
 }
 
 .assistant-markdown > * {

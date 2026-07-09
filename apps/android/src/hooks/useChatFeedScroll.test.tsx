@@ -38,6 +38,7 @@ describe("useChatFeedScroll", () => {
     hookSnapshots.length = 0;
     rafCallbacks = [];
     resizeObservers = [];
+    vi.useFakeTimers();
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
       rafCallbacks.push(callback);
       return rafCallbacks.length;
@@ -48,6 +49,7 @@ describe("useChatFeedScroll", () => {
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -427,6 +429,32 @@ describe("useChatFeedScroll", () => {
     expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 620, behavior: "auto" });
   });
 
+  it("does not auto-scroll while the user scroll lock is active during streaming", () => {
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 500 });
+    render(
+      <ScrollHarness
+        messages={[message("session-1:0:user", "user")]}
+        metrics={metrics}
+        reply={reply("streaming reply")}
+        statusTone="loading"
+      />,
+    );
+    fireEvent.scroll(feedElement());
+    vi.mocked(feedElement().scrollTo).mockClear();
+
+    fireEvent.wheel(feedElement());
+    metrics.scrollHeight = 1120;
+    notifyResize(feedElement());
+
+    expect(feedElement().scrollTo).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(1500);
+    });
+
+    expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 620, behavior: "auto" });
+  });
+
   it("keeps bottom follow active during an in-progress smooth scroll to bottom", () => {
     const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 120 });
     render(
@@ -517,6 +545,9 @@ function ScrollHarness(props: {
         scroll.scrollRef.current = node;
       }}
       onScroll={scroll.handleScroll}
+      onTouchMove={scroll.handleUserScrollIntent}
+      onTouchStart={scroll.handleUserScrollIntent}
+      onWheel={scroll.handleUserScrollIntent}
     >
       <div data-testid="feed-content" data-chat-feed-content="">
         {props.feedItems?.map((item) => (

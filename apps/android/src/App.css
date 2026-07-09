@@ -202,6 +202,7 @@ code {
   overflow-anchor: auto;
   overscroll-behavior-y: contain;
   scroll-behavior: smooth;
+  contain: layout style;
 }
 
 .chat-feed.is-empty {
@@ -230,6 +231,7 @@ code {
   width: 100%;
   padding-bottom: 24px;
   overflow-anchor: auto;
+  contain: layout style;
   will-change: transform;
 }
 
@@ -377,6 +379,7 @@ code {
   max-width: 100%;
   margin: 0 auto;
   display: flex;
+  contain: layout style;
 }
 
 .user-row {

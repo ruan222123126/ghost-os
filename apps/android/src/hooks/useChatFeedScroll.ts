@@ -4,6 +4,7 @@ import type { AgentPayload, MobileConversationMessage, StatusMessage } from "../
 const BOTTOM_THRESHOLD_PX = 48;
 const LOAD_OLDER_THRESHOLD_PX = 32;
 const SCROLL_ANCHOR_TOLERANCE_PX = 2;
+const USER_SCROLL_LOCK_RELEASE_MS = 1500;
 const CHAT_FEED_CONTENT_SELECTOR = "[data-chat-feed-content]";
 
 interface UseChatFeedScrollOptions {
@@ -46,6 +47,8 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   const previousSessionIdRef = useRef<string | undefined>(undefined);
   const previousScrollTopRef = useRef(0);
   const autoScrollRef = useRef(false);
+  const isUserScrollingRef = useRef(false);
+  const userScrollReleaseTimeoutRef = useRef<number | null>(null);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const [trailingSpacerPx, setTrailingSpacerPxState] = useState(0);
   const [registeredUserRowVersion, setRegisteredUserRowVersion] = useState(0);
@@ -82,6 +85,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     historyAnchorRef.current = null;
     olderLoadPendingRef.current = false;
     autoScrollRef.current = false;
+    releaseUserScrollLock();
     setTrailingSpacerPx(0);
     setShowScrollDown(false);
     if (hadPreviousSession && scrollRef.current) {
@@ -134,6 +138,12 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   }, [options.loadingOlderHistory]);
 
   useLayoutEffect(() => {
+    return () => {
+      clearUserScrollReleaseTimeout();
+    };
+  }, []);
+
+  useLayoutEffect(() => {
     const element = scrollRef.current;
     if (!element || typeof ResizeObserver === "undefined") {
       return;
@@ -141,7 +151,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
 
     const resizeObserver = new ResizeObserver(() => {
       syncPostSendAnchor();
-      if (autoScrollRef.current) {
+      if (autoScrollRef.current && !isUserScrollingRef.current) {
         scrollToBottom("auto");
         return;
       }
@@ -202,6 +212,20 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     setShowScrollDown(distanceFromBottom(element) > BOTTOM_THRESHOLD_PX);
   }
 
+  function handleUserScrollIntent(): void {
+    isUserScrollingRef.current = true;
+    clearUserScrollReleaseTimeout();
+    userScrollReleaseTimeoutRef.current = window.setTimeout(() => {
+      isUserScrollingRef.current = false;
+      userScrollReleaseTimeoutRef.current = null;
+      if (autoScrollRef.current) {
+        scrollToBottom("auto");
+        return;
+      }
+      syncBottomAffordance();
+    }, USER_SCROLL_LOCK_RELEASE_MS);
+  }
+
   function resetScrollDown(): void {
     autoScrollRef.current = false;
     postSendAnchorRef.current = null;
@@ -216,6 +240,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
       return;
     }
 
+    releaseUserScrollLock();
     autoScrollRef.current = true;
     postSendAnchorRef.current = null;
     historyAnchorRef.current = null;
@@ -248,7 +273,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   function syncPostSendAnchor(): void {
     const anchor = postSendAnchorRef.current;
     const element = scrollRef.current;
-    if (!anchor || !element || autoScrollRef.current) {
+    if (!anchor || !element || autoScrollRef.current || isUserScrollingRef.current) {
       return;
     }
     if (postSendAnchorJustFocusedRef.current) {
@@ -341,6 +366,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
 
   return {
     handleScroll,
+    handleUserScrollIntent,
     historySentinelRef,
     registerUserMessageRow,
     resetScrollDown,
@@ -349,6 +375,19 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     showScrollDown,
     trailingSpacerPx,
   };
+
+  function clearUserScrollReleaseTimeout(): void {
+    if (userScrollReleaseTimeoutRef.current === null) {
+      return;
+    }
+    window.clearTimeout(userScrollReleaseTimeoutRef.current);
+    userScrollReleaseTimeoutRef.current = null;
+  }
+
+  function releaseUserScrollLock(): void {
+    clearUserScrollReleaseTimeout();
+    isUserScrollingRef.current = false;
+  }
 }
 
 function distanceFromBottom(element: HTMLElement): number {

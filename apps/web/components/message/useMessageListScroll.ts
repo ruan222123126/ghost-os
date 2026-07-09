@@ -8,7 +8,9 @@ import { useMessageListPostSendFocus } from './useMessageListPostSendFocus';
 const OLDER_HISTORY_TOP_THRESHOLD_PX = 240;
 const HARD_BOTTOM_TOLERANCE_PX = 2;
 const USER_SCROLL_UP_TOLERANCE_PX = 2;
+const USER_SCROLL_LOCK_RELEASE_MS = 1500;
 type ScrollFrameHandle = number | ReturnType<typeof setTimeout>;
+type TimeoutHandle = ReturnType<typeof setTimeout>;
 
 interface OlderHistoryAnchorSnapshot {
   scrollHeight: number;
@@ -36,12 +38,15 @@ export function useMessageListScroll(options: UseMessageListScrollOptions) {
   const olderHistoryAnchorRef = useRef<OlderHistoryAnchorSnapshot | null>(null);
   const scrollFrameRef = useRef<ScrollFrameHandle | null>(null);
   const skipOlderHistoryLoadOnceRef = useRef(false);
+  const userScrollLockRef = useRef(false);
+  const userScrollLockTimeoutRef = useRef<TimeoutHandle | null>(null);
 
   const scheduleBottomFollow = useCallback(() => {
     scheduleScrollToBottom({
       autoFollowRef,
       scrollElementRef,
       scrollFrameRef,
+      userScrollLockRef,
     });
   }, []);
 
@@ -80,6 +85,7 @@ export function useMessageListScroll(options: UseMessageListScrollOptions) {
     }
 
     cancelScrollFrame(scrollFrameRef);
+    releaseUserScrollLock(userScrollLockRef, userScrollLockTimeoutRef);
     postSendFocus.cancelAnchorScroll();
     postSendFocus.releasePostSendLock(true);
     autoFollowRef.current = true;
@@ -95,8 +101,11 @@ export function useMessageListScroll(options: UseMessageListScrollOptions) {
     detachPostSendLockFromAnchor: postSendFocus.detachPostSendLockFromAnchor,
     postSendLockJustStartedRef: postSendFocus.postSendLockJustStartedRef,
     postSendLockRef: postSendFocus.postSendLockRef,
+    scrollFrameRef,
     scrollElementRef,
     setShowScrollToBottom,
+    userScrollLockRef,
+    userScrollLockTimeoutRef,
   });
   useBottomFollowOnLayoutChange({
     autoFollowRef,
@@ -119,6 +128,7 @@ export function useMessageListScroll(options: UseMessageListScrollOptions) {
     scrollElementRef,
   });
   useScrollFrameCleanup(scrollFrameRef);
+  useUserScrollLockCleanup(userScrollLockTimeoutRef);
 
   return {
     registerMessageRow: postSendFocus.registerMessageRow,
@@ -169,15 +179,21 @@ function useAutoFollowTracking(options: {
   postSendLockJustStartedRef: MutableRefObject<boolean>;
   postSendLockRef: MutableRefObject<unknown | null>;
   scrollElementRef: MutableRefObject<HTMLDivElement | null>;
+  scrollFrameRef: MutableRefObject<ScrollFrameHandle | null>;
   setShowScrollToBottom: (value: boolean) => void;
+  userScrollLockRef: MutableRefObject<boolean>;
+  userScrollLockTimeoutRef: MutableRefObject<TimeoutHandle | null>;
 }) {
   const {
     autoFollowRef,
     detachPostSendLockFromAnchor,
     postSendLockJustStartedRef,
     postSendLockRef,
+    scrollFrameRef,
     scrollElementRef,
     setShowScrollToBottom,
+    userScrollLockRef,
+    userScrollLockTimeoutRef,
   } = options;
   const userScrollIntentRef = useRef(false);
   const previousScrollTopRef = useRef(0);
@@ -228,7 +244,33 @@ function useAutoFollowTracking(options: {
   ]);
   const markUserScrollIntent = useCallback(() => {
     userScrollIntentRef.current = true;
-  }, []);
+    userScrollLockRef.current = true;
+    clearUserScrollLockTimeout(userScrollLockTimeoutRef);
+    userScrollLockTimeoutRef.current = setTimeout(() => {
+      userScrollLockRef.current = false;
+      userScrollLockTimeoutRef.current = null;
+      if (autoFollowRef.current) {
+        scheduleScrollToBottom({
+          autoFollowRef,
+          scrollElementRef,
+          scrollFrameRef,
+          userScrollLockRef,
+        });
+        return;
+      }
+      const container = scrollElementRef.current;
+      if (container) {
+        syncBottomAffordance(container, autoFollowRef, setShowScrollToBottom);
+      }
+    }, USER_SCROLL_LOCK_RELEASE_MS);
+  }, [
+    autoFollowRef,
+    scrollElementRef,
+    scrollFrameRef,
+    setShowScrollToBottom,
+    userScrollLockRef,
+    userScrollLockTimeoutRef,
+  ]);
 
   useEffect(() => {
     const container = scrollElementRef.current;
@@ -239,10 +281,12 @@ function useAutoFollowTracking(options: {
     syncAutoFollow();
     previousScrollTopRef.current = container.scrollTop;
     container.addEventListener('scroll', syncAutoFollow, { passive: true });
+    container.addEventListener('touchstart', markUserScrollIntent, { passive: true });
     container.addEventListener('wheel', markUserScrollIntent, { passive: true });
     container.addEventListener('touchmove', markUserScrollIntent, { passive: true });
     return () => {
       container.removeEventListener('scroll', syncAutoFollow);
+      container.removeEventListener('touchstart', markUserScrollIntent);
       container.removeEventListener('wheel', markUserScrollIntent);
       container.removeEventListener('touchmove', markUserScrollIntent);
     };
@@ -375,6 +419,14 @@ function useScrollFrameCleanup(scrollFrameRef: MutableRefObject<ScrollFrameHandl
   }, [scrollFrameRef]);
 }
 
+function useUserScrollLockCleanup(userScrollLockTimeoutRef: MutableRefObject<TimeoutHandle | null>) {
+  useEffect(() => {
+    return () => {
+      clearUserScrollLockTimeout(userScrollLockTimeoutRef);
+    };
+  }, [userScrollLockTimeoutRef]);
+}
+
 function useMountedFlag(mountedRef: MutableRefObject<boolean>) {
   useEffect(() => {
     mountedRef.current = true;
@@ -406,9 +458,10 @@ function scheduleScrollToBottom(options: {
   autoFollowRef: MutableRefObject<boolean>;
   scrollElementRef: MutableRefObject<HTMLDivElement | null>;
   scrollFrameRef: MutableRefObject<ScrollFrameHandle | null>;
+  userScrollLockRef: MutableRefObject<boolean>;
 }) {
   const container = options.scrollElementRef.current;
-  if (!container || !options.autoFollowRef.current) {
+  if (!container || !options.autoFollowRef.current || options.userScrollLockRef.current) {
     return;
   }
 
@@ -422,9 +475,10 @@ function scheduleScrollToBottom(options: {
 function scrollToBottomIfStillFollowing(options: {
   autoFollowRef: MutableRefObject<boolean>;
   scrollElementRef: MutableRefObject<HTMLDivElement | null>;
+  userScrollLockRef: MutableRefObject<boolean>;
 }) {
   const container = options.scrollElementRef.current;
-  if (!container || !options.autoFollowRef.current) {
+  if (!container || !options.autoFollowRef.current || options.userScrollLockRef.current) {
     return;
   }
 
@@ -462,4 +516,21 @@ function cancelScrollFrame(scrollFrameRef: MutableRefObject<ScrollFrameHandle | 
     clearTimeout(scrollFrameRef.current);
   }
   scrollFrameRef.current = null;
+}
+
+function clearUserScrollLockTimeout(userScrollLockTimeoutRef: MutableRefObject<TimeoutHandle | null>) {
+  if (userScrollLockTimeoutRef.current === null) {
+    return;
+  }
+
+  clearTimeout(userScrollLockTimeoutRef.current);
+  userScrollLockTimeoutRef.current = null;
+}
+
+function releaseUserScrollLock(
+  userScrollLockRef: MutableRefObject<boolean>,
+  userScrollLockTimeoutRef: MutableRefObject<TimeoutHandle | null>,
+) {
+  clearUserScrollLockTimeout(userScrollLockTimeoutRef);
+  userScrollLockRef.current = false;
 }

@@ -217,6 +217,7 @@ function App() {
   const showTopLoadingBar = mobileSessions.loadingSessionMessages || mobileSessions.loadingOlderHistory;
   const {
     handleScroll,
+    handleUserScrollIntent,
     historySentinelRef,
     registerUserMessageRow,
     resetScrollDown,
@@ -488,6 +489,9 @@ function App() {
         <main
           ref={setChatFeedRef}
           onScroll={handleScroll}
+          onTouchMove={handleUserScrollIntent}
+          onTouchStart={handleUserScrollIntent}
+          onWheel={handleUserScrollIntent}
           className={`chat-feed ${showEmptyIntro ? "is-empty" : ""}`}
         >
           {showEmptyIntro ? (
