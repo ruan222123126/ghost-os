@@ -359,6 +359,9 @@ function syncFinalMessageText(runtime: MobileAgentStreamRuntime, finalText: stri
   if (!finalText.trim() || finalText === runtime.message) {
     return;
   }
+  if (isRepeatedFinalSnapshot(finalText, runtime.message)) {
+    return;
+  }
 
   const hasToolParts = runtime.parts.some((part) => part.kind === "tool");
   if (!hasToolParts) {
@@ -372,4 +375,8 @@ function syncFinalMessageText(runtime: MobileAgentStreamRuntime, finalText: stri
   }
 
   runtime.message = finalText;
+}
+
+function isRepeatedFinalSnapshot(finalText: string, currentText: string): boolean {
+  return currentText !== "" && finalText === `${currentText}${currentText}`;
 }
