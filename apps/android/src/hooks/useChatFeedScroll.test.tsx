@@ -394,6 +394,31 @@ describe("useChatFeedScroll", () => {
 
     expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 620, behavior: "auto" });
   });
+
+  it("keeps bottom follow active during an in-progress smooth scroll to bottom", () => {
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 120 });
+    render(
+      <ScrollHarness
+        messages={[message("session-1:0:user", "user")]}
+        metrics={metrics}
+        showScrollDownControl
+      />,
+    );
+    vi.mocked(feedElement().scrollTo).mockClear();
+
+    fireEvent.scroll(feedElement());
+    fireEvent.click(screen.getByRole("button", { name: "scroll bottom" }));
+
+    expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 500, behavior: "smooth" });
+
+    metrics.scrollTop = 300;
+    fireEvent.scroll(feedElement());
+
+    metrics.scrollHeight = 1240;
+    notifyResize(feedElement());
+
+    expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 740, behavior: "auto" });
+  });
 });
 
 class MockResizeObserver {
@@ -431,6 +456,7 @@ function ScrollHarness(props: {
   postSendFocusRequest?: PostSendFocusRequest | null;
   reply?: AgentPayload;
   sessionId?: string;
+  showScrollDownControl?: boolean;
   statusTone?: StatusMessage["tone"];
 }) {
   const scroll = useChatFeedScroll({
@@ -476,6 +502,9 @@ function ScrollHarness(props: {
         ))}
       </div>
       <div data-testid="history-sentinel" ref={scroll.historySentinelRef} />
+      {props.showScrollDownControl ? (
+        <button type="button" onClick={() => scroll.scrollToBottom()} aria-label="scroll bottom" />
+      ) : null}
     </main>
   );
 }

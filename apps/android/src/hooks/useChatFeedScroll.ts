@@ -218,10 +218,14 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
 
     autoScrollRef.current = true;
     postSendAnchorRef.current = null;
+    historyAnchorRef.current = null;
+    setTrailingSpacerPx(0);
     setShowScrollDown(false);
     const nextScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
     element.scrollTo({ top: nextScrollTop, behavior });
-    previousScrollTopRef.current = nextScrollTop;
+    if (behavior !== "smooth") {
+      previousScrollTopRef.current = nextScrollTop;
+    }
   }
 
   function focusUserMessage(messageId: string): boolean {
