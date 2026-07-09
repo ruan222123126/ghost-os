@@ -6,6 +6,7 @@ const NO_ACTIVE_THINKING_SEGMENT_INDEX = -1;
 export interface ChatRuntimeState {
   assistantBuffer: string;
   assistantMessageId: string;
+  assistantRawBuffer: string;
   nextStructuredToolPreviewSeq: number;
   thinkingActiveSegmentIndex: number;
   thinkingBuffers: string[];
@@ -27,6 +28,7 @@ export function createChatRuntimeState(traceId: string, sessionId?: string): Cha
   return {
     assistantBuffer: '',
     assistantMessageId: `stream-assistant:${trimmedTraceId}`,
+    assistantRawBuffer: '',
     nextStructuredToolPreviewSeq: 1,
     thinkingActiveSegmentIndex: NO_ACTIVE_THINKING_SEGMENT_INDEX,
     thinkingBuffers: [],
@@ -50,6 +52,7 @@ export function createChatRuntimeStateFromDraft(
 ): ChatRuntimeState {
   const runtime = createChatRuntimeState(draft.trace_id, sessionId);
   runtime.assistantBuffer = draft.assistant_segments.map((segment) => segment.content).join('');
+  runtime.assistantRawBuffer = runtime.assistantBuffer;
   runtime.thinkingBuffers = draft.thinking_segments.map((segment) => segment.content);
   runtime.thinkingActiveSegmentIndex = resolveActiveThinkingSegmentIndex(draft);
 

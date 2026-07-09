@@ -28,6 +28,8 @@ interface ProjectAgentEventOptions {
   runtime: ChatRuntimeState;
 }
 
+const MIN_OVERLAP_DELTA_TRIM_LENGTH = 8;
+
 export function projectAgentEvent(options: ProjectAgentEventOptions): ChatRuntimeAction[] {
   switch (options.event.type) {
     case 'completion_delta':
@@ -87,10 +89,11 @@ function projectThinkingDelta(runtime: ChatRuntimeState, thinking?: string): Cha
 }
 
 function projectTextDelta(runtime: ChatRuntimeState, traceId: string, text?: string): ChatRuntimeAction[] {
-  const delta = normalizeAssistantTextDelta(runtime.assistantBuffer, text);
+  const delta = normalizeAssistantTextDelta(runtime.assistantRawBuffer, text);
   if (!delta) {
     return [];
   }
+  runtime.assistantRawBuffer = `${runtime.assistantRawBuffer}${delta}`;
   const consumed = consumeToolTagStreamChunk(runtime.toolTagState, delta);
   return projectToolTagUnits(runtime, traceId, consumed.units);
 }
@@ -100,9 +103,27 @@ function normalizeAssistantTextDelta(assistantBuffer: string, text?: string): st
     return '';
   }
   if (!assistantBuffer || !text.startsWith(assistantBuffer)) {
-    return text;
+    return trimOverlappingTextDelta(assistantBuffer, text);
   }
   return text.slice(assistantBuffer.length);
+}
+
+function trimOverlappingTextDelta(assistantBuffer: string, text: string): string {
+  const overlapLength = longestSuffixPrefixLength(assistantBuffer, text);
+  if (overlapLength < MIN_OVERLAP_DELTA_TRIM_LENGTH) {
+    return text;
+  }
+  return text.slice(overlapLength);
+}
+
+function longestSuffixPrefixLength(left: string, right: string): number {
+  const maxLength = Math.min(left.length, right.length);
+  for (let length = maxLength; length > 0; length -= 1) {
+    if (left.endsWith(right.slice(0, length))) {
+      return length;
+    }
+  }
+  return 0;
 }
 
 function projectAwaitingHuman({ event, runtime }: ProjectAgentEventOptions): ChatRuntimeAction[] {
@@ -134,6 +155,7 @@ function projectMessage({ event, runtime }: ProjectAgentEventOptions): ChatRunti
     assistantText: resolveVisibleAssistantText(payload.text, runtime.assistantBuffer),
   });
   runtime.assistantBuffer = '';
+  runtime.assistantRawBuffer = '';
   clearRuntimeThinking(runtime);
   return actions;
 }
