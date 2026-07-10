@@ -44,6 +44,20 @@ describe("MobileSidebar", () => {
     expect(screen.getByText("Task 40")).toBeTruthy();
     expect(screen.getByText("Task 44")).toBeTruthy();
   });
+
+  it("does not render task status badges", () => {
+    renderSidebar({
+      historyItems: [
+        historyItem("running", "Running task", "running"),
+        historyItem("success", "Completed task", "success"),
+        historyItem("error", "Failed task", "error"),
+      ],
+    });
+
+    expect(screen.queryByText("运行中")).toBeNull();
+    expect(screen.queryByText("完成")).toBeNull();
+    expect(screen.queryByText("失败")).toBeNull();
+  });
 });
 
 function renderSidebar(options: {
@@ -76,6 +90,20 @@ function historyItems(count: number): SidebarHistoryItem[] {
     title: `Task ${String(index).padStart(2, "0")}`,
     updatedAt: `2026-01-01T00:${String(59 - index).padStart(2, "0")}:00.000Z`,
   }));
+}
+
+function historyItem(
+  id: string,
+  title: string,
+  status: NonNullable<SidebarHistoryItem["status"]>,
+): SidebarHistoryItem {
+  return {
+    id,
+    pinned: false,
+    status,
+    title,
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
 }
 
 function settings(): StoredSettings {
