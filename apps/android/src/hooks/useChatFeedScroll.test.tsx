@@ -75,6 +75,48 @@ describe("useChatFeedScroll", () => {
     expect(latestSnapshot().showScrollDown).toBe(false);
   });
 
+  it("shrinks streaming whitespace with content growth and retains the final remainder", () => {
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 300, scrollTop: 0 });
+    const userMessage = message("pending:user:1710000000000", "user");
+    const { rerender } = render(
+      <ScrollHarness
+        feedItems={[feedItem(userMessage.id, 120, 200)]}
+        messages={[userMessage]}
+        metrics={metrics}
+        postSendFocusRequest={postSendRequest(userMessage.id)}
+        reply={reply("partial")}
+        statusTone="loading"
+      />,
+    );
+
+    expect(latestSnapshot().trailingSpacerPx).toBe(320);
+
+    metrics.scrollHeight = 720;
+    rerender(
+      <ScrollHarness
+        feedItems={[feedItem(userMessage.id, 120, 200)]}
+        messages={[userMessage]}
+        metrics={metrics}
+        postSendFocusRequest={postSendRequest(userMessage.id)}
+        reply={reply("partial response grew")}
+        statusTone="loading"
+      />,
+    );
+    expect(latestSnapshot().trailingSpacerPx).toBe(220);
+
+    rerender(
+      <ScrollHarness
+        feedItems={[feedItem(userMessage.id, 120, 200)]}
+        messages={[userMessage]}
+        metrics={metrics}
+        postSendFocusRequest={postSendRequest(userMessage.id)}
+        reply={reply("complete")}
+        statusTone="success"
+      />,
+    );
+    expect(latestSnapshot().trailingSpacerPx).toBe(220);
+  });
+
   it("does not focus appended messages without a post-send request", () => {
     const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 300, scrollTop: 0 });
     const userMessage = message("pending:user:1710000000000", "user");
@@ -120,7 +162,28 @@ describe("useChatFeedScroll", () => {
     expect(feedElement().scrollTo).not.toHaveBeenCalled();
   });
 
-  it("resumes bottom follow when sending from a scrolled-up conversation", () => {
+  it("does not enable bottom follow from a programmatic scroll event", () => {
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 500 });
+    const { rerender } = render(
+      <ScrollHarness messages={[message("session-1:0:user", "user")]} metrics={metrics} />,
+    );
+    fireEvent.scroll(feedElement());
+    vi.mocked(feedElement().scrollTo).mockClear();
+
+    metrics.scrollHeight = 1120;
+    rerender(
+      <ScrollHarness
+        messages={[message("session-1:0:user", "user")]}
+        metrics={metrics}
+        reply={reply("streaming reply")}
+        statusTone="loading"
+      />,
+    );
+
+    expect(feedElement().scrollTo).not.toHaveBeenCalled();
+  });
+
+  it("anchors a new user message without enabling automatic bottom follow", () => {
     const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 0 });
     const existingMessage = message("session-1:0:user", "user");
     const followUp = message("session-1:1:user", "user");
@@ -144,7 +207,7 @@ describe("useChatFeedScroll", () => {
     flushRaf();
 
     expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 260, behavior: "auto" });
-    expect(latestSnapshot().showScrollDown).toBe(false);
+    expect(latestSnapshot().showScrollDown).toBe(true);
   });
 
   it("loads older history at the top and compensates scrollTop", async () => {
@@ -409,6 +472,40 @@ describe("useChatFeedScroll", () => {
     expect(metrics.scrollTop).toBe(0);
   });
 
+  it("preserves the post-send anchor when a new conversation receives its session id", () => {
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 300, scrollTop: 0 });
+    const userMessage = message("pending:user:1710000000000", "user");
+    const request = postSendRequest(userMessage.id);
+    const { rerender } = render(
+      <ScrollHarness
+        feedItems={[feedItem(userMessage.id, 120, 200)]}
+        messages={[userMessage]}
+        metrics={metrics}
+        postSendFocusRequest={request}
+        reply={reply("partial")}
+        statusTone="loading"
+      />,
+    );
+
+    expect(metrics.scrollTop).toBe(120);
+    expect(latestSnapshot().trailingSpacerPx).toBe(320);
+
+    rerender(
+      <ScrollHarness
+        feedItems={[feedItem(userMessage.id, 0, 80)]}
+        messages={[userMessage]}
+        metrics={metrics}
+        postSendFocusRequest={request}
+        reply={reply("partial response")}
+        sessionId="session-1"
+        statusTone="loading"
+      />,
+    );
+
+    expect(metrics.scrollTop).toBe(120);
+    expect(latestSnapshot().trailingSpacerPx).toBe(320);
+  });
+
   it("keeps following the bottom when the feed resizes during streaming", () => {
     const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 500 });
     render(
@@ -420,6 +517,7 @@ describe("useChatFeedScroll", () => {
       />,
     );
     vi.mocked(feedElement().scrollTo).mockClear();
+    fireEvent.wheel(feedElement());
     fireEvent.scroll(feedElement());
 
     metrics.scrollHeight = 1120;
@@ -429,7 +527,7 @@ describe("useChatFeedScroll", () => {
     expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 620, behavior: "auto" });
   });
 
-  it("does not auto-scroll while the user scroll lock is active during streaming", () => {
+  it("cancels bottom follow as soon as the user scrolls upward", () => {
     const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 500 });
     render(
       <ScrollHarness
@@ -439,20 +537,17 @@ describe("useChatFeedScroll", () => {
         statusTone="loading"
       />,
     );
+    fireEvent.wheel(feedElement());
     fireEvent.scroll(feedElement());
     vi.mocked(feedElement().scrollTo).mockClear();
 
     fireEvent.wheel(feedElement());
+    metrics.scrollTop = 470;
+    fireEvent.scroll(feedElement());
     metrics.scrollHeight = 1120;
     notifyResize(feedElement());
 
     expect(feedElement().scrollTo).not.toHaveBeenCalled();
-
-    act(() => {
-      vi.advanceTimersByTime(1500);
-    });
-
-    expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 620, behavior: "auto" });
   });
 
   it("keeps bottom follow active during an in-progress smooth scroll to bottom", () => {
@@ -545,8 +640,13 @@ function ScrollHarness(props: {
         scroll.scrollRef.current = node;
       }}
       onScroll={scroll.handleScroll}
+      onPointerCancel={scroll.handleUserScrollEnd}
+      onPointerDown={scroll.handleUserScrollStart}
+      onPointerUp={scroll.handleUserScrollEnd}
+      onTouchCancel={scroll.handleUserScrollEnd}
+      onTouchEnd={scroll.handleUserScrollEnd}
       onTouchMove={scroll.handleUserScrollIntent}
-      onTouchStart={scroll.handleUserScrollIntent}
+      onTouchStart={scroll.handleUserScrollStart}
       onWheel={scroll.handleUserScrollIntent}
     >
       <div data-testid="feed-content" data-chat-feed-content="">
@@ -565,6 +665,7 @@ function ScrollHarness(props: {
         ))}
       </div>
       <div data-testid="history-sentinel" ref={scroll.historySentinelRef} />
+      <div data-testid="trailing-spacer" ref={scroll.trailingSpacerRef} style={{ minHeight: scroll.trailingSpacerPx }} />
       {props.showScrollDownControl ? (
         <button type="button" onClick={() => scroll.scrollToBottom()} aria-label="scroll bottom" />
       ) : null}

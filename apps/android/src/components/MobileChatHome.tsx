@@ -5,8 +5,9 @@ export {
   ChatComposer,
   ChatHeader,
   ConversationMessageList,
+  MobileChatComposer,
   MobileSidebar,
   MoreActionSheet,
   ScrollDownButton,
 } from "./mobileChat";
-export type { SidebarHistoryItem } from "./mobileChat";
+export type { MobileChatComposerHandle, SidebarHistoryItem } from "./mobileChat";

@@ -232,7 +232,6 @@ code {
   padding-bottom: 24px;
   overflow-anchor: auto;
   contain: layout style;
-  will-change: transform;
 }
 
 .conversation-list > .message-row + .message-row {
@@ -379,6 +378,7 @@ code {
   max-width: 100%;
   margin: 0 auto;
   display: flex;
+  overflow-anchor: auto;
   contain: layout style;
 }
 

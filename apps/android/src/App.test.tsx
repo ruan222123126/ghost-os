@@ -67,12 +67,16 @@ vi.mock("./hooks/useBodyScrollLock", () => ({
 vi.mock("./hooks/useChatFeedScroll", () => ({
   useChatFeedScroll: () => ({
     handleScroll: vi.fn(),
+    handleUserScrollEnd: vi.fn(),
+    handleUserScrollIntent: vi.fn(),
+    handleUserScrollStart: vi.fn(),
     historySentinelRef: { current: null },
     registerUserMessageRow: vi.fn(() => vi.fn()),
     resetScrollDown: vi.fn(),
     scrollRef: { current: null },
     scrollToBottom: vi.fn(),
     showScrollDown: false,
+    trailingSpacerRef: { current: null },
     trailingSpacerPx: 0,
   }),
 }));

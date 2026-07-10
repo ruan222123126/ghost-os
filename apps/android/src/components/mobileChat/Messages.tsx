@@ -1,5 +1,16 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { forwardRef, memo, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import {
+  forwardRef,
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import type {
   AgentPayload,
   ChatSelectedSkill,
@@ -140,41 +151,64 @@ export function AssistantReply(props: AssistantReplyProps) {
 export const ConversationMessageList = memo(function ConversationMessageList(props: {
   messages: MobileConversationMessage[];
   onApproveExternalAgent?: (input: ExternalApprovalActionInput) => Promise<boolean>;
+  postSendFocusRequest?: { messageId: string; token: number } | null;
   registerUserMessageRow: (messageId: string) => (node: HTMLDivElement | null) => void;
   reply: AgentPayload | undefined;
   scrollElementRef?: RefObject<HTMLElement | null>;
   status: StatusMessage;
 }) {
-  const listItems = useMemo(
-    () => conversationListItems(props.messages, props.reply, props.status),
-    [props.messages, props.reply, props.status],
-  );
+  const hasActiveReply = Boolean(props.reply) || props.status.tone === "error";
+  const itemCount = props.messages.length + (hasActiveReply ? 1 : 0);
+  const getItemKey = useCallback((index: number) => {
+    const message = props.messages[index];
+    return message?.id ?? `active-reply:${props.reply?.session_id ?? "status"}`;
+  }, [props.messages, props.reply?.session_id]);
   const virtualizer = useVirtualizer({
-    anchorTo: "end",
-    count: listItems.length,
+    anchorTo: "start",
+    count: itemCount,
     estimateSize: estimateConversationRowSize,
-    followOnAppend: "auto",
-    getItemKey: (index) => conversationListItemKey(listItems[index]),
+    followOnAppend: false,
+    getItemKey,
     getScrollElement: () => props.scrollElementRef?.current ?? null,
     overscan: 8,
+    useAnimationFrameWithResizeObserver: true,
   });
   const virtualItems = virtualizer.getVirtualItems();
+  const postSendMessageIndex = useMemo(() => {
+    const messageId = props.postSendFocusRequest?.messageId;
+    return messageId ? props.messages.findIndex((message) => message.id === messageId) : -1;
+  }, [props.messages, props.postSendFocusRequest?.messageId]);
 
-  if (listItems.length === 0) {
+  useLayoutEffect(() => {
+    if (!props.scrollElementRef || postSendMessageIndex < 0 || !props.postSendFocusRequest) {
+      return;
+    }
+    virtualizer.scrollToIndex(postSendMessageIndex, { align: "start", behavior: "auto" });
+  }, [postSendMessageIndex, props.postSendFocusRequest?.token, props.scrollElementRef, virtualizer]);
+
+  if (itemCount === 0) {
     return null;
   }
 
   if (!props.scrollElementRef) {
     return (
       <div className="conversation-list" data-chat-feed-content="">
-        {listItems.map((item) => (
+        {props.messages.map((message) => (
           <ConversationListItemRow
-            key={conversationListItemKey(item)}
-            item={item}
+            key={message.id}
+            item={{ kind: "message", message }}
             onApproveExternalAgent={props.onApproveExternalAgent}
             registerUserMessageRow={props.registerUserMessageRow}
           />
         ))}
+        {hasActiveReply ? (
+          <ConversationListItemRow
+            key={getItemKey(props.messages.length)}
+            item={{ kind: "reply", reply: props.reply, status: props.status }}
+            onApproveExternalAgent={props.onApproveExternalAgent}
+            registerUserMessageRow={props.registerUserMessageRow}
+          />
+        ) : null}
       </div>
     );
   }
@@ -186,7 +220,10 @@ export const ConversationMessageList = memo(function ConversationMessageList(pro
       style={{ height: virtualizer.getTotalSize() }}
     >
       {virtualItems.map((virtualItem) => {
-        const item = listItems[virtualItem.index];
+        const message = props.messages[virtualItem.index];
+        const item: ConversationListItem = message
+          ? { kind: "message", message }
+          : { kind: "reply", reply: props.reply, status: props.status };
         return (
           <div
             key={virtualItem.key}
@@ -210,25 +247,6 @@ export const ConversationMessageList = memo(function ConversationMessageList(pro
 type ConversationListItem =
   | { kind: "message"; message: MobileConversationMessage }
   | { kind: "reply"; reply: AgentPayload | undefined; status: StatusMessage };
-
-function conversationListItems(
-  messages: MobileConversationMessage[],
-  reply: AgentPayload | undefined,
-  status: StatusMessage,
-): ConversationListItem[] {
-  const items: ConversationListItem[] = messages.map((message) => ({ kind: "message", message }));
-  if (reply || status.tone === "error") {
-    items.push({ kind: "reply", reply, status });
-  }
-  return items;
-}
-
-function conversationListItemKey(item: ConversationListItem): string {
-  if (item.kind === "message") {
-    return item.message.id;
-  }
-  return `active-reply:${item.reply?.session_id ?? "status"}`;
-}
 
 function estimateConversationRowSize(index: number): number {
   return index === 0 ? 96 : 132;

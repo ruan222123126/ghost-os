@@ -1,14 +1,15 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, FormEvent, KeyboardEvent } from "react";
+import type { CSSProperties, KeyboardEvent } from "react";
 import {
   AssistantIntro,
-  ChatComposer,
   ChatHeader,
   ConversationMessageList,
+  MobileChatComposer,
   MobileSidebar,
   MoreActionSheet,
   ScrollDownButton,
 } from "./components/MobileChatHome";
+import type { MobileChatComposerHandle } from "./components/MobileChatHome";
 import type { SidebarHistoryItem } from "./components/mobileChat/types";
 import { MobileConnectionPanel } from "./components/MobileConnectionPanel";
 import { MobileSearchPage } from "./components/MobileSearchPage";
@@ -32,10 +33,6 @@ import "./App.css";
 import "./components/mobileChat/Messages.css";
 import "./components/mobileChat/ToolCards.css";
 import "./App.overlays.css";
-
-function isNonEmptyMessage(value: string): boolean {
-  return value.trim().length > 0;
-}
 
 const SIDEBAR_CLOSE_DEFER_MS = 320;
 const COMPLETION_NOTIFICATION_STACK_LIMIT = 8;
@@ -133,8 +130,6 @@ function App() {
     updateExternalCodexPermissionMode,
     updateProvider,
   } = useMobileBridge();
-  const [message, setMessage] = useState("");
-  const [selectedSkill, setSelectedSkill] = useState<ChatSelectedSkill | null>(null);
   const [agentRuntime, setAgentRuntime] = useState<AgentRuntimeType>("ghost");
   const [agentMode, setAgentMode] = useState<AgentModeSelection>(null);
   const [codexModel, setCodexModel] = useState<string>("");
@@ -146,6 +141,7 @@ function App() {
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [pinnedHistoryIds, setPinnedHistoryIds] = useState<string[]>([]);
   const [completionNotifications, setCompletionNotifications] = useState<CompletionNotification[]>([]);
+  const composerRef = useRef<MobileChatComposerHandle>(null);
   const pendingSelectHistoryTimeoutRef = useRef<number | null>(null);
   const previousHistoryStatusRef = useRef<Map<string, SidebarHistoryItem["status"]>>(new Map());
   const localRuntimeConfig = useMemo(() => buildLocalRuntimeConfig(providerList, settings), [providerList, settings]);
@@ -208,7 +204,6 @@ function App() {
   });
   const displayStatus = mobileSessions.activeStatus.tone === "idle" ? status : mobileSessions.activeStatus;
   const supportsComposerSkills = Boolean(config) && (effectiveAgentRuntime === "codex" || settings.remoteExecutionEnabled);
-  const canSubmit = isNonEmptyMessage(message) || selectedSkill !== null;
   const runtimeLabel = useMemo(
     () => displayRuntime(effectiveAgentRuntime, effectiveRuntimeConfig, activeCodexModel),
     [activeCodexModel, effectiveAgentRuntime, effectiveRuntimeConfig],
@@ -219,13 +214,16 @@ function App() {
   const showTopLoadingBar = mobileSessions.loadingSessionMessages || mobileSessions.loadingOlderHistory;
   const {
     handleScroll,
+    handleUserScrollEnd,
     handleUserScrollIntent,
+    handleUserScrollStart,
     historySentinelRef,
     registerUserMessageRow,
     resetScrollDown,
     scrollRef,
     scrollToBottom,
     showScrollDown,
+    trailingSpacerRef,
     trailingSpacerPx,
   } = useChatFeedScroll({
     hasOlderHistory: mobileSessions.hasOlderHistory,
@@ -238,6 +236,9 @@ function App() {
     statusTone: mobileSessions.activeStatus.tone,
   });
   const selectSessionRef = useRef(mobileSessions.selectSession);
+  const sendMessageRef = useRef(mobileSessions.sendMessage);
+  const stopCurrentRunRef = useRef(mobileSessions.stopCurrentRun);
+  const refreshSkillsRef = useRef(refreshSkills);
   const activeHistoryItem = useMemo(
     () => mobileSessions.historyItems.find((item) => item.id === mobileSessions.activeSessionId),
     [mobileSessions.activeSessionId, mobileSessions.historyItems],
@@ -250,16 +251,23 @@ function App() {
   }, [mobileSessions.selectSession]);
 
   useEffect(() => {
+    sendMessageRef.current = mobileSessions.sendMessage;
+    stopCurrentRunRef.current = mobileSessions.stopCurrentRun;
+    refreshSkillsRef.current = refreshSkills;
+  }, [mobileSessions.sendMessage, mobileSessions.stopCurrentRun, refreshSkills]);
+
+  const sendComposerMessage = useCallback(
+    (text: string, selectedSkill?: ChatSelectedSkill) => sendMessageRef.current(text, selectedSkill),
+    [],
+  );
+  const stopComposerRun = useCallback(() => stopCurrentRunRef.current(), []);
+  const refreshComposerSkills = useCallback(() => refreshSkillsRef.current(), []);
+
+  useEffect(() => {
     return () => {
       clearPendingSelectHistory();
     };
   }, []);
-
-  useEffect(() => {
-    if (!supportsComposerSkills && selectedSkill !== null) {
-      setSelectedSkill(null);
-    }
-  }, [selectedSkill, supportsComposerSkills]);
 
   useEffect(() => {
     const previousStatuses = previousHistoryStatusRef.current;
@@ -289,24 +297,6 @@ function App() {
     );
   }, [mobileSessions.historyItems]);
 
-  async function sendMessage(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault();
-    const trimmed = message.trim();
-    if (!trimmed && !selectedSkill) {
-      return;
-    }
-
-    const previousMessage = message;
-    const previousSkill = selectedSkill;
-    setMessage("");
-    setSelectedSkill(null);
-    const sent = await mobileSessions.sendMessage(trimmed, selectedSkill);
-    if (!sent) {
-      setMessage(previousMessage);
-      setSelectedSkill(previousSkill);
-    }
-  }
-
   function switchAgentRuntime(runtime: AgentRuntimeType): void {
     setAgentRuntime(runtime);
     if (runtime !== "codex") {
@@ -315,8 +305,7 @@ function App() {
   }
 
   function selectHistory(sessionId: string): void {
-    setMessage("");
-    setSelectedSkill(null);
+    composerRef.current?.reset();
     const shouldDeferSelection = isSidebarOpen;
     setIsSidebarOpen(false);
     clearPendingSelectHistory();
@@ -394,8 +383,7 @@ function App() {
   }
 
   function startNewSession(): void {
-    setMessage("");
-    setSelectedSkill(null);
+    composerRef.current?.reset();
     mobileSessions.startNewSession();
     setIsConnectionOpen(false);
     setIsRuntimeMenuOpen(false);
@@ -405,7 +393,7 @@ function App() {
   }
 
   function clearLocalConversation(): void {
-    setSelectedSkill(null);
+    composerRef.current?.reset();
     mobileSessions.clearCurrentConversation();
     setIsMoreMenuOpen(false);
     resetScrollDown();
@@ -492,13 +480,18 @@ function App() {
         <main
           ref={setChatFeedRef}
           onScroll={handleScroll}
+          onPointerCancel={handleUserScrollEnd}
+          onPointerDown={handleUserScrollStart}
+          onPointerUp={handleUserScrollEnd}
+          onTouchCancel={handleUserScrollEnd}
+          onTouchEnd={handleUserScrollEnd}
           onTouchMove={handleUserScrollIntent}
-          onTouchStart={handleUserScrollIntent}
+          onTouchStart={handleUserScrollStart}
           onWheel={handleUserScrollIntent}
           className={`chat-feed ${showEmptyIntro ? "is-empty" : ""}`}
         >
           {showEmptyIntro ? (
-            <AssistantIntro onSelectSuggestion={setMessage} />
+            <AssistantIntro onSelectSuggestion={(value) => composerRef.current?.setDraft(value)} />
           ) : null}
 
           {!showEmptyIntro ? (
@@ -508,35 +501,34 @@ function App() {
           <ConversationMessageList
             messages={mobileSessions.activeMessages}
             onApproveExternalAgent={approveExternalAgent}
+            postSendFocusRequest={mobileSessions.postSendFocusRequest}
             registerUserMessageRow={registerUserMessageRow}
             reply={mobileSessions.activeReply}
             scrollElementRef={scrollRef}
             status={displayStatus}
           />
-          <div aria-hidden="true" className="chat-feed-trailing-spacer" style={{ height: trailingSpacerPx }} />
+          <div
+            ref={trailingSpacerRef}
+            aria-hidden="true"
+            className="chat-feed-trailing-spacer"
+            style={{ minHeight: trailingSpacerPx }}
+          />
         </main>
 
         {showScrollDown ? <ScrollDownButton onClick={() => scrollToBottom()} /> : null}
 
-        <ChatComposer
+        <MobileChatComposer
+          ref={composerRef}
           agentMode={agentMode}
           canEnableCodexMode={Boolean(config)}
-          canSubmit={canSubmit}
-          disabled={!mobileSessions.canSend}
-          value={message}
+          canSend={mobileSessions.canSend}
           canStop={(settings.remoteExecutionEnabled || effectiveAgentRuntime === "codex") && mobileSessions.canStop}
           loading={mobileSessions.activeStatus.tone === "loading"}
-          selectedSkill={selectedSkill}
           skills={supportsComposerSkills ? skillList : undefined}
-          onClearSelectedSkill={() => setSelectedSkill(null)}
-          onRefreshSkills={supportsComposerSkills ? refreshSkills : undefined}
-          onSelectSkill={supportsComposerSkills ? (skill) => setSelectedSkill({ id: skill.id, name: skill.name }) : undefined}
           onChangeAgentMode={setAgentMode}
-          onSubmit={sendMessage}
-          onStop={(settings.remoteExecutionEnabled || effectiveAgentRuntime === "codex") ? async () => {
-            await mobileSessions.stopCurrentRun();
-          } : undefined}
-          onChange={setMessage}
+          onRefreshSkills={supportsComposerSkills ? refreshComposerSkills : undefined}
+          onSend={sendComposerMessage}
+          onStop={(settings.remoteExecutionEnabled || effectiveAgentRuntime === "codex") ? stopComposerRun : undefined}
         />
       </div>
 

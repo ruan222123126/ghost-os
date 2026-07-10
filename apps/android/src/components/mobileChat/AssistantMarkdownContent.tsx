@@ -101,15 +101,15 @@ function prepareAssistantMarkdownForRender(content: string, final: boolean): str
   if (final) {
     return displayContent;
   }
-  return closeDanglingMarkdownBlocks(displayContent);
+  return stabilizeStreamingMarkdown(displayContent);
 }
 
-function closeDanglingMarkdownBlocks(content: string): string {
+function stabilizeStreamingMarkdown(content: string): string {
   const openFence = findDanglingFence(content);
-  if (!openFence) {
-    return content;
+  if (openFence) {
+    return `${content}\n${openFence}`;
   }
-  return `${content}\n${openFence}`;
+  return completeTrailingMarkdownTable(content);
 }
 
 function findDanglingFence(content: string): string | null {
@@ -124,4 +124,84 @@ function findDanglingFence(content: string): string | null {
     stack.push(fence);
   }
   return stack.length > 0 ? stack[stack.length - 1] : null;
+}
+
+function completeTrailingMarkdownTable(content: string): string {
+  const lines = content.split("\n");
+  const lastLineIndex = lines.length - 1;
+  const lastCells = parsePipeCells(lines[lastLineIndex] ?? "", 1);
+  if (!lastCells) {
+    return content;
+  }
+
+  const previousLineIndex = lastLineIndex - 1;
+  const previousCells = previousLineIndex >= 0 ? parseTableCells(lines[previousLineIndex] ?? "") : null;
+  if (!previousCells) {
+    if (lastCells.length < 2 || !hasClosedTableRow(lines[lastLineIndex] ?? "")) {
+      return content;
+    }
+    lines.push(buildTableDelimiter(lastCells.length));
+    return lines.join("\n");
+  }
+
+  if (isPossibleTableDelimiter(lastCells)) {
+    lines[lastLineIndex] = buildTableDelimiter(previousCells.length);
+    return lines.join("\n");
+  }
+  if (isPossibleTableDelimiter(previousCells)) {
+    lines[lastLineIndex] = buildNormalizedTableRow(lastCells, previousCells.length);
+  }
+  return lines.join("\n");
+}
+
+function parseTableCells(line: string): string[] | null {
+  return parsePipeCells(line, 2);
+}
+
+function parsePipeCells(line: string, minimumCellCount: number): string[] | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("|")) {
+    return null;
+  }
+  const body = trimmed.slice(1, trimmed.endsWith("|") ? -1 : undefined);
+  const cells = splitUnescapedPipes(body).map((cell) => cell.trim());
+  return cells.length >= minimumCellCount ? cells : null;
+}
+
+function splitUnescapedPipes(value: string): string[] {
+  const cells: string[] = [];
+  let current = "";
+  let escaped = false;
+  for (const character of value) {
+    if (character === "|" && !escaped) {
+      cells.push(current);
+      current = "";
+    } else {
+      current += character;
+    }
+    escaped = character === "\\" && !escaped;
+    if (character !== "\\") {
+      escaped = false;
+    }
+  }
+  cells.push(current);
+  return cells;
+}
+
+function hasClosedTableRow(line: string): boolean {
+  return line.trim().endsWith("|");
+}
+
+function isPossibleTableDelimiter(cells: string[]): boolean {
+  return cells.some((cell) => cell.includes("-"))
+    && cells.every((cell) => cell === "" || /^:?-+:?$/.test(cell));
+}
+
+function buildTableDelimiter(columnCount: number): string {
+  return `| ${Array.from({ length: columnCount }, () => "---").join(" | ")} |`;
+}
+
+function buildNormalizedTableRow(cells: string[], columnCount: number): string {
+  const normalizedCells = Array.from({ length: columnCount }, (_, index) => cells[index] ?? "");
+  return `| ${normalizedCells.join(" | ")} |`;
 }

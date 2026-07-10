@@ -74,4 +74,33 @@ describe("AssistantMarkdownContent", () => {
 
     expect(screen.getByTestId("markstream-renderer").textContent).toBe("先检查项目。\n\n测试通过。");
   });
+
+  it("prebuilds a streaming table after the header row arrives", () => {
+    render(<AssistantMarkdownContent content="| 平台 | 状态 |" final={false} showCopyButton={false} />);
+
+    expect(screen.getByTestId("markstream-renderer").textContent).toBe(
+      "| 平台 | 状态 |\n| --- | --- |",
+    );
+  });
+
+  it("completes a partial table delimiter and data row", () => {
+    const { rerender } = render(
+      <AssistantMarkdownContent content={"| 平台 | 状态 |\n| --- |"} final={false} showCopyButton={false} />,
+    );
+
+    expect(screen.getByTestId("markstream-renderer").textContent).toBe(
+      "| 平台 | 状态 |\n| --- | --- |",
+    );
+
+    rerender(
+      <AssistantMarkdownContent
+        content={"| 平台 | 状态 |\n| --- | --- |\n| Android"}
+        final={false}
+        showCopyButton={false}
+      />,
+    );
+    expect(screen.getByTestId("markstream-renderer").textContent).toBe(
+      "| 平台 | 状态 |\n| --- | --- |\n| Android |  |",
+    );
+  });
 });
