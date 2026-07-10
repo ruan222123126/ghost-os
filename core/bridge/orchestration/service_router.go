@@ -204,10 +204,6 @@ func (s *bridgeService) registeredActionNames() []string {
 
 func validateBusRequest(req apiRequest) error { return dispatch.ValidateBusRequest(req) }
 
-func (s *Service) ExecuteConfigGetAction(traceID string) (ServiceResult, error) {
-	return s.inner.executeConfigGetAction(traceID)
-}
-
 func (s *Service) ExecuteConfigUpdateAction(req ConfigUpdateRequest, traceID string) (ServiceResult, error) {
 	return s.inner.executeConfigUpdateAction(req, traceID)
 }
@@ -225,12 +221,13 @@ func registerDefaultActions(service *bridgeService) {
 
 func defaultActionHandlers(service *bridgeService) dispatch.DefaultHandlers {
 	return dispatch.DefaultHandlers{
-		AgentSend:            service.executeAgentAction,
-		AgentStop:            service.executeAgentStopAction,
-		ExternalAgentStart:   service.executeExternalAgentStartAction,
-		ExternalAgentSend:    service.executeExternalAgentSendAction,
-		ExternalAgentStop:    service.executeExternalAgentStopAction,
-		ExternalAgentApprove: service.executeExternalAgentApproveAction,
+		AgentSend:              service.executeAgentAction,
+		AgentStop:              service.executeAgentStopAction,
+		ExternalAgentStart:     service.executeExternalAgentStartAction,
+		ExternalAgentSend:      service.executeExternalAgentSendAction,
+		ExternalAgentStop:      service.executeExternalAgentStopAction,
+		ExternalAgentApprove:   service.executeExternalAgentApproveAction,
+		ExternalAgentModelsGet: service.executeExternalAgentModelsGetAction,
 		ConfigGet: func(_ context.Context, traceID string) (ServiceResult, error) {
 			return service.executeConfigGetAction(traceID)
 		},

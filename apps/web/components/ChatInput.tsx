@@ -9,7 +9,6 @@ import { ComposerImageStrip } from '@/components/ComposerImageStrip';
 import { ModelSelector } from '@/components/ModelSelector';
 import { useComposerSkills } from '@/hooks/useComposerSkills';
 import { createChatImageDrafts } from '@/lib/chatImageDrafts';
-import { DEFAULT_CODEX_MODEL } from '@/lib/codexModels';
 import { toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { AgentModeSelection, ChatImageDraft, ChatSelectedSkill, ChatSendInput, ProviderModelOption } from '@/lib/types';
@@ -192,10 +191,10 @@ function resolveCodexModel(
   }
 
   if (activeModel?.providerType === 'codex') {
-    return activeModel.model.trim() || DEFAULT_CODEX_MODEL;
+    return activeModel.model.trim() || undefined;
   }
 
-  return DEFAULT_CODEX_MODEL;
+  return undefined;
 }
 
 function canSubmitChatInput(input: ChatSendInput): boolean {

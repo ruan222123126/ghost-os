@@ -17,7 +17,7 @@ import { useBodyScrollLock } from "./hooks/useBodyScrollLock";
 import { useChatFeedScroll } from "./hooks/useChatFeedScroll";
 import { useMobileBridge } from "./hooks/useMobileBridge";
 import { useMobileSessions } from "./hooks/useMobileSessions";
-import { DEFAULT_CODEX_MODEL, normalizeCodexModel } from "./lib/codexModels";
+import { normalizeCodexModel } from "./lib/codexModels";
 import type {
   AgentModeSelection,
   AgentRuntimeType,
@@ -48,10 +48,10 @@ interface CompletionNotification {
 function displayRuntime(
   agentRuntime: AgentRuntimeType,
   config: ReturnType<typeof useMobileBridge>["config"],
-  codexModel: string = DEFAULT_CODEX_MODEL,
+  codexModel: string,
 ): string {
   if (agentRuntime === "codex") {
-    return `Codex / ${normalizeCodexModel(codexModel)}`;
+    return codexModel ? `Codex / ${codexModel}` : "Codex";
   }
   if (config?.provider && config.model) {
     return `${config.provider} / ${config.model}`;
@@ -92,6 +92,8 @@ function App() {
     approveExternalAgent,
     bridgeUrl,
     config,
+    codexModelCatalog,
+    codexModelCatalogError,
     connectBridge,
     connectionStatus,
     createProvider,
@@ -135,7 +137,7 @@ function App() {
   const [selectedSkill, setSelectedSkill] = useState<ChatSelectedSkill | null>(null);
   const [agentRuntime, setAgentRuntime] = useState<AgentRuntimeType>("ghost");
   const [agentMode, setAgentMode] = useState<AgentModeSelection>(null);
-  const [codexModel, setCodexModel] = useState<string>(DEFAULT_CODEX_MODEL);
+  const [codexModel, setCodexModel] = useState<string>("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isConnectionOpen, setIsConnectionOpen] = useState(false);
@@ -149,7 +151,7 @@ function App() {
   const localRuntimeConfig = useMemo(() => buildLocalRuntimeConfig(providerList, settings), [providerList, settings]);
   const chatConfig = settings.remoteExecutionEnabled ? config : localRuntimeConfig;
   const chatProviderList = providerList;
-  const activeCodexModel = normalizeCodexModel(codexModel);
+  const activeCodexModel = normalizeCodexModel(codexModel, codexModelCatalog);
   const effectiveAgentRuntime = resolveEffectiveAgentRuntime(agentRuntime, agentMode);
   const effectiveRuntimeConfig = effectiveAgentRuntime === "codex" ? config : chatConfig;
   const sendAgentMessageForRuntime = useCallback(
@@ -174,7 +176,7 @@ function App() {
         setAgentRuntime("codex");
         setAgentMode(selection.mode === "plan" ? "plan" : "normal");
         if (selection.runtime === "codex" && selection.model?.trim()) {
-          setCodexModel(normalizeCodexModel(selection.model));
+          setCodexModel(normalizeCodexModel(selection.model, codexModelCatalog));
         }
         return;
       }
@@ -183,7 +185,7 @@ function App() {
       setAgentMode(null);
       await switchRuntimeSelection(selection);
     },
-    [switchRuntimeSelection],
+    [codexModelCatalog, switchRuntimeSelection],
   );
   const mobileSessions = useMobileSessions({
     bridgeConnected: Boolean(config),
@@ -464,6 +466,8 @@ function App() {
           runtimeLabel={runtimeLabel}
           agentRuntime={effectiveAgentRuntime}
           codexModel={activeCodexModel}
+          codexModelCatalog={codexModelCatalog}
+          codexModelCatalogError={codexModelCatalogError}
           config={effectiveRuntimeConfig}
           codexPermissionMode={config?.external_codex_permission_mode}
           providerList={chatProviderList}

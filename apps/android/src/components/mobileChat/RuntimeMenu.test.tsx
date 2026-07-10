@@ -17,6 +17,7 @@ describe("RuntimeMenu", () => {
       <RuntimeMenu
         agentRuntime="codex"
         codexModel="gpt-5.4"
+        codexModelCatalog={{ models: ["gpt-5.5", "gpt-5.4"], default_model: "gpt-5.5" }}
         codexPermissionMode="safe-yolo"
         config={{ model: "gpt-4o", provider: "OpenAI" }}
         providerList={{ active_provider: "OpenAI", providers: [] }}

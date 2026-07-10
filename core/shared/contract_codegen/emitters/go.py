@@ -171,6 +171,7 @@ const (
 \tBusActionExternalAgentSend    = busActionExternalAgentSend
 \tBusActionExternalAgentStop    = busActionExternalAgentStop
 \tBusActionExternalAgentApprove = busActionExternalAgentApprove
+\tBusActionExternalAgentModelsGet = busActionExternalAgentModelsGet
 \tBusStatusSuccess              = busStatusSuccess
 \tBusStatusError                = busStatusError
 \tBusAssistantSessionEndSignal  = busAssistantSessionEndSignal

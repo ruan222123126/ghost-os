@@ -250,6 +250,10 @@ func (s *bridgeService) configService() appconfig.Service {
 	}
 }
 
+func (s *Service) ExecuteConfigGetAction(traceID string) (ServiceResult, error) {
+	return s.inner.executeConfigGetAction(traceID)
+}
+
 func (s *bridgeService) afterRuntimeConfigUpdate() error {
 	s.syncTaskSchedulerExecutionTimeout()
 	return s.BootstrapSystemTasks()

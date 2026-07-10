@@ -1,9 +1,20 @@
-export const CODEX_MODEL_IDS = ["gpt-5.5", "gpt-5.4"] as const;
-export const DEFAULT_CODEX_MODEL: string = CODEX_MODEL_IDS[0];
+export interface CodexModelCatalogLike {
+  models: string[];
+  default_model: string;
+}
 
-export function normalizeCodexModel(model: string | undefined): string {
+export const EMPTY_CODEX_MODEL_CATALOG: CodexModelCatalogLike = {
+  models: [],
+  default_model: "",
+};
+
+export function normalizeCodexModel(
+  model: string | undefined,
+  catalog: CodexModelCatalogLike = EMPTY_CODEX_MODEL_CATALOG,
+): string {
   const trimmed = model?.trim() ?? "";
-  return CODEX_MODEL_IDS.includes(trimmed as (typeof CODEX_MODEL_IDS)[number])
-    ? trimmed
-    : DEFAULT_CODEX_MODEL;
+  if (trimmed && (catalog.models.length === 0 || catalog.models.includes(trimmed))) {
+    return trimmed;
+  }
+  return catalog.default_model.trim() || catalog.models[0]?.trim() || "";
 }

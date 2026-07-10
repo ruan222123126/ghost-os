@@ -81,6 +81,9 @@
         "externalAgentApprovalResponse": {
             "$ref": "./schema/defs/external_agent.json#/$defs/externalAgentApprovalResponse"
         },
+        "codexModelCatalog": {
+            "$ref": "./schema/defs/external_agent.json#/$defs/codexModelCatalog"
+        },
         "humanResponseRequest": {
             "$ref": "./schema/defs/agent_human.json#/$defs/humanResponseRequest"
         },

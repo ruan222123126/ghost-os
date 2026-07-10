@@ -71,6 +71,11 @@ export interface ConfigPayload {
   relay_default_execution_timeout_ms?: number;
 }
 
+export interface CodexModelCatalogPayload {
+  models: string[];
+  default_model: string;
+}
+
 export interface ProviderConfigPayload {
   name: string;
   type: ProviderType;

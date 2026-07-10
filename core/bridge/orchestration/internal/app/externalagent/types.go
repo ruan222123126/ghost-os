@@ -76,6 +76,11 @@ type TurnOptions struct {
 	Effort         string
 }
 
+type ModelCatalog struct {
+	Models       []string
+	DefaultModel string
+}
+
 type CodexEvent struct {
 	Type    string
 	Method  string
@@ -97,6 +102,7 @@ type ApprovalRequest struct {
 
 type CodexClient interface {
 	Connect(context.Context) error
+	ListModels(context.Context) (ModelCatalog, error)
 	StartThread(context.Context, ThreadOptions) (ThreadResult, error)
 	ResumeThread(context.Context, ThreadOptions) (ThreadResult, error)
 	SetCollaborationMode(context.Context, CollaborationModeOptions) error

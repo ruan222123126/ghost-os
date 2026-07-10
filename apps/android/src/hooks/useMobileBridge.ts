@@ -35,6 +35,7 @@ import type {
   AgentPayload,
   AgentRequestMode,
   ChatSelectedSkill,
+  CodexModelCatalogPayload,
   ConfigPayload,
   ExternalAgentApprovalDecision,
   ExternalCodexPermissionMode,
@@ -386,6 +387,11 @@ export function useMobileBridge() {
   const [host, setHost] = useState<HostProfile>();
   const [config, setConfig] = useState<ConfigPayload>();
   const [providerList, setProviderList] = useState<ProviderListPayload>();
+  const [codexModelCatalog, setCodexModelCatalog] = useState<CodexModelCatalogPayload>({
+    models: [],
+    default_model: "",
+  });
+  const [codexModelCatalogError, setCodexModelCatalogError] = useState("");
   const [localProviderList, setLocalProviderList] = useState<ProviderListPayload>();
   const [skillList, setSkillList] = useState<SkillPayload[]>();
   const [skillListError, setSkillListError] = useState("");
@@ -461,6 +467,8 @@ export function useMobileBridge() {
     webRTCClientRef.current = undefined;
     setConfig(undefined);
     setProviderList(undefined);
+    setCodexModelCatalog({ models: [], default_model: "" });
+    setCodexModelCatalogError("");
     setSkillList(undefined);
     setSkillListError("");
     setTaskList(undefined);
@@ -518,6 +526,13 @@ export function useMobileBridge() {
   const loadProviders = useCallback(async (): Promise<ProviderListPayload> => {
     const payload = await requestBridge<ProviderListPayload>("CONFIG_PROVIDERS_GET", {});
     setProviderList(payload);
+    return payload;
+  }, [requestBridge]);
+
+  const loadCodexModelCatalog = useCallback(async (): Promise<CodexModelCatalogPayload> => {
+    setCodexModelCatalogError("");
+    const payload = await requestBridge<CodexModelCatalogPayload>("EXTERNAL_AGENT_MODELS_GET", {});
+    setCodexModelCatalog(payload);
     return payload;
   }, [requestBridge]);
 
@@ -681,6 +696,11 @@ export function useMobileBridge() {
 
   useEffect(() => {
     if (connectionStatus.tone === "success") {
+      void loadCodexModelCatalog().catch((error: unknown) => {
+        const text = `Codex 模型列表加载失败：${errorMessage(error)}`;
+        console.error("[useMobileBridge] load Codex models failed", error);
+        setCodexModelCatalogError(text);
+      });
       void syncProvidersBidirectionally().catch((error: unknown) => {
         console.error("[useMobileBridge] provider sync failed", error);
       });
@@ -689,7 +709,7 @@ export function useMobileBridge() {
     setSettings((current) => (current.remoteExecutionEnabled
       ? { ...current, remoteExecutionEnabled: false }
       : current));
-  }, [connectionStatus.tone, syncProvidersBidirectionally]);
+  }, [connectionStatus.tone, loadCodexModelCatalog, syncProvidersBidirectionally]);
 
   const selectedLocalProviderList = useMemo(
     () => withLocalProviderSelection(localProviderList, settings),
@@ -1550,6 +1570,8 @@ export function useMobileBridge() {
     appendSessionMessages,
     bridgeUrl,
     config,
+    codexModelCatalog,
+    codexModelCatalogError,
     connectBridge,
     connectionStatus,
     createProvider,

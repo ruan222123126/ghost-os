@@ -9,35 +9,36 @@ import (
 )
 
 const (
-	busActionAgentSend            = bus.ActionAgentSend
-	busActionAgentStop            = bus.ActionAgentStop
-	busActionExternalAgentStart   = bus.ActionExternalAgentStart
-	busActionExternalAgentSend    = bus.ActionExternalAgentSend
-	busActionExternalAgentStop    = bus.ActionExternalAgentStop
-	busActionExternalAgentApprove = bus.ActionExternalAgentApprove
-	busActionHumanResponse        = bus.ActionHumanResponse
-	busActionSessionsList         = bus.ActionSessionsList
-	busActionSessionsSearch       = bus.ActionSessionsSearch
-	busActionSessionGet           = bus.ActionSessionGet
-	busActionSessionAppend        = bus.ActionSessionAppend
-	busActionConfigGet            = bus.ActionConfigGet
-	busActionConfigUpdate         = bus.ActionConfigUpdate
-	busActionConfigProvidersGet   = bus.ActionConfigProvidersGet
-	busActionConfigProviderExport = bus.ActionConfigProviderExport
-	busActionConfigProviderCreate = bus.ActionConfigProviderCreate
-	busActionConfigProviderUpdate = bus.ActionConfigProviderUpdate
-	busActionConfigProviderDelete = bus.ActionConfigProviderDelete
-	busActionSkillList            = bus.ActionSkillList
-	busActionSkillUpdate          = bus.ActionSkillUpdate
-	busActionSkillDelete          = bus.ActionSkillDelete
-	busActionTaskCreate           = bus.ActionTaskCreate
-	busActionTaskList             = bus.ActionTaskList
-	busActionTaskGet              = bus.ActionTaskGet
-	busActionTaskUpdate           = bus.ActionTaskUpdate
-	busActionTaskRunNow           = bus.ActionTaskRunNow
-	busActionTaskStop             = bus.ActionTaskStop
-	busActionTaskLogs             = bus.ActionTaskLogs
-	busActionTaskDelete           = bus.ActionTaskDelete
+	busActionAgentSend              = bus.ActionAgentSend
+	busActionAgentStop              = bus.ActionAgentStop
+	busActionExternalAgentStart     = bus.ActionExternalAgentStart
+	busActionExternalAgentSend      = bus.ActionExternalAgentSend
+	busActionExternalAgentStop      = bus.ActionExternalAgentStop
+	busActionExternalAgentApprove   = bus.ActionExternalAgentApprove
+	busActionExternalAgentModelsGet = bus.ActionExternalAgentModelsGet
+	busActionHumanResponse          = bus.ActionHumanResponse
+	busActionSessionsList           = bus.ActionSessionsList
+	busActionSessionsSearch         = bus.ActionSessionsSearch
+	busActionSessionGet             = bus.ActionSessionGet
+	busActionSessionAppend          = bus.ActionSessionAppend
+	busActionConfigGet              = bus.ActionConfigGet
+	busActionConfigUpdate           = bus.ActionConfigUpdate
+	busActionConfigProvidersGet     = bus.ActionConfigProvidersGet
+	busActionConfigProviderExport   = bus.ActionConfigProviderExport
+	busActionConfigProviderCreate   = bus.ActionConfigProviderCreate
+	busActionConfigProviderUpdate   = bus.ActionConfigProviderUpdate
+	busActionConfigProviderDelete   = bus.ActionConfigProviderDelete
+	busActionSkillList              = bus.ActionSkillList
+	busActionSkillUpdate            = bus.ActionSkillUpdate
+	busActionSkillDelete            = bus.ActionSkillDelete
+	busActionTaskCreate             = bus.ActionTaskCreate
+	busActionTaskList               = bus.ActionTaskList
+	busActionTaskGet                = bus.ActionTaskGet
+	busActionTaskUpdate             = bus.ActionTaskUpdate
+	busActionTaskRunNow             = bus.ActionTaskRunNow
+	busActionTaskStop               = bus.ActionTaskStop
+	busActionTaskLogs               = bus.ActionTaskLogs
+	busActionTaskDelete             = bus.ActionTaskDelete
 )
 
 const (
@@ -59,6 +60,7 @@ type agentStopResponse = api.AgentStopResponse
 type externalAgentApprovalParams = api.ExternalAgentApprovalParams
 type externalAgentResponse = api.ExternalAgentResponse
 type externalAgentApprovalResponse = api.ExternalAgentApprovalResponse
+type codexModelCatalog = api.CodexModelCatalog
 type humanResponseParams = api.HumanResponseParams
 type humanResponseAck = api.HumanResponseAck
 type agentStreamEventContract = api.AgentStreamEventContract
@@ -165,14 +167,15 @@ type providerCreateRequest = providerConfigInput
 type providerUpdateRequest = providerConfigInput
 
 const (
-	BusActionAgentSend            = busActionAgentSend
-	BusActionExternalAgentStart   = busActionExternalAgentStart
-	BusActionExternalAgentSend    = busActionExternalAgentSend
-	BusActionExternalAgentStop    = busActionExternalAgentStop
-	BusActionExternalAgentApprove = busActionExternalAgentApprove
-	BusStatusSuccess              = busStatusSuccess
-	BusStatusError                = busStatusError
-	BusAssistantSessionEndSignal  = busAssistantSessionEndSignal
+	BusActionAgentSend              = busActionAgentSend
+	BusActionExternalAgentStart     = busActionExternalAgentStart
+	BusActionExternalAgentSend      = busActionExternalAgentSend
+	BusActionExternalAgentStop      = busActionExternalAgentStop
+	BusActionExternalAgentApprove   = busActionExternalAgentApprove
+	BusActionExternalAgentModelsGet = busActionExternalAgentModelsGet
+	BusStatusSuccess                = busStatusSuccess
+	BusStatusError                  = busStatusError
+	BusAssistantSessionEndSignal    = busAssistantSessionEndSignal
 
 	DefaultMaxRequestBodyBytes = defaultMaxRequestBodyBytes
 	TaskListScopeUser          = taskListScopeUser

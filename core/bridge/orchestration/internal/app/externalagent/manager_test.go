@@ -822,7 +822,22 @@ func newFakeCodexClient() *fakeCodexClient {
 	}
 }
 
+func TestManagerListModelsUsesCodexCatalog(t *testing.T) {
+	manager, _, _ := newExternalAgentTestManager(t)
+	catalog, err := manager.ListModels(context.Background())
+	if err != nil {
+		t.Fatalf("list models failed: %v", err)
+	}
+	if catalog.DefaultModel != "codex-test" || len(catalog.Models) != 1 || catalog.Models[0] != "codex-test" {
+		t.Fatalf("unexpected catalog: %+v", catalog)
+	}
+}
+
 func (f *fakeCodexClient) Connect(context.Context) error { return nil }
+
+func (f *fakeCodexClient) ListModels(context.Context) (ModelCatalog, error) {
+	return ModelCatalog{Models: []string{"codex-test"}, DefaultModel: "codex-test"}, nil
+}
 
 func (f *fakeCodexClient) StartThread(_ context.Context, opts ThreadOptions) (ThreadResult, error) {
 	f.mu.Lock()

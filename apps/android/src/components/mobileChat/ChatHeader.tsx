@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type {
   AgentRuntimeType,
   ConfigPayload,
+  CodexModelCatalogPayload,
   ExternalCodexPermissionMode,
   ProviderListPayload,
   StatusMessage,
@@ -15,6 +16,8 @@ interface ChatHeaderProps {
   agentRuntime: AgentRuntimeType;
   runtimeLabel: string;
   codexModel?: string;
+  codexModelCatalog?: CodexModelCatalogPayload;
+  codexModelCatalogError?: string;
   codexPermissionMode?: ExternalCodexPermissionMode;
   config: ConfigPayload | undefined;
   providerList: ProviderListPayload | undefined;
@@ -72,6 +75,8 @@ function HeaderRuntimeSelector(props: HeaderRuntimeSelectorProps) {
         <RuntimeMenu
           agentRuntime={props.agentRuntime}
           codexModel={props.codexModel}
+          codexModelCatalog={props.codexModelCatalog}
+          codexModelCatalogError={props.codexModelCatalogError}
           codexPermissionMode={props.codexPermissionMode}
           config={props.config}
           providerList={props.providerList}

@@ -89,6 +89,11 @@ vi.mock("./hooks/useMobileBridge", () => ({
       project_root: "/tmp/ghost-os",
       provider: "DeepSeek",
     },
+    codexModelCatalog: {
+      models: ["gpt-5.5", "gpt-5.4"],
+      default_model: "gpt-5.5",
+    },
+    codexModelCatalogError: "",
     connectBridge: vi.fn(),
     connectionStatus: { tone: "success", text: "HTTP fallback 已连接" },
     createProvider: vi.fn(),

@@ -36,3 +36,8 @@ type ExternalAgentApprovalResponse struct {
 	Decision   string `json:"decision"`
 	Accepted   bool   `json:"accepted"`
 }
+
+type CodexModelCatalog struct {
+	Models       []string `json:"models"`
+	DefaultModel string   `json:"default_model"`
+}

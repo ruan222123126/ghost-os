@@ -164,6 +164,12 @@ pub struct ExternalAgentApprovalResponse {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct CodexModelCatalog {
+    pub models: Vec<String>,
+    pub default_model: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct HumanResponseRequest {
     pub session_id: String,
     pub question_id: String,

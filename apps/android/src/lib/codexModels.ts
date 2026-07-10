@@ -1,5 +1,5 @@
 export {
-  CODEX_MODEL_IDS,
-  DEFAULT_CODEX_MODEL,
+  EMPTY_CODEX_MODEL_CATALOG,
   normalizeCodexModel,
 } from "../../../shared/codexModels";
+export type { CodexModelCatalogLike } from "../../../shared/codexModels";

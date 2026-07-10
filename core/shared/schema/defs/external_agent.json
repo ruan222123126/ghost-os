@@ -164,6 +164,30 @@
         "ts": { "name": "ExternalAgentApprovalResponse" },
         "rust": { "name": "ExternalAgentApprovalResponse" }
       }
+    },
+    "codexModelCatalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "models",
+        "default_model"
+      ],
+      "properties": {
+        "models": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "default_model": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "x-codegen": {
+        "order": 63,
+        "go": { "name": "codexModelCatalog" },
+        "ts": { "name": "CodexModelCatalog" },
+        "rust": { "name": "CodexModelCatalog" }
+      }
     }
   }
 }

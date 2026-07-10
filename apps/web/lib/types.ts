@@ -61,6 +61,7 @@ export type {
   AgentRunStartedPayload,
   BridgeConfig,
   ConfigUpdate,
+  CodexModelCatalog,
   HumanResponseAck,
   HumanResponseRequest,
   ProviderConfig,

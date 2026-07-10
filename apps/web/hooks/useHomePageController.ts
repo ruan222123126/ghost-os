@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSession } from '@/lib/api/sessions/api';
+import { getCodexModelCatalog } from '@/lib/api/agent/models';
 import { useBridgeChat } from '@/hooks/chat/useBridgeChat';
 import { useBridgeConfig } from '@/hooks/useBridgeConfig';
 import { useSessions } from '@/hooks/useSessions';
@@ -12,8 +13,8 @@ import {
   configControllerState,
   sessionControllerState,
 } from '@/hooks/homePageControllerState';
-import { CODEX_MODEL_IDS, DEFAULT_CODEX_MODEL, normalizeCodexModel } from '@/lib/codexModels';
-import { ignorePromise } from '@/lib/errors';
+import { EMPTY_CODEX_MODEL_CATALOG, normalizeCodexModel } from '@/lib/codexModels';
+import { ignorePromise, toErrorMessage } from '@/lib/errors';
 import { parseSettingsQuery, stripSettingsQuery, type SettingsQueryTab } from '@/lib/settingsQuery';
 import type {
   AgentModeSelection,
@@ -21,6 +22,7 @@ import type {
   ProviderModelOption,
   SessionRuntimeSelection,
   WorkflowTaskPayload,
+  CodexModelCatalog,
 } from '@/lib/types';
 
 export interface HomePageController {
@@ -104,6 +106,12 @@ interface HomePageActions {
 type SessionRuntimeSelectionApplier = (selection: SessionRuntimeSelection | null | undefined) => Promise<void>;
 type ComposerModelState = Pick<HomePageController, 'activeModelOption' | 'modelOptions'>;
 
+interface CodexModelCatalogState {
+  catalog: CodexModelCatalog;
+  error: string;
+  loading: boolean;
+}
+
 function useSettingsQueryState(): SettingsQueryState {
   const [queryString, setQueryString] = useState('');
 
@@ -143,16 +151,27 @@ export function useHomePageController(): HomePageController {
   const settings = useSettingsPanelState(router);
   const sessions = useSessions({ autoRefresh: true });
   const config = useBridgeConfig({ autoRefresh: !settings.showConfig });
+  const codexCatalog = useCodexModelCatalog();
   const [agentMode, setAgentMode] = useState<AgentModeSelection>(null);
-  const [codexModel, setCodexModel] = useState(DEFAULT_CODEX_MODEL);
+  const [codexModel, setCodexModel] = useState('');
   const chat = useBridgeChat({
     currentSessionId: sessions.currentSessionId,
     externalCodexPermissionMode: config.config?.external_codex_permission_mode,
     externalProjectRoot: config.config?.project_root,
     onSessionResolved: sessions.setCurrentSessionId,
   });
-  const selectActiveModel = useComposerModelSelection(agentMode, config.selectActiveModel, setCodexModel);
-  const applySessionRuntimeSelection = useSessionRuntimeSelectionApplier(config.selectActiveModel, setAgentMode, setCodexModel);
+  const selectActiveModel = useComposerModelSelection(
+    agentMode,
+    config.selectActiveModel,
+    setCodexModel,
+    codexCatalog.catalog,
+  );
+  const applySessionRuntimeSelection = useSessionRuntimeSelectionApplier(
+    config.selectActiveModel,
+    setAgentMode,
+    setCodexModel,
+    codexCatalog.catalog,
+  );
   const actions = useHomePageActions(sessions, chat, applySessionRuntimeSelection);
   const derived = buildDerivedHomeState({
     chat,
@@ -161,13 +180,15 @@ export function useHomePageController(): HomePageController {
     showConfig: settings.showConfig,
   });
   const modelState = useMemo(() => {
-    return buildComposerModelState(agentMode, config.activeModelOption, config.modelOptions, codexModel);
-  }, [agentMode, codexModel, config.activeModelOption, config.modelOptions]);
+    return buildComposerModelState(agentMode, config.activeModelOption, config.modelOptions, codexModel, codexCatalog.catalog);
+  }, [agentMode, codexCatalog.catalog, codexModel, config.activeModelOption, config.modelOptions]);
 
   return {
     ...sessionControllerState(sessions, chat),
     ...chatControllerState(chat),
     ...configControllerState(config),
+    configError: config.configError || (agentMode !== null ? codexCatalog.error : ''),
+    modelOptionsLoading: config.modelOptionsLoading || (agentMode !== null && codexCatalog.loading),
     ...modelState,
     ...derived,
     showConfig: settings.showConfig,
@@ -190,6 +211,38 @@ export function useHomePageController(): HomePageController {
     openWorkflowCreate: settings.openWorkflowCreate,
     openWorkflowEdit: settings.openWorkflowEdit,
   };
+}
+
+function useCodexModelCatalog(): CodexModelCatalogState {
+  const [state, setState] = useState<CodexModelCatalogState>({
+    catalog: EMPTY_CODEX_MODEL_CATALOG,
+    error: '',
+    loading: true,
+  });
+
+  useEffect(() => {
+    let active = true;
+    getCodexModelCatalog()
+      .then((catalog) => {
+        if (active) {
+          setState({ catalog, error: '', loading: false });
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setState({
+            catalog: EMPTY_CODEX_MODEL_CATALOG,
+            error: toErrorMessage(error, 'Codex 模型列表加载失败'),
+            loading: false,
+          });
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return state;
 }
 
 function useSettingsPanelState(router: RouterController): SettingsPanelState {
@@ -274,6 +327,7 @@ function useSessionRuntimeSelectionApplier(
   selectActiveModel: HomePageController['selectActiveModel'],
   setAgentMode: (mode: AgentModeSelection) => void,
   setCodexModel: (model: string) => void,
+  codexCatalog: CodexModelCatalog,
 ): SessionRuntimeSelectionApplier {
   return useCallback(async (selection) => {
     if (!selection) {
@@ -282,7 +336,7 @@ function useSessionRuntimeSelectionApplier(
 
     setAgentMode(agentModeForRuntimeSelection(selection));
     if (selection.runtime === 'codex') {
-      setCodexModel(normalizeCodexModel(selection.model));
+      setCodexModel(normalizeCodexModel(selection.model, codexCatalog));
       return;
     }
 
@@ -291,22 +345,23 @@ function useSessionRuntimeSelectionApplier(
       return;
     }
     await selectActiveModel(option);
-  }, [selectActiveModel, setAgentMode, setCodexModel]);
+  }, [codexCatalog, selectActiveModel, setAgentMode, setCodexModel]);
 }
 
 function useComposerModelSelection(
   agentMode: AgentModeSelection,
   selectActiveModel: HomePageController['selectActiveModel'],
   setCodexModel: (model: string) => void,
+  codexCatalog: CodexModelCatalog,
 ): HomePageController['selectActiveModel'] {
   return useCallback(async (option) => {
     if (agentMode !== null && option.providerType === 'codex') {
-      setCodexModel(normalizeCodexModel(option.model));
+      setCodexModel(normalizeCodexModel(option.model, codexCatalog));
       return true;
     }
 
     return selectActiveModel(option);
-  }, [agentMode, selectActiveModel, setCodexModel]);
+  }, [agentMode, codexCatalog, selectActiveModel, setCodexModel]);
 }
 
 async function loadSessionRuntimeSelectionDetail(sessionId: string) {
@@ -349,6 +404,7 @@ function buildComposerModelState(
   activeModelOption: ProviderModelOption | null,
   modelOptions: ProviderModelOption[],
   codexModel: string,
+  codexCatalog: CodexModelCatalog,
 ): ComposerModelState {
   if (agentMode === null) {
     return {
@@ -357,22 +413,15 @@ function buildComposerModelState(
     };
   }
 
-  const codexOptions = buildCodexModelOptions(modelOptions);
+  const codexOptions = buildCodexModelOptions(codexCatalog);
   return {
-    activeModelOption: resolveActiveCodexModelOption(codexModel, activeModelOption, codexOptions),
+    activeModelOption: resolveActiveCodexModelOption(codexModel, activeModelOption, codexOptions, codexCatalog),
     modelOptions: codexOptions,
   };
 }
 
-function buildCodexModelOptions(modelOptions: ProviderModelOption[]): ProviderModelOption[] {
-  const configuredOptions = uniqueProviderModelOptions(
-    modelOptions.filter((option) => option.providerType === 'codex' && option.model.trim()),
-  );
-  if (configuredOptions.length > 0) {
-    return configuredOptions;
-  }
-
-  return CODEX_MODEL_IDS.map((model) => ({
+function buildCodexModelOptions(catalog: CodexModelCatalog): ProviderModelOption[] {
+  return catalog.models.map((model) => ({
     providerName: 'codex',
     providerType: 'codex',
     model,
@@ -383,39 +432,17 @@ function resolveActiveCodexModelOption(
   codexModel: string,
   activeModelOption: ProviderModelOption | null,
   codexOptions: ProviderModelOption[],
+  catalog: CodexModelCatalog,
 ): ProviderModelOption | null {
   const activeCodexModel = activeModelOption?.providerType === 'codex'
     ? activeModelOption.model.trim()
-    : normalizeCodexModel(codexModel);
-  const targetModel = activeCodexModel || DEFAULT_CODEX_MODEL;
+    : normalizeCodexModel(codexModel, catalog);
+  const targetModel = activeCodexModel || catalog.default_model;
 
   return codexOptions.find((option) => sameModel(option.model, targetModel))
-    ?? codexOptions.find((option) => sameModel(option.model, DEFAULT_CODEX_MODEL))
+    ?? codexOptions.find((option) => sameModel(option.model, catalog.default_model))
     ?? codexOptions[0]
     ?? null;
-}
-
-function uniqueProviderModelOptions(options: ProviderModelOption[]): ProviderModelOption[] {
-  const seen = new Set<string>();
-  const uniqueOptions: ProviderModelOption[] = [];
-
-  for (const option of options) {
-    const model = option.model.trim();
-    const providerName = option.providerName.trim() || 'codex';
-    const key = `${providerName.toLowerCase()}::${model.toLowerCase()}`;
-    if (seen.has(key)) {
-      continue;
-    }
-
-    seen.add(key);
-    uniqueOptions.push({
-      providerName,
-      providerType: 'codex',
-      model,
-    });
-  }
-
-  return uniqueOptions;
 }
 
 function sameModel(left: string, right: string): boolean {

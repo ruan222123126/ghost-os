@@ -1,7 +1,7 @@
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import { getSession } from '@/lib/api/sessions/api';
-import { CODEX_MODEL_IDS, DEFAULT_CODEX_MODEL } from '@/lib/codexModels';
+import { getCodexModelCatalog } from '@/lib/api/agent/models';
 import type { ProviderModelOption } from '@/lib/types';
 import { useHomePageController } from './useHomePageController';
 
@@ -30,6 +30,15 @@ jest.mock('@/lib/api/sessions/api', () => ({
   getSession: jest.fn(),
 }));
 
+jest.mock('@/lib/api/agent/models', () => ({
+  getCodexModelCatalog: jest.fn(),
+}));
+
+const CODEX_CATALOG = {
+  models: ['codex-default', 'codex-fast', 'gpt-5.4'],
+  default_model: 'codex-default',
+};
+
 describe('hooks/useHomePageController', () => {
   beforeEach(() => {
     mockRouter = buildRouter();
@@ -37,6 +46,7 @@ describe('hooks/useHomePageController', () => {
     mockChat = buildChatController();
     mockConfig = buildConfigController();
     jest.mocked(getSession).mockReset();
+    jest.mocked(getCodexModelCatalog).mockReturnValue(new Promise(() => undefined));
     installWindowSearch('');
   });
 
@@ -69,6 +79,7 @@ describe('hooks/useHomePageController', () => {
   });
 
   it('restores runtime selection from loaded session history detail', async () => {
+    jest.mocked(getCodexModelCatalog).mockResolvedValue(CODEX_CATALOG);
     mockChat.shouldLoadSessionHistory.mockReturnValue(true);
     mockChat.loadSessionHistory.mockResolvedValue({
       last_runtime_selection: {
@@ -87,7 +98,7 @@ describe('hooks/useHomePageController', () => {
     });
 
     expect(latest.current.agentMode).toBe('plan');
-    expect(mockConfig.selectActiveModel).toHaveBeenCalledWith({
+    expect(latest.current.activeModelOption).toEqual({
       providerName: 'codex',
       providerType: 'codex',
       model: 'gpt-5.4',
@@ -121,7 +132,8 @@ describe('hooks/useHomePageController', () => {
     });
   });
 
-  it('uses codex model options while codex mode is active', () => {
+  it('uses backend Codex model options while codex mode is active', async () => {
+    jest.mocked(getCodexModelCatalog).mockResolvedValue(CODEX_CATALOG);
     mockConfig.activeModelOption = {
       providerName: 'openai-main',
       providerType: 'openai',
@@ -130,16 +142,17 @@ describe('hooks/useHomePageController', () => {
     mockConfig.modelOptions = [mockConfig.activeModelOption];
     const latest = renderController();
 
-    act(() => {
+    await act(async () => {
       latest.current.setAgentMode('normal');
+      await Promise.resolve();
     });
 
     expect(latest.current.activeModelOption).toEqual({
       providerName: 'codex',
       providerType: 'codex',
-      model: DEFAULT_CODEX_MODEL,
+      model: CODEX_CATALOG.default_model,
     });
-    expect(latest.current.modelOptions).toEqual(CODEX_MODEL_IDS.map((model) => ({
+    expect(latest.current.modelOptions).toEqual(CODEX_CATALOG.models.map((model) => ({
       providerName: 'codex',
       providerType: 'codex',
       model,
