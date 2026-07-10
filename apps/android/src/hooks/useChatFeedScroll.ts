@@ -2,6 +2,7 @@ import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import type { AgentPayload, MobileConversationMessage, StatusMessage } from "../mobileTypes";
 
 const BOTTOM_THRESHOLD_PX = 48;
+const HARD_BOTTOM_TOLERANCE_PX = 2;
 const LOAD_OLDER_THRESHOLD_PX = 32;
 const SCROLL_DIRECTION_TOLERANCE_PX = 2;
 const USER_SCROLL_INTENT_RELEASE_MS = 240;
@@ -47,6 +48,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   const previousSessionIdRef = useRef<string | undefined>(undefined);
   const previousScrollTopRef = useRef(0);
   const autoScrollRef = useRef(false);
+  const smoothScrollInProgressRef = useRef(false);
   const userScrollIntentRef = useRef(false);
   const userScrollIntentTimeoutRef = useRef<number | null>(null);
   const trailingSpacerPxRef = useRef(0);
@@ -95,6 +97,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     historyAnchorRef.current = null;
     olderLoadPendingRef.current = false;
     autoScrollRef.current = false;
+    smoothScrollInProgressRef.current = false;
     clearUserScrollIntent();
     setTrailingSpacerPx(0);
     setShowScrollDown(false);
@@ -124,6 +127,10 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
 
   useLayoutEffect(() => {
     compensateHistoryAnchor();
+    if (smoothScrollInProgressRef.current) {
+      setShowScrollDown(false);
+      return;
+    }
     if (!options.loadingOlderHistory && autoScrollRef.current && hasFeedContent) {
       forceScrollToBottom("auto");
       return;
@@ -151,6 +158,10 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     }
 
     const resizeObserver = new ResizeObserver(() => {
+      if (smoothScrollInProgressRef.current) {
+        setShowScrollDown(false);
+        return;
+      }
       if (autoScrollRef.current) {
         forceScrollToBottom("auto");
       } else if (isStreaming) {
@@ -201,11 +212,21 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     );
     if (interruptedAutoScroll) {
       autoScrollRef.current = false;
+      smoothScrollInProgressRef.current = false;
     }
 
     maybeLoadOlderHistory(element);
     if (interruptedAutoScroll) {
       syncBottomAffordance();
+      return;
+    }
+    if (smoothScrollInProgressRef.current) {
+      if (isAtHardBottom(element)) {
+        smoothScrollInProgressRef.current = false;
+        autoScrollRef.current = true;
+        previousScrollTopRef.current = element.scrollTop;
+      }
+      setShowScrollDown(false);
       return;
     }
     if (userInitiated && isAtBottom(element)) {
@@ -220,11 +241,13 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   }
 
   function handleUserScrollStart(): void {
+    interruptSmoothScroll();
     userScrollIntentRef.current = true;
     clearUserScrollIntentTimeout();
   }
 
   function handleUserScrollIntent(): void {
+    interruptSmoothScroll();
     userScrollIntentRef.current = true;
     scheduleUserScrollIntentRelease(USER_SCROLL_INTENT_RELEASE_MS);
   }
@@ -235,18 +258,28 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
 
   function resetScrollDown(): void {
     autoScrollRef.current = false;
+    smoothScrollInProgressRef.current = false;
     dynamicSpacerAnchorRef.current = null;
     historyAnchorRef.current = null;
     setTrailingSpacerPx(0);
     setShowScrollDown(false);
   }
 
-  function scrollToBottom(behavior: ScrollBehavior = "smooth"): void {
+  function scrollToBottom(
+    behavior: ScrollBehavior = "smooth",
+    performSmoothScroll?: () => void,
+  ): void {
+    clearUserScrollIntent();
     autoScrollRef.current = true;
+    smoothScrollInProgressRef.current = behavior === "smooth";
     dynamicSpacerAnchorRef.current = null;
     historyAnchorRef.current = null;
     setTrailingSpacerPx(0);
     setShowScrollDown(false);
+    if (behavior === "smooth" && performSmoothScroll) {
+      performSmoothScroll();
+      return;
+    }
     forceScrollToBottom(behavior);
   }
 
@@ -258,6 +291,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     }
 
     autoScrollRef.current = false;
+    smoothScrollInProgressRef.current = false;
     const viewportBottom = targetScrollTop + element.clientHeight;
     dynamicSpacerAnchorRef.current = { viewportBottom };
     setTrailingSpacerPx(requiredTrailingSpacerPx(element, viewportBottom, trailingSpacerPxRef.current));
@@ -384,6 +418,14 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     userScrollIntentRef.current = false;
   }
 
+  function interruptSmoothScroll(): void {
+    if (!smoothScrollInProgressRef.current) {
+      return;
+    }
+    smoothScrollInProgressRef.current = false;
+    autoScrollRef.current = false;
+  }
+
   function isPendingSessionPromotion(previousSessionId: string, currentSessionId: string): boolean {
     const request = options.postSendFocusRequest;
     return previousSessionId === ""
@@ -413,6 +455,10 @@ function distanceFromBottom(element: HTMLElement): number {
 
 function isAtBottom(element: HTMLElement): boolean {
   return distanceFromBottom(element) <= BOTTOM_THRESHOLD_PX;
+}
+
+function isAtHardBottom(element: HTMLElement): boolean {
+  return distanceFromBottom(element) <= HARD_BOTTOM_TOLERANCE_PX;
 }
 
 function hasUserMessage(messages: MobileConversationMessage[], messageId: string): boolean {

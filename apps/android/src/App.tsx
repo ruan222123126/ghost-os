@@ -142,6 +142,7 @@ function App() {
   const [pinnedHistoryIds, setPinnedHistoryIds] = useState<string[]>([]);
   const [completionNotifications, setCompletionNotifications] = useState<CompletionNotification[]>([]);
   const composerRef = useRef<MobileChatComposerHandle>(null);
+  const virtualScrollToBottomRef = useRef<(() => void) | null>(null);
   const pendingSelectHistoryTimeoutRef = useRef<number | null>(null);
   const previousHistoryStatusRef = useRef<Map<string, SidebarHistoryItem["status"]>>(new Map());
   const localRuntimeConfig = useMemo(() => buildLocalRuntimeConfig(providerList, settings), [providerList, settings]);
@@ -505,6 +506,7 @@ function App() {
             registerUserMessageRow={registerUserMessageRow}
             reply={mobileSessions.activeReply}
             scrollElementRef={scrollRef}
+            scrollToBottomRef={virtualScrollToBottomRef}
             status={displayStatus}
           />
           <div
@@ -515,7 +517,11 @@ function App() {
           />
         </main>
 
-        {showScrollDown ? <ScrollDownButton onClick={() => scrollToBottom()} /> : null}
+        {showScrollDown ? (
+          <ScrollDownButton
+            onClick={() => scrollToBottom("smooth", virtualScrollToBottomRef.current ?? undefined)}
+          />
+        ) : null}
 
         <MobileChatComposer
           ref={composerRef}

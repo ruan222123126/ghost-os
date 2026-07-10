@@ -550,13 +550,15 @@ describe("useChatFeedScroll", () => {
     expect(feedElement().scrollTo).not.toHaveBeenCalled();
   });
 
-  it("keeps bottom follow active during an in-progress smooth scroll to bottom", () => {
+  it("does not interrupt an in-progress virtual smooth scroll when rows resize", () => {
     const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 120 });
+    const smoothScrollToBottom = vi.fn();
     render(
       <ScrollHarness
         messages={[message("session-1:0:user", "user")]}
         metrics={metrics}
         showScrollDownControl
+        smoothScrollToBottom={smoothScrollToBottom}
       />,
     );
     vi.mocked(feedElement().scrollTo).mockClear();
@@ -564,7 +566,8 @@ describe("useChatFeedScroll", () => {
     fireEvent.scroll(feedElement());
     fireEvent.click(screen.getByRole("button", { name: "scroll bottom" }));
 
-    expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 500, behavior: "smooth" });
+    expect(smoothScrollToBottom).toHaveBeenCalledOnce();
+    expect(feedElement().scrollTo).not.toHaveBeenCalled();
 
     metrics.scrollTop = 300;
     fireEvent.scroll(feedElement());
@@ -572,7 +575,15 @@ describe("useChatFeedScroll", () => {
     metrics.scrollHeight = 1240;
     notifyResize(feedElement());
 
-    expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 740, behavior: "auto" });
+    expect(feedElement().scrollTo).not.toHaveBeenCalled();
+    expect(latestSnapshot().showScrollDown).toBe(false);
+
+    metrics.scrollTop = 740;
+    fireEvent.scroll(feedElement());
+    metrics.scrollHeight = 1360;
+    notifyResize(feedElement());
+
+    expect(feedElement().scrollTo).toHaveBeenLastCalledWith({ top: 860, behavior: "auto" });
   });
 });
 
@@ -612,6 +623,7 @@ function ScrollHarness(props: {
   reply?: AgentPayload;
   sessionId?: string;
   showScrollDownControl?: boolean;
+  smoothScrollToBottom?: () => void;
   statusTone?: StatusMessage["tone"];
 }) {
   const scroll = useChatFeedScroll({
@@ -667,7 +679,11 @@ function ScrollHarness(props: {
       <div data-testid="history-sentinel" ref={scroll.historySentinelRef} />
       <div data-testid="trailing-spacer" ref={scroll.trailingSpacerRef} style={{ minHeight: scroll.trailingSpacerPx }} />
       {props.showScrollDownControl ? (
-        <button type="button" onClick={() => scroll.scrollToBottom()} aria-label="scroll bottom" />
+        <button
+          type="button"
+          onClick={() => scroll.scrollToBottom("smooth", props.smoothScrollToBottom)}
+          aria-label="scroll bottom"
+        />
       ) : null}
     </main>
   );

@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type MutableRefObject,
   type ReactNode,
   type RefObject,
 } from "react";
@@ -155,6 +156,7 @@ export const ConversationMessageList = memo(function ConversationMessageList(pro
   registerUserMessageRow: (messageId: string) => (node: HTMLDivElement | null) => void;
   reply: AgentPayload | undefined;
   scrollElementRef?: RefObject<HTMLElement | null>;
+  scrollToBottomRef?: MutableRefObject<(() => void) | null>;
   status: StatusMessage;
 }) {
   const hasActiveReply = Boolean(props.reply) || props.status.tone === "error";
@@ -178,6 +180,22 @@ export const ConversationMessageList = memo(function ConversationMessageList(pro
     const messageId = props.postSendFocusRequest?.messageId;
     return messageId ? props.messages.findIndex((message) => message.id === messageId) : -1;
   }, [props.messages, props.postSendFocusRequest?.messageId]);
+  const scrollToVirtualBottom = useCallback(() => {
+    virtualizer.scrollToEnd({ behavior: "smooth" });
+  }, [virtualizer]);
+
+  useLayoutEffect(() => {
+    const scrollToBottomRef = props.scrollToBottomRef;
+    if (!scrollToBottomRef) {
+      return;
+    }
+    scrollToBottomRef.current = scrollToVirtualBottom;
+    return () => {
+      if (scrollToBottomRef.current === scrollToVirtualBottom) {
+        scrollToBottomRef.current = null;
+      }
+    };
+  }, [props.scrollToBottomRef, scrollToVirtualBottom]);
 
   useLayoutEffect(() => {
     if (!props.scrollElementRef || postSendMessageIndex < 0 || !props.postSendFocusRequest) {

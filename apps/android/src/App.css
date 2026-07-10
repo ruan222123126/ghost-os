@@ -201,7 +201,6 @@ code {
   flex-direction: column;
   overflow-anchor: auto;
   overscroll-behavior-y: contain;
-  scroll-behavior: smooth;
   contain: layout style;
 }
 
@@ -221,7 +220,7 @@ code {
   min-width: 0;
   flex: 0 0 auto;
   contain: layout style paint;
-  overflow-anchor: auto;
+  overflow-anchor: none;
 }
 
 .conversation-virtual-row {
@@ -230,7 +229,7 @@ code {
   left: 0;
   width: 100%;
   padding-bottom: 24px;
-  overflow-anchor: auto;
+  overflow-anchor: none;
   contain: layout style;
 }
 
@@ -248,7 +247,7 @@ code {
   width: 100%;
   height: 1px;
   flex: 0 0 1px;
-  overflow-anchor: auto;
+  overflow-anchor: none;
 }
 
 @keyframes mobile-top-loading-bar-slide {
