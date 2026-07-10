@@ -30,7 +30,7 @@ const mocks = vi.hoisted(() => ({
   useMobileSessions: vi.fn((options: MockMobileSessionsOptions) => ({
     activeMessages: [],
     activeReply: undefined,
-    activeSessionId: undefined,
+    activeSessionId: undefined as string | undefined,
     activeStatus: { tone: "idle", text: "首页" },
     canSend: true,
     canStop: false,
@@ -181,7 +181,11 @@ describe("App Codex mode routing", () => {
     const selectSession = vi.fn(async (_sessionId: string) => undefined);
     mocks.useMobileSessions.mockImplementation((options: MockMobileSessionsOptions) =>
       mockMobileSessions(options, {
-        historyItems: [historyItem("session-1", "设计复盘", "running")],
+        activeSessionId: "session-2",
+        historyItems: [
+          historyItem("session-1", "设计复盘", "running"),
+          historyItem("session-2", "当前会话", undefined),
+        ],
         selectSession,
       })
     );
@@ -192,7 +196,11 @@ describe("App Codex mode routing", () => {
 
     mocks.useMobileSessions.mockImplementation((options: MockMobileSessionsOptions) =>
       mockMobileSessions(options, {
-        historyItems: [historyItem("session-1", "设计复盘", "success")],
+        activeSessionId: "session-2",
+        historyItems: [
+          historyItem("session-1", "设计复盘", "success"),
+          historyItem("session-2", "当前会话", undefined),
+        ],
         selectSession,
       })
     );
@@ -206,11 +214,41 @@ describe("App Codex mode routing", () => {
       expect(screen.queryByText("设计复盘会话已完成")).toBeNull();
     });
   });
+
+  it("does not notify for sessions that were already completed before this app lifecycle", async () => {
+    mocks.useMobileSessions.mockImplementation((options: MockMobileSessionsOptions) =>
+      mockMobileSessions(options, {
+        historyItems: [
+          historyItem("session-1", "已完成任务", "success"),
+          historyItem("session-2", "状态补全任务", undefined),
+        ],
+      })
+    );
+
+    const { rerender } = render(<App />);
+
+    expect(screen.queryByText("已完成任务会话已完成")).toBeNull();
+
+    mocks.useMobileSessions.mockImplementation((options: MockMobileSessionsOptions) =>
+      mockMobileSessions(options, {
+        historyItems: [
+          historyItem("session-1", "已完成任务", "success"),
+          historyItem("session-2", "状态补全任务", "success"),
+        ],
+      })
+    );
+    rerender(<App />);
+
+    await waitFor(() => {
+      expect(screen.queryByText("状态补全任务会话已完成")).toBeNull();
+    });
+  });
 });
 
 function mockMobileSessions(
   options: MockMobileSessionsOptions,
   overrides: {
+    activeSessionId?: string;
     historyItems?: MockHistoryItem[];
     selectSession?: (sessionId: string) => Promise<void>;
   } = {},
@@ -218,7 +256,7 @@ function mockMobileSessions(
   return {
     activeMessages: [],
     activeReply: undefined,
-    activeSessionId: undefined,
+    activeSessionId: overrides.activeSessionId,
     activeStatus: { tone: "idle", text: "首页" },
     canSend: true,
     canStop: false,

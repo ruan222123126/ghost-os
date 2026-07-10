@@ -265,8 +265,7 @@ function App() {
     const previousStatuses = previousHistoryStatusRef.current;
     const completedItems = mobileSessions.historyItems.filter((item) =>
       item.status === "success"
-        && previousStatuses.has(item.id)
-        && previousStatuses.get(item.id) !== "success"
+        && previousStatuses.get(item.id) === "running"
     );
 
     if (completedItems.length > 0) {
