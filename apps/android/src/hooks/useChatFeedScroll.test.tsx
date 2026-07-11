@@ -550,6 +550,53 @@ describe("useChatFeedScroll", () => {
     expect(feedElement().scrollTo).not.toHaveBeenCalled();
   });
 
+  it("releases bottom follow on a one-pixel upward scroll", () => {
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 500 });
+    render(
+      <ScrollHarness
+        messages={[message("session-1:0:user", "user")]}
+        metrics={metrics}
+        reply={reply("streaming reply")}
+        statusTone="loading"
+      />,
+    );
+    fireEvent.wheel(feedElement());
+    fireEvent.scroll(feedElement());
+    vi.mocked(feedElement().scrollTo).mockClear();
+
+    fireEvent.wheel(feedElement());
+    metrics.scrollTop = 499;
+    fireEvent.scroll(feedElement());
+    metrics.scrollHeight = 1120;
+    notifyResize(feedElement());
+
+    expect(metrics.scrollTop).toBe(499);
+    expect(feedElement().scrollTo).not.toHaveBeenCalled();
+  });
+
+  it("does not enable bottom follow merely inside the scroll-down button threshold", () => {
+    const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 440 });
+    render(
+      <ScrollHarness
+        messages={[message("session-1:0:user", "user")]}
+        metrics={metrics}
+        reply={reply("streaming reply")}
+        statusTone="loading"
+      />,
+    );
+    fireEvent.wheel(feedElement());
+    fireEvent.scroll(feedElement());
+    vi.mocked(feedElement().scrollTo).mockClear();
+
+    metrics.scrollTop = 455;
+    fireEvent.scroll(feedElement());
+    metrics.scrollHeight = 1120;
+    notifyResize(feedElement());
+
+    expect(metrics.scrollTop).toBe(455);
+    expect(feedElement().scrollTo).not.toHaveBeenCalled();
+  });
+
   it("does not interrupt an in-progress virtual smooth scroll when rows resize", () => {
     const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 120 });
     const smoothScrollToBottom = vi.fn();

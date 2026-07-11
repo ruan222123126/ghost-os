@@ -4,7 +4,6 @@ import type { AgentPayload, MobileConversationMessage, StatusMessage } from "../
 const BOTTOM_THRESHOLD_PX = 48;
 const HARD_BOTTOM_TOLERANCE_PX = 2;
 const LOAD_OLDER_THRESHOLD_PX = 32;
-const SCROLL_DIRECTION_TOLERANCE_PX = 2;
 const USER_SCROLL_INTENT_RELEASE_MS = 240;
 const USER_SCROLL_END_RELEASE_MS = 320;
 const CHAT_FEED_CONTENT_SELECTOR = "[data-chat-feed-content]";
@@ -210,18 +209,14 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     if (userInitiated) {
       scheduleUserScrollIntentRelease(USER_SCROLL_INTENT_RELEASE_MS);
     }
-    const interruptedAutoScroll = (
-      autoScrollRef.current
-      && userInitiated
-      && element.scrollTop < previousScrollTop - SCROLL_DIRECTION_TOLERANCE_PX
-    );
-    if (interruptedAutoScroll) {
+    const userScrolledAwayFromBottom = userInitiated && element.scrollTop < previousScrollTop;
+    if (userScrolledAwayFromBottom) {
       autoScrollRef.current = false;
       smoothScrollInProgressRef.current = false;
     }
 
     maybeLoadOlderHistory(element);
-    if (interruptedAutoScroll) {
+    if (userScrolledAwayFromBottom) {
       syncBottomAffordance();
       return;
     }
@@ -234,7 +229,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
       setShowScrollDown(false);
       return;
     }
-    if (userInitiated && isAtBottom(element)) {
+    if (userInitiated && isAtHardBottom(element)) {
       autoScrollRef.current = true;
       dynamicSpacerAnchorRef.current = null;
       setTrailingSpacerPx(0);
@@ -483,10 +478,6 @@ function findHistoryAnchorElement(element: HTMLElement, key: string | null): HTM
 
 function distanceFromBottom(element: HTMLElement): number {
   return Math.max(0, element.scrollHeight - element.scrollTop - element.clientHeight);
-}
-
-function isAtBottom(element: HTMLElement): boolean {
-  return distanceFromBottom(element) <= BOTTOM_THRESHOLD_PX;
 }
 
 function isAtHardBottom(element: HTMLElement): boolean {
