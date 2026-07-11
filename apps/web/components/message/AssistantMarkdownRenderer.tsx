@@ -61,6 +61,7 @@ export const AssistantMarkdownRenderer: FC<AssistantMarkdownRendererProps> = ({
   showCopyButton = true,
 }) => (
   <MarkdownRender
+    batchRendering={false}
     codeBlockProps={{
       enableFontSizeControl: false,
       showCollapseButton: false,
@@ -72,10 +73,12 @@ export const AssistantMarkdownRenderer: FC<AssistantMarkdownRendererProps> = ({
     content={content}
     customId={ASSISTANT_MARKDOWN_CUSTOM_ID}
     d2Props={{ showCopyButton }}
+    deferNodesUntilVisible={false}
     fade={false}
     final={final}
     htmlPolicy="safe"
     infographicProps={{ showCopyButton }}
+    maxLiveNodes={0}
     mermaidProps={{ showCopyButton }}
     showTooltips={false}
     typewriter={false}
