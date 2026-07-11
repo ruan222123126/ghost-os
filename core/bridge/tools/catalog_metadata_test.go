@@ -1,0 +1,105 @@
+package tools
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestGetToolMetadata_CoversExpectedTools(t *testing.T) {
+	metadata := GetToolMetadata()
+	expected := []string{
+		"list_files",
+		"read_file",
+		"search_files",
+		"write_file",
+		"apply_diff",
+		"bash_exec",
+		"script_exec",
+		"codex_cli",
+		"web_search",
+		"screen_control",
+		"sfind",
+		"ask_human",
+	}
+	seen := make(map[string]ToolMetadata, len(metadata))
+	alwaysOnCount := 0
+	for _, item := range metadata {
+		if item.Name == "" {
+			t.Fatal("tool metadata name should not be empty")
+		}
+		if item.Domain == "" {
+			t.Fatalf("tool metadata domain should not be empty: %+v", item)
+		}
+		if len(item.Tags) == 0 {
+			t.Fatalf("tool metadata tags should not be empty: %+v", item)
+		}
+		if item.ShortDesc == "" {
+			t.Fatalf("tool metadata short description should not be empty: %+v", item)
+		}
+		seen[item.Name] = item
+		if item.AlwaysOn {
+			alwaysOnCount++
+		}
+	}
+
+	for _, name := range expected {
+		if _, ok := seen[name]; !ok {
+			t.Fatalf("expected metadata for tool %q", name)
+		}
+	}
+	if alwaysOnCount != 0 {
+		t.Fatalf("expected no always-on tools, got %d", alwaysOnCount)
+	}
+}
+
+func TestFormatMetadataForSelector_HidesOnDemandTools(t *testing.T) {
+	formatted := FormatMetadataForSelector()
+	if strings.TrimSpace(formatted) == "" {
+		t.Fatal("formatted metadata should not be empty")
+	}
+
+	for _, item := range GetToolMetadata() {
+		if item.Name == ToolSearchToolName || item.OnDemand {
+			continue
+		}
+		if !strings.Contains(formatted, item.Name) {
+			t.Fatalf("formatted metadata should contain %q", item.Name)
+		}
+	}
+	if strings.Contains(formatted, ToolSearchToolName) {
+		t.Fatalf("formatted metadata should exclude %q: %q", ToolSearchToolName, formatted)
+	}
+	if strings.Contains(formatted, "always_on=true") {
+		t.Fatalf("formatted metadata should not include always_on marker: %q", formatted)
+	}
+}
+
+func TestFormatMetadataForCatalog_FiltersToVisibleTools(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register(&mockTool{name: "script_exec"})
+	registry.Register(&mockTool{name: "ask_human"})
+
+	formatted := FormatMetadataForCatalog(registry)
+	if strings.Contains(formatted, "web_search") {
+		t.Fatalf("formatted metadata should exclude hidden tools: %q", formatted)
+	}
+	for _, name := range []string{"script_exec", "ask_human"} {
+		if !strings.Contains(formatted, name) {
+			t.Fatalf("formatted metadata should contain %q", name)
+		}
+	}
+}
+
+func TestFormatPromptToolsForCatalog_UsesShortDescriptions(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register(&mockTool{name: "script_exec"})
+	registry.Register(&mockTool{name: ToolSearchToolName})
+
+	formatted := FormatPromptToolsForCatalog(registry)
+	if !strings.Contains(formatted, "- script_exec: Run a Python script in sandbox.") {
+		t.Fatalf("unexpected prompt tool list: %q", formatted)
+	}
+	if !strings.Contains(formatted, "- sfind: Find or load optional skills from SKILL.md.") {
+		t.Fatalf("unexpected prompt tool list: %q", formatted)
+	}
+}

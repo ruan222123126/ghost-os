@@ -91,7 +91,7 @@ func TestToAnthropicRequestBuildsToolImageContentBlocks(t *testing.T) {
 				ToolCalls: []ToolCall{
 					{
 						ID:        "tool-call-1",
-						Name:      "browser_action",
+						Name:      "screen_action",
 						Arguments: json.RawMessage(`{"action":"screenshot"}`),
 					},
 				},
@@ -99,7 +99,7 @@ func TestToAnthropicRequestBuildsToolImageContentBlocks(t *testing.T) {
 			{
 				Role:       RoleTool,
 				ToolCallID: "tool-call-1",
-				Text:       `{"status":"success","tool":"browser_action"}`,
+				Text:       `{"status":"success","tool":"screen_action"}`,
 				Content: []ContentPart{
 					{
 						Type: ContentTypeImage,
@@ -127,5 +127,37 @@ func TestToAnthropicRequestBuildsToolImageContentBlocks(t *testing.T) {
 	}
 	if !strings.Contains(string(encoded), `"type":"image"`) {
 		t.Fatalf("expected image block in tool_result, got: %s", string(encoded))
+	}
+}
+
+func TestToAnthropicRequestBuildsUserImageContentBlocks(t *testing.T) {
+	request, err := toAnthropicRequest("claude-3-7-sonnet", 1024, CompletionRequest{
+		Messages: []Message{{
+			Role: RoleUser,
+			Text: "describe this image",
+			Content: []ContentPart{{
+				Type: ContentTypeImage,
+				Image: &ImageContent{
+					URL:      "data:image/png;base64,ZmFrZS1pbWFnZQ==",
+					MimeType: "image/png",
+				},
+			}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("toAnthropicRequest returned error: %v", err)
+	}
+	if len(request.Messages) != 1 {
+		t.Fatalf("unexpected message count: got %d want %d", len(request.Messages), 1)
+	}
+	encoded, err := json.Marshal(request.Messages[0].Content)
+	if err != nil {
+		t.Fatalf("marshal user content: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"type":"image"`) {
+		t.Fatalf("expected image block in user content, got: %s", string(encoded))
+	}
+	if !strings.Contains(string(encoded), `"describe this image"`) {
+		t.Fatalf("expected user text in content, got: %s", string(encoded))
 	}
 }

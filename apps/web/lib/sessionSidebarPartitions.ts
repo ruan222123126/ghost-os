@@ -1,0 +1,279 @@
+import type { SessionMetadata } from '@/lib/types';
+import {
+  LEGACY_SESSION_PARTITION_STORAGE_KEY,
+  UNCLASSIFIED_PARTITION_ID,
+  type BuildSessionPartitionViewsInput,
+  type PartitionNameValidationError,
+  type SessionSearchMatcher,
+  type SessionPartition,
+  type SessionPartitionStoreV1,
+  type SessionPartitionView,
+} from '@/lib/sessionSidebarPartitionsModel';
+import { sortSessionIDsByRecentActivity } from '@/lib/sessionSidebarSessionSort';
+
+interface SessionPartitionMeta {
+  id: string;
+  name: string;
+}
+
+interface SessionPartitionViewContext {
+  byID: Map<string, SessionMetadata>;
+  grouped: Record<string, string[]>;
+  matchesSearch: SessionSearchMatcher;
+  query: string;
+}
+
+export {
+  LEGACY_SESSION_PARTITION_STORAGE_KEY,
+  SESSION_PARTITION_VERSION,
+  UNCLASSIFIED_PARTITION_ID,
+  type BuildSessionPartitionViewsInput,
+  type PartitionNameValidationError,
+  type SessionPartition,
+  type SessionSearchMatcher,
+  type SessionPartitionStoreV1,
+  type SessionPartitionView,
+} from '@/lib/sessionSidebarPartitionsModel';
+
+export {
+  createInitialSessionPartitionStore,
+  parseSessionPartitionStore,
+  stringifySessionPartitionStore,
+  storesAreEqual,
+} from '@/lib/sessionSidebarPartitionsCodec';
+
+export function validatePartitionName(
+  value: string,
+  store: SessionPartitionStoreV1,
+  unclassifiedName: string,
+): PartitionNameValidationError | undefined {
+  const normalizedName = normalizeName(value);
+  if (!normalizedName) {
+    return 'empty';
+  }
+
+  const lowerName = normalizedName.toLowerCase();
+  if (lowerName === normalizeName(unclassifiedName).toLowerCase()) {
+    return 'duplicate';
+  }
+
+  const duplicated = store.partitions.some((partition) => {
+    return normalizeName(partition.name).toLowerCase() === lowerName;
+  });
+  return duplicated ? 'duplicate' : undefined;
+}
+
+export function createSessionPartition(
+  store: SessionPartitionStoreV1,
+  name: string,
+  partitionID: string,
+): SessionPartitionStoreV1 {
+  const normalizedName = normalizeName(name);
+  const normalizedID = partitionID.trim();
+  if (!normalizedName) {
+    throw new Error('Partition name cannot be empty');
+  }
+  if (!normalizedID || normalizedID === UNCLASSIFIED_PARTITION_ID) {
+    throw new Error(`Invalid partition id: ${partitionID}`);
+  }
+  if (store.partitions.some((partition) => partition.id === normalizedID)) {
+    throw new Error(`Partition already exists: ${partitionID}`);
+  }
+
+  return {
+    ...store,
+    partitions: [...store.partitions, { id: normalizedID, name: normalizedName }],
+  };
+}
+
+export function sanitizeSessionPartitionStore(
+  store: SessionPartitionStoreV1,
+  sessions: SessionMetadata[],
+): SessionPartitionStoreV1 {
+  const knownSessionIDs = new Set(sessions.map((session) => session.id));
+  const partitions = dedupePartitions(store.partitions);
+  const partitionIDs = buildPartitionIDSet(partitions);
+
+  return {
+    version: store.version,
+    partitions,
+    assignments: pruneAssignments(store.assignments, knownSessionIDs, partitionIDs),
+  };
+}
+
+export function buildSessionPartitionViews(input: BuildSessionPartitionViewsInput): SessionPartitionView[] {
+  const sanitized = sanitizeSessionPartitionStore(input.store, input.sessions);
+  const partitionMetas = buildSessionPartitionMetas(input.unclassifiedName, sanitized.partitions);
+  const context = buildSessionPartitionViewContext(input, sanitized, partitionMetas);
+  return partitionMetas
+    .map((meta) => buildSessionPartitionView(meta, context))
+    .filter((view) => shouldKeepSessionPartitionView(view, context.query));
+}
+
+export function partitionNameMatches(name: string, normalizedQuery: string): boolean {
+  return Boolean(normalizedQuery)
+    && name.trim().toLowerCase().includes(normalizedQuery);
+}
+
+export function moveSessionToPartition(input: {
+  store: SessionPartitionStoreV1;
+  sessions: SessionMetadata[];
+  sessionID: string;
+  targetPartitionID: string;
+  targetIndex: number;
+}): SessionPartitionStoreV1 {
+  const { store, sessions, sessionID, targetPartitionID } = input;
+  const sanitized = sanitizeSessionPartitionStore(store, sessions);
+  const knownSessionIDs = new Set(sessions.map((session) => session.id));
+  if (!knownSessionIDs.has(sessionID)) {
+    throw new Error(`Unknown session id: ${sessionID}`);
+  }
+
+  const partitionIDs = [UNCLASSIFIED_PARTITION_ID, ...sanitized.partitions.map((partition) => partition.id)];
+  if (!partitionIDs.includes(targetPartitionID)) {
+    throw new Error(`Unknown partition id: ${targetPartitionID}`);
+  }
+
+  const assignments = { ...sanitized.assignments };
+  if (targetPartitionID === UNCLASSIFIED_PARTITION_ID) {
+    delete assignments[sessionID];
+  } else {
+    assignments[sessionID] = targetPartitionID;
+  }
+
+  return {
+    ...sanitized,
+    assignments,
+  };
+}
+
+function buildPartitionIDSet(partitions: SessionPartition[]): Set<string> {
+  const ids = new Set<string>([UNCLASSIFIED_PARTITION_ID]);
+  for (const partition of partitions) {
+    ids.add(partition.id);
+  }
+  return ids;
+}
+
+function buildSessionPartitionMetas(
+  unclassifiedName: string,
+  partitions: SessionPartition[],
+): SessionPartitionMeta[] {
+  return [
+    { id: UNCLASSIFIED_PARTITION_ID, name: unclassifiedName },
+    ...partitions,
+  ];
+}
+
+function buildSessionPartitionViewContext(
+  input: BuildSessionPartitionViewsInput,
+  store: SessionPartitionStoreV1,
+  partitionMetas: SessionPartitionMeta[],
+): SessionPartitionViewContext {
+  return {
+    byID: new Map(input.sessions.map((session) => [session.id, session])),
+    grouped: buildOrderedSessionIDsByPartition(input.sessions, store, partitionMetas.map((meta) => meta.id)),
+    matchesSearch: input.matchesSearch ?? defaultSessionSearchMatcher,
+    query: input.searchQuery.trim().toLowerCase(),
+  };
+}
+
+function buildSessionPartitionView(
+  meta: SessionPartitionMeta,
+  context: SessionPartitionViewContext,
+): SessionPartitionView {
+  return {
+    id: meta.id,
+    name: meta.name,
+    sessions: visibleSessionsForPartition(meta, context),
+  };
+}
+
+function visibleSessionsForPartition(
+  meta: SessionPartitionMeta,
+  context: SessionPartitionViewContext,
+): SessionMetadata[] {
+  const partitionMatches = partitionNameMatches(meta.name, context.query);
+  const sessions: SessionMetadata[] = [];
+  for (const sessionID of context.grouped[meta.id] ?? []) {
+    const session = context.byID.get(sessionID);
+    if (!session) {
+      continue;
+    }
+    if (partitionMatches || context.matchesSearch(session, context.query)) {
+      sessions.push(session);
+    }
+  }
+  return sessions;
+}
+
+function shouldKeepSessionPartitionView(view: SessionPartitionView, query: string): boolean {
+  return !query || view.sessions.length > 0;
+}
+
+function pruneAssignments(
+  assignments: Record<string, string>,
+  knownSessionIDs: Set<string>,
+  partitionIDs: Set<string>,
+): Record<string, string> {
+  const next: Record<string, string> = {};
+  for (const [sessionID, partitionID] of Object.entries(assignments)) {
+    if (!knownSessionIDs.has(sessionID)) {
+      continue;
+    }
+    if (!partitionIDs.has(partitionID) || partitionID === UNCLASSIFIED_PARTITION_ID) {
+      continue;
+    }
+    next[sessionID] = partitionID;
+  }
+  return next;
+}
+
+function buildOrderedSessionIDsByPartition(
+  sessions: SessionMetadata[],
+  store: SessionPartitionStoreV1,
+  partitionIDs: string[],
+): Record<string, string[]> {
+  const sessionByID = new Map(sessions.map((session) => [session.id, session]));
+  const grouped = Object.fromEntries(partitionIDs.map((partitionID) => [partitionID, [] as string[]]));
+
+  for (const session of sessions) {
+    const assigned = store.assignments[session.id];
+    const target = partitionIDs.includes(assigned) ? assigned : UNCLASSIFIED_PARTITION_ID;
+    grouped[target].push(session.id);
+  }
+
+  for (const partitionID of partitionIDs) {
+    grouped[partitionID] = sortSessionIDsByRecentActivity(grouped[partitionID], sessionByID);
+  }
+
+  return grouped;
+}
+
+function dedupePartitions(partitions: SessionPartition[]): SessionPartition[] {
+  const seen = new Set<string>();
+  const deduped: SessionPartition[] = [];
+
+  for (const partition of partitions) {
+    const id = partition.id.trim();
+    const name = normalizeName(partition.name);
+    if (!id || !name || id === UNCLASSIFIED_PARTITION_ID || seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    deduped.push({ id, name });
+  }
+
+  return deduped;
+}
+
+function normalizeName(value: string): string {
+  return value.trim();
+}
+
+function defaultSessionSearchMatcher(
+  session: SessionMetadata,
+  normalizedQuery: string,
+): boolean {
+  return !normalizedQuery || session.id.toLowerCase().includes(normalizedQuery);
+}

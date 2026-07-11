@@ -1,0 +1,270 @@
+.workflow-arch-properties {
+  width: 0;
+  flex: 0 0 0;
+  overflow: hidden;
+  border-left: 0;
+  background: #fafafa;
+  pointer-events: none;
+  transition:
+    width 320ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 220ms ease;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+}
+
+.workflow-arch-properties.workflow-arch-properties--open {
+  width: 320px;
+  flex-basis: 320px;
+  border-left: 1px solid #f5f5f5;
+  pointer-events: auto;
+}
+
+.workflow-arch-properties-head {
+  padding: 32px 32px 40px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.workflow-arch-properties-head h2 {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 900;
+  font-style: italic;
+  line-height: 0.9;
+  letter-spacing: -0.03em;
+  text-transform: uppercase;
+}
+
+.workflow-arch-properties-head p {
+  margin: 10px 0 0;
+  color: #a3a3a3;
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.workflow-arch-properties-pill {
+  margin: 0 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #e5e5e5;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+  padding: 10px 16px;
+}
+
+.workflow-arch-properties-pill span {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #000000;
+}
+
+.workflow-arch-properties-pill strong {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.workflow-arch-properties-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+
+.workflow-arch-prop-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.workflow-arch-prop-group-head {
+  border-bottom: 1px solid #e5e5e5;
+  padding-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workflow-arch-prop-group-head span {
+  color: #737373;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.workflow-arch-inline-button {
+  border: 1px solid #000000;
+  background: #ffffff;
+  padding: 6px 12px;
+  color: #000000;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 180ms ease, background-color 180ms ease;
+}
+
+.workflow-arch-inline-button:hover {
+  background: #000000;
+  color: #ffffff;
+}
+
+.workflow-arch-variable-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.workflow-arch-variable-item {
+  border: 1px solid #f5f5f5;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+  padding: 20px;
+  transition: border-color 180ms ease;
+}
+
+.workflow-arch-variable-item:hover {
+  border-color: #000000;
+}
+
+.workflow-arch-variable-item-head {
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.workflow-arch-variable-item-head span {
+  color: #a3a3a3;
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.workflow-arch-remove-button {
+  border: 0;
+  background: transparent;
+  color: #ef4444;
+  font-size: 14px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.workflow-arch-variable-item:hover .workflow-arch-remove-button {
+  opacity: 1;
+}
+
+.workflow-arch-variable-item input {
+  border: 0;
+  border-bottom: 1px solid #e5e5e5;
+  padding: 8px 0;
+  border-radius: 0;
+}
+
+.workflow-arch-variable-item input:focus {
+  outline: none;
+  border-bottom-color: #000000;
+}
+
+.workflow-arch-variable-item-meta {
+  margin: 10px 0 0;
+  color: #737373;
+  font-size: 11px;
+  line-height: 1.45;
+  word-break: break-all;
+}
+
+.workflow-arch-variable-item-meta strong {
+  color: #525252;
+  font-weight: 700;
+}
+
+.workflow-arch-module-placeholder {
+  border: 2px dashed #e5e5e5;
+  padding: 40px 16px;
+  text-align: center;
+  opacity: 0.4;
+}
+
+.workflow-arch-module-placeholder p {
+  margin: 0;
+  color: #737373;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  line-height: 1.8;
+}
+
+.workflow-arch-end-tip {
+  border: 2px dashed #d4d4d4;
+  color: #a3a3a3;
+  text-align: center;
+  padding: 34px 18px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 10px;
+}
+
+.workflow-arch-end-tip p {
+  margin: 0;
+}
+
+.workflow-arch-properties-footer {
+  margin-top: auto;
+  padding: 32px;
+  border-top: 1px solid #f5f5f5;
+}
+
+.workflow-arch-danger-button {
+  width: 100%;
+  border: 1px solid #e5e5e5;
+  background: #ffffff;
+  color: #a3a3a3;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 180ms ease, border-color 180ms ease, background-color 180ms ease;
+}
+
+.workflow-arch-danger-button:hover {
+  color: #ffffff;
+  border-color: #000000;
+  background: #000000;
+}
+
+@media (max-width: 1080px) {
+  .workflow-arch-properties {
+    position: fixed;
+    inset: 0 0 0 auto;
+    width: 0;
+    flex-basis: auto;
+  }
+
+  .workflow-arch-properties.workflow-arch-properties--open {
+    width: min(100vw, 360px);
+    flex-basis: auto;
+  }
+}

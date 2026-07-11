@@ -1,0 +1,119 @@
+from __future__ import annotations
+
+from contract_codegen.catalog import collect_definitions, dereference_schema, target_name_map
+from contract_codegen.common import (
+    object_additional_properties_schema,
+    object_has_declared_properties,
+    object_is_open,
+    schema_ref_name,
+)
+
+
+def _object_type(schema: dict, target_names: dict[str, str], prop_schema: dict) -> str:
+    if object_has_declared_properties(prop_schema):
+        raise ValueError(f"inline structured TS object must be promoted to $defs: {prop_schema}")
+
+    additional = object_additional_properties_schema(prop_schema)
+    if additional is not None:
+        return f"Record<string, {_type_for_schema(schema, target_names, additional)}>"
+    if object_is_open(prop_schema):
+        return "Record<string, unknown>"
+    raise ValueError(f"unsupported closed TS object schema: {prop_schema}")
+
+
+def _inner_type(schema: dict, target_names: dict[str, str], prop_schema: dict) -> str:
+    if not prop_schema:
+        return "unknown"
+
+    ref_value = prop_schema.get("$ref")
+    if ref_value:
+        ref_name = schema_ref_name(ref_value)
+        if ref_name in target_names:
+            return target_names[ref_name]
+        return _inner_type(schema, target_names, dereference_schema(schema, prop_schema))
+
+    schema_type = prop_schema.get("type")
+    if schema_type == "string":
+        if "const" in prop_schema:
+            return f"'{prop_schema['const']}'"
+        if "enum" in prop_schema:
+            return " | ".join(f"'{value}'" for value in prop_schema["enum"])
+        return "string"
+    if schema_type in {"integer", "number"}:
+        return "number"
+    if schema_type == "boolean":
+        return "boolean"
+    if schema_type == "array":
+        return f'{_type_for_schema(schema, target_names, prop_schema.get("items", {}))}[]'
+    if schema_type == "object":
+        return _object_type(schema, target_names, prop_schema)
+    raise ValueError(f"unsupported TS schema: {prop_schema}")
+
+
+def _type_for_schema(schema: dict, target_names: dict[str, str], prop_schema: dict) -> str:
+    if prop_schema.get("oneOf"):
+        parts: list[str] = []
+        for candidate in prop_schema["oneOf"]:
+            parts.append("null" if candidate.get("type") == "null" else _inner_type(schema, target_names, candidate))
+        return " | ".join(parts)
+    return _inner_type(schema, target_names, prop_schema)
+
+
+def _render_object(schema: dict, spec, target_names: dict[str, str]) -> str:
+    required = set(spec.definition.get("required", []))
+    lines = [f"export interface {spec.target_name} {{"]
+    for prop_name, prop_schema in spec.definition.get("properties", {}).items():
+        optional = "" if prop_name in required else "?"
+        field_type = _type_for_schema(schema, target_names, prop_schema)
+        lines.append(f"  {prop_name}{optional}: {field_type};")
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def _render_union(spec, target_names: dict[str, str]) -> str:
+    members = " | ".join(target_names[schema_ref_name(candidate["$ref"])] for candidate in spec.definition["oneOf"])
+    return f"export type {spec.target_name} = {members};"
+
+
+def render(schema: dict) -> str:
+    target_names = target_name_map(schema, "ts")
+    action_union = " | ".join(f"'{action}'" for action in schema["$defs"]["action"]["enum"])
+    status_union = " | ".join(f"'{status}'" for status in schema["$defs"]["status"]["enum"])
+    objects = "\n\n".join(
+        _render_object(schema, spec, target_names) for spec in collect_definitions(schema, "ts", kind="object")
+    )
+    unions = "\n\n".join(_render_union(spec, target_names) for spec in collect_definitions(schema, "ts", kind="union"))
+
+    return f'''// CODE GENERATED. DO NOT EDIT. Source: core/shared/schema.json
+// Source: core/shared/schema.json ({schema.get("$id", "")})
+
+export type BusAction = {action_union};
+export type BusStatus = {status_union};
+
+export interface ApiRequest<TParams extends object> {{
+  action: BusAction;
+  params: TParams;
+  trace_id: string;
+  request_id?: string;
+}}
+
+export interface ApiSuccessEnvelope<TPayload> {{
+  status: 'success';
+  payload: TPayload;
+  error: string;
+  request_id?: string;
+}}
+
+export interface ApiErrorEnvelope {{
+  status: 'error';
+  payload: Record<string, unknown>;
+  error: string;
+  request_id?: string;
+}}
+
+export type ApiEnvelope<TPayload> = ApiSuccessEnvelope<TPayload> | ApiErrorEnvelope;
+
+{objects}
+
+{unions}
+'''

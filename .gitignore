@@ -1,11 +1,28 @@
 # Runtime and temporary files.
 *.tmp.*
 **/*.tmp.*
+.tmp_*
+**/.tmp_*
+*.swp
+*.swo
 __pycache__/
+.DS_Store
+Thumbs.db
+
+# Local configuration and secrets.
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.sample
+!**/.env.template
 
 # Build outputs.
+/target/
 **/target/
 **/dist/
+**/build/
+**/coverage/
+**/*.tsbuildinfo
 bin/
 core/bridge/bridge
 
@@ -17,5 +34,34 @@ core/bridge/bridge
 .pnpm-store/
 **/.pnpm-store/
 
+# IDE and tool state.
+**/.gradle/
+**/.idea/
+**/.vscode/
+*.iml
+**/local.properties
+
 # Runtime logs.
 data/logs/*
+
+# Agent scratch artifacts.
+.codex
+.codex/
+core/bridge/.codex*/
+core/bridge/.codex*
+core/bridge/.ghost/
+core/bridge/.relay/
+core/bridge/**/*.exit
+core/bridge/codex*/
+core/bridge/codex-*
+core/bridge/codex_*
+core/bridge/core/
+core/bridge/phase0_*.txt*
+core/bridge/round*_codex.txt*
+core/bridge/stage1-deletion-report.md
+core/bridge/tmp/
+/tmp_apply_diff_test.txt
+
+# Temporary dev scripts.
+weather_now.py
+open-dev-bashes.sh

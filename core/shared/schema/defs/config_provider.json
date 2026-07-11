@@ -1,0 +1,218 @@
+{
+  "$defs": {
+    "providerConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type",
+        "base_url",
+        "api_key_set",
+        "provider_id",
+        "updated_at"
+      ],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "type": { "$ref": "./base.json#/$defs/providerType" },
+        "base_url": { "type": "string", "minLength": 1 },
+        "provider_id": { "type": "string", "minLength": 1 },
+        "updated_at": { "type": "string", "minLength": 1 },
+        "deleted_at": { "type": "string", "minLength": 1 },
+        "models": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "context_window_tokens": { "type": "integer", "minimum": 1 },
+        "response_reserve_tokens": { "type": "integer", "minimum": 1 },
+        "model_context_window_tokens": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "model_response_reserve_tokens": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "api_key_set": { "type": "boolean" }
+      },
+      "x-codegen": {
+        "order": 210,
+        "go": { "name": "providerConfigResponse" },
+        "ts": { "name": "ProviderConfig" },
+        "rust": { "name": "ProviderConfig" },
+        "kotlin": { "name": "ProviderConfig" }
+      }
+    },
+    "providerConfigInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type"
+      ],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "type": { "$ref": "./base.json#/$defs/providerType" },
+        "provider_id": { "type": "string" },
+        "updated_at": { "type": "string" },
+        "deleted_at": { "type": "string" },
+        "base_url": {
+          "type": "string",
+          "minLength": 1,
+          "x-go-pointer": true
+        },
+        "api_key": { "type": "string", "x-go-pointer": true },
+        "models": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "context_window_tokens": { "type": "integer", "minimum": 1 },
+        "response_reserve_tokens": { "type": "integer", "minimum": 1 },
+        "model_context_window_tokens": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "model_response_reserve_tokens": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "trace_id": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 220,
+        "go": { "name": "providerConfigInput" },
+        "ts": { "name": "ProviderConfigInput" },
+        "rust": { "name": "ProviderConfigInput" },
+        "kotlin": { "name": "ProviderConfigInput" }
+      }
+    },
+    "providerSyncRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider_id",
+        "updated_at"
+      ],
+      "properties": {
+        "provider_id": { "type": "string", "minLength": 1 },
+        "updated_at": { "type": "string", "minLength": 1 },
+        "deleted_at": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "type": { "$ref": "./base.json#/$defs/providerType" },
+        "base_url": { "type": "string", "minLength": 1 },
+        "models": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "context_window_tokens": { "type": "integer", "minimum": 1 },
+        "response_reserve_tokens": { "type": "integer", "minimum": 1 },
+        "model_context_window_tokens": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "model_response_reserve_tokens": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "api_key_set": { "type": "boolean" }
+      },
+      "x-codegen": {
+        "order": 225,
+        "go": { "name": "providerSyncRecordResponse" },
+        "ts": { "name": "ProviderSyncRecord" },
+        "rust": { "name": "ProviderSyncRecord" },
+        "kotlin": { "name": "ProviderSyncRecord" }
+      }
+    },
+    "providerListResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "providers",
+        "active_provider"
+      ],
+      "properties": {
+        "providers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/providerConfig"
+          }
+        },
+        "active_provider": { "type": "string" },
+        "provider_sync_records": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/providerSyncRecord"
+          }
+        }
+      },
+      "x-codegen": {
+        "order": 230,
+        "go": { "name": "providerListResponse" },
+        "ts": { "name": "ProviderListResponse" },
+        "rust": { "name": "ProviderListResponse" },
+        "kotlin": { "name": "ProviderListResponse" }
+      }
+    },
+    "providerBusUpdateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "provider"
+      ],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "provider": {
+          "$ref": "#/$defs/providerConfigInput"
+        },
+        "trace_id": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 240,
+        "go": { "name": "providerBusUpdateRequest" },
+        "ts": { "name": "ProviderBusUpdateRequest" },
+        "rust": { "name": "ProviderBusUpdateRequest" },
+        "kotlin": { "name": "ProviderBusUpdateRequest" }
+      }
+    },
+    "providerBusDeleteRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "provider_id": { "type": "string" },
+        "updated_at": { "type": "string" },
+        "deleted_at": { "type": "string" },
+        "trace_id": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 250,
+        "go": { "name": "providerBusDeleteRequest" },
+        "ts": { "name": "ProviderBusDeleteRequest" },
+        "rust": { "name": "ProviderBusDeleteRequest" },
+        "kotlin": { "name": "ProviderBusDeleteRequest" }
+      }
+    }
+  }
+}

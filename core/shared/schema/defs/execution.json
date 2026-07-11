@@ -1,0 +1,178 @@
+{
+  "$defs": {
+    "bashExecParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command"
+      ],
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1
+        },
+        "login": {
+          "type": "boolean",
+          "default": true
+        },
+        "interactive": {
+          "type": "boolean",
+          "default": false
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tty": {
+          "type": "boolean",
+          "default": false
+        },
+        "yield_time_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60000
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60000,
+          "default": 30000
+        },
+        "max_output_chars": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "interactive"
+            ],
+            "properties": {
+              "interactive": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "login"
+                  ]
+                },
+                {
+                  "required": [
+                    "timeout_ms"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "interactive": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "session_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "tty"
+                  ]
+                },
+                {
+                  "required": [
+                    "yield_time_ms"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "bashExecPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stdout",
+        "stderr"
+      ],
+      "properties": {
+        "stdout": {
+          "type": "string"
+        },
+        "stderr": {
+          "type": "string"
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "running": {
+          "type": "boolean"
+        },
+        "exit_code": {
+          "type": "integer"
+        }
+      }
+    },
+    "scriptExecParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "script"
+      ],
+      "properties": {
+        "script": {
+          "type": "string",
+          "minLength": 1
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60000,
+          "default": 30000
+        },
+        "max_memory_mb": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 512,
+          "default": 256
+        }
+      }
+    },
+    "scriptExecPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "output",
+        "tool_calls_log"
+      ],
+      "properties": {
+        "output": {
+          "type": "string"
+        },
+        "tool_calls_log": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  }
+}

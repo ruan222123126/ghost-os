@@ -52,7 +52,7 @@
 
 .chat-layout {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr) 380px;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 0;
   height: 100vh;
   min-height: 100vh;
@@ -71,8 +71,7 @@
 }
 
 .sidebar,
-.chat,
-.briefing-rail {
+.chat {
   height: 100%;
   min-height: 0;
   max-height: none;
@@ -82,8 +81,34 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  border-right: 1px solid rgb(var(--border) / 0.58);
-  background: rgb(255 251 243 / 0.68);
+  border-right: 1px solid rgb(0 0 0 / 0.06);
+  background: rgb(250 250 250);
+}
+
+.session-sidebar-history-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(115 115 115 / 0.34) transparent;
+}
+
+.session-sidebar-history-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.session-sidebar-history-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.session-sidebar-history-scroll::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgb(115 115 115 / 0.36);
+  background-clip: padding-box;
+}
+
+.session-sidebar-history-scroll:hover::-webkit-scrollbar-thumb,
+.session-sidebar-history-scroll::-webkit-scrollbar-thumb:active {
+  background: rgb(82 82 82 / 0.58);
+  background-clip: padding-box;
 }
 
 .chat {
@@ -91,6 +116,88 @@
   flex-direction: column;
   min-width: 0;
   background: rgb(255 251 243 / 0.52);
+}
+
+.chat.is-empty-home {
+  background: rgb(255 255 255);
+}
+
+.chat-empty-home {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.chat-empty-home .status-line {
+  width: min(100%, 780px);
+}
+
+.chat-empty-hero {
+  display: grid;
+  gap: 12px;
+  width: min(100%, 720px);
+  text-align: center;
+}
+
+.chat-empty-hero-title {
+  margin: 0;
+  color: rgb(38 38 38);
+  font-size: clamp(32px, 4vw, 48px);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.04em;
+}
+
+.chat-empty-hero-subtitle {
+  margin: 0;
+  color: rgb(115 115 115);
+  font-size: clamp(15px, 1.5vw, 18px);
+  line-height: 1.7;
+}
+
+.chat-session-notch {
+  flex: 0 0 48px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  height: 48px;
+  padding: 0 22px;
+  border-bottom: 1px solid rgb(0 0 0 / 0.08);
+  background: rgb(255 255 255);
+}
+
+.chat-session-notch-id,
+.chat-session-notch-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-session-notch-id {
+  color: rgb(115 115 115);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.chat-session-notch-title {
+  justify-self: center;
+  max-width: 100%;
+  color: rgb(0 0 0);
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.chat-session-notch-spacer {
+  min-width: 0;
 }
 
 .chat-head {
@@ -115,6 +222,55 @@
 
 .sidebar-status {
   margin: 0 16px 12px;
+}
+
+.session-partition-header {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.session-partition-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  color: currentcolor;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    color 120ms ease;
+}
+
+.session-partition-header:hover .session-partition-toggle,
+.session-partition-header:focus-within .session-partition-toggle,
+.session-partition-toggle.is-collapsed {
+  opacity: 1;
+}
+
+.session-partition-toggle:hover {
+  color: rgb(0 0 0);
+}
+
+.session-partition-toggle-icon {
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid currentcolor;
+  transform: rotate(90deg);
+  transition: transform 120ms ease;
+}
+
+.session-partition-toggle[aria-expanded='false'] .session-partition-toggle-icon {
+  transform: rotate(0deg);
 }
 
 .session-list {

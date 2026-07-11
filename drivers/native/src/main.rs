@@ -1,85 +1,182 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
 mod action_router;
-mod browser_query;
+mod codex_cli;
+mod display_scale;
+mod file_actions;
+mod framing;
+mod input;
+mod json_params;
 mod sandbox;
+mod screen;
 mod script_exec;
+mod shell_actions;
+mod shell_sessions;
+mod types;
 
-use base64::Engine;
-use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
-use std::fs;
-use std::io::{self, Read, Write};
-use std::process::Command;
-use xcap::Monitor;
+use std::io::{self, BufReader, BufWriter, Read, Write};
+use types::Request;
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
-use enigo::{Enigo, MouseButton, MouseControllable};
+pub(crate) use types::Response;
 
-// Request 对齐 core/shared/schema.json 的请求结构。
-#[derive(Deserialize)]
-struct Request {
-    action: String,
-    #[serde(rename = "params", default)]
-    params: Value,
-    #[serde(rename = "trace_id", default)]
-    trace_id: String,
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum EntryRoute {
+    SandboxWorker,
+    CodexCLIWorker,
+    Persistent,
+    OneShot,
 }
 
-// Response 是 native 层统一返回格式。
-#[derive(Serialize)]
-pub(crate) struct Response {
-    status: String,
-    payload: Value,
-    error: String,
+#[derive(Debug, Eq, PartialEq)]
+struct RouteResult {
+    handled: bool,
+    error: Option<String>,
 }
 
-impl Response {
-    // success 构造成功响应。
-    pub(crate) fn success(payload: Value) -> Self {
+impl RouteResult {
+    fn handled() -> Self {
         Self {
-            status: "success".to_string(),
-            payload,
-            error: String::new(),
+            handled: true,
+            error: None,
         }
     }
 
-    // error 构造失败响应。
-    pub(crate) fn error(message: String) -> Self {
+    fn error(message: impl Into<String>) -> Self {
         Self {
-            status: "error".to_string(),
-            payload: json!({}),
-            error: message,
+            handled: false,
+            error: Some(message.into()),
         }
     }
 }
 
 fn main() {
-    if std::env::args().any(|arg| arg == "--sandbox-worker") {
-        script_exec::run_sandbox_worker();
-        return;
+    let args: Vec<String> = std::env::args().collect();
+    let result = route_entry(&args);
+    if let Some(err) = result.error {
+        eprintln!("{err}");
+        std::process::exit(1);
+    }
+    if !result.handled {
+        eprintln!("native entry route was not handled");
+        std::process::exit(1);
+    }
+}
+
+fn route_entry(args: &[String]) -> RouteResult {
+    let route = match resolve_entry_route(args) {
+        Ok(route) => route,
+        Err(err) => return RouteResult::error(err),
+    };
+
+    match route {
+        EntryRoute::SandboxWorker => {
+            script_exec::run_sandbox_worker();
+            RouteResult::handled()
+        }
+        EntryRoute::CodexCLIWorker => {
+            codex_cli::run_worker();
+            RouteResult::handled()
+        }
+        EntryRoute::Persistent => match run_persistent_mode() {
+            Ok(()) => RouteResult::handled(),
+            Err(err) => RouteResult::error(format!("persistent mode exited: {err}")),
+        },
+        EntryRoute::OneShot => run_oneshot_mode(),
+    }
+}
+
+fn resolve_entry_route(args: &[String]) -> Result<EntryRoute, String> {
+    let mut sandbox_worker = false;
+    let mut codex_cli_worker = false;
+    let mut persistent = false;
+
+    for arg in args.iter().skip(1) {
+        match arg.as_str() {
+            "--sandbox-worker" => sandbox_worker = true,
+            "--codex-cli-worker" => codex_cli_worker = true,
+            "--persistent" => persistent = true,
+            _ => return Err(format!("unknown argument: {arg}")),
+        }
     }
 
-    // 读取整段 stdin，保持最小协议处理路径。
-    let input = match read_stdin_payload() {
-        Ok(input) => input,
-        Err(err) => {
-            emit(Response::error(err));
-            return;
-        }
+    let worker_mode_count = [sandbox_worker, codex_cli_worker, persistent]
+        .iter()
+        .filter(|flag| **flag)
+        .count();
+    if worker_mode_count > 1 {
+        return Err(
+            "conflicting arguments: --sandbox-worker, --codex-cli-worker, and --persistent are mutually exclusive"
+                .to_string(),
+        );
+    }
+
+    if sandbox_worker {
+        return Ok(EntryRoute::SandboxWorker);
+    }
+    if codex_cli_worker {
+        return Ok(EntryRoute::CodexCLIWorker);
+    }
+    if persistent {
+        return Ok(EntryRoute::Persistent);
+    }
+    Ok(EntryRoute::OneShot)
+}
+
+fn run_oneshot_mode() -> RouteResult {
+    let response = match build_oneshot_response() {
+        Ok(response) => response,
+        Err(err) => Response::error(err),
     };
 
-    let request: Request = match serde_json::from_str(&input) {
-        Ok(request) => request,
-        Err(err) => {
-            emit(Response::error(format!("invalid json: {err}")));
-            return;
-        }
-    };
+    match emit(response) {
+        Ok(()) => RouteResult::handled(),
+        Err(err) => RouteResult::error(format!("oneshot mode emit failed: {err}")),
+    }
+}
 
-    let response =
-        action_router::dispatch_action(&request.action, &request.params, &request.trace_id);
-    emit(response);
+fn build_oneshot_response() -> Result<Response, String> {
+    let input = read_stdin_payload()?;
+    let request: Request =
+        serde_json::from_str(&input).map_err(|err| format!("invalid json: {err}"))?;
+    Ok(
+        action_router::dispatch_action(&request.action, &request.params, &request.trace_id)
+            .with_request_id(request.request_id.as_deref()),
+    )
+}
+
+fn run_persistent_mode() -> Result<(), String> {
+    let stdin = io::stdin();
+    let stdout = io::stdout();
+    let mut reader = BufReader::new(stdin.lock());
+    let mut writer = BufWriter::new(stdout.lock());
+    serve_persistent_session(&mut reader, &mut writer)
+}
+
+fn serve_persistent_session<R: Read, W: Write>(
+    reader: &mut R,
+    writer: &mut W,
+) -> Result<(), String> {
+    loop {
+        let request = match framing::read_frame(reader) {
+            Ok(request) => request,
+            Err(framing::ReadFrameError::Closed) => return Ok(()),
+            Err(framing::ReadFrameError::Request {
+                message,
+                request_id,
+            }) => {
+                let response = Response::error(message).with_request_id(request_id.as_deref());
+                framing::write_frame(writer, &response)?;
+                continue;
+            }
+            Err(framing::ReadFrameError::Protocol(message)) => return Err(message),
+        };
+
+        let response =
+            action_router::dispatch_action(&request.action, &request.params, &request.trace_id)
+                .with_request_id(request.request_id.as_deref());
+
+        framing::write_frame(writer, &response)?;
+    }
 }
 
 pub(crate) fn read_stdin_payload() -> Result<String, String> {
@@ -96,295 +193,98 @@ pub(crate) fn read_stdin_payload() -> Result<String, String> {
     Ok(input.to_string())
 }
 
-pub(crate) fn handle_list_files(params: &Value) -> Response {
-    let path = params
-        .get("path")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or(".");
-
-    let read_dir = match fs::read_dir(path) {
-        Ok(entries) => entries,
-        Err(err) => {
-            return Response::error(format!("read dir {path:?} failed: {err}"));
-        }
-    };
-
-    let mut names = Vec::new();
-    for entry_result in read_dir {
-        let entry = match entry_result {
-            Ok(entry) => entry,
-            Err(err) => return Response::error(format!("read dir entry failed: {err}")),
-        };
-
-        let metadata = match entry.metadata() {
-            Ok(metadata) => metadata,
-            Err(err) => return Response::error(format!("read metadata failed: {err}")),
-        };
-
-        let mut name = entry.file_name().to_string_lossy().to_string();
-        if metadata.is_dir() {
-            name.push('/');
-        }
-        names.push(name);
-    }
-
-    names.sort();
-    Response::success(json!({
-        "path": path,
-        "entries": names,
-    }))
+fn emit(response: Response) -> Result<(), String> {
+    let stdout = io::stdout();
+    let mut writer = stdout.lock();
+    write_response_line(&mut writer, &response)
 }
 
-pub(crate) fn handle_bash_exec(params: &Value) -> Response {
-    let command = params
-        .get("command")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .unwrap_or("");
-
-    if command.is_empty() {
-        return Response::error("command is required".to_string());
-    }
-
-    // BASH_EXEC 入口尚未开放，避免返回 success 造成上层误判为“已执行”。
-    Response::error(
-        "BASH_EXEC is not implemented in native execution layer; use SCRIPT_EXEC tools.bash_exec"
-            .to_string(),
-    )
-}
-
-#[derive(Clone, Copy, Debug)]
-enum ClickButton {
-    Left,
-    Right,
-    Middle,
-}
-
-pub(crate) fn handle_screen_shot(params: &Value) -> Response {
-    let display_id = match parse_optional_display_id(params) {
-        Ok(display_id) => display_id,
-        Err(err) => return Response::error(err),
-    };
-
-    let monitors = match Monitor::all() {
-        Ok(monitors) => monitors,
-        Err(err) => return Response::error(format!("list monitors failed: {err}")),
-    };
-    if monitors.is_empty() {
-        return Response::error("no monitor is available".to_string());
-    }
-
-    let monitor = if let Some(id) = display_id {
-        match monitors.iter().find(|monitor| monitor.id() == id) {
-            Some(monitor) => monitor,
-            None => {
-                return Response::error(format!(
-                    "display_id {id} is not found; available displays: {}",
-                    monitors
-                        .iter()
-                        .map(|monitor| monitor.id().to_string())
-                        .collect::<Vec<_>>()
-                        .join(",")
-                ));
-            }
-        }
-    } else {
-        monitors
-            .iter()
-            .find(|monitor| monitor.is_primary())
-            .unwrap_or(&monitors[0])
-    };
-
-    let image = match monitor.capture_image() {
-        Ok(image) => image,
-        Err(err) => {
-            return Response::error(format!("capture monitor {} failed: {err}", monitor.id()));
-        }
-    };
-
-    let width = image.width();
-    let height = image.height();
-    let png_bytes = match encode_png(image) {
-        Ok(png_bytes) => png_bytes,
-        Err(err) => return Response::error(err),
-    };
-    let image_base64 = base64::engine::general_purpose::STANDARD.encode(png_bytes);
-
-    Response::success(json!({
-        "image_base64": image_base64,
-        "width": width,
-        "height": height,
-        "display_id": monitor.id(),
-    }))
-}
-
-pub(crate) fn handle_mouse_click(params: &Value) -> Response {
-    let x = match parse_required_i32(params, "x") {
-        Ok(x) => x,
-        Err(err) => return Response::error(err),
-    };
-    let y = match parse_required_i32(params, "y") {
-        Ok(y) => y,
-        Err(err) => return Response::error(err),
-    };
-    let button = match parse_click_button(params) {
-        Ok(button) => button,
-        Err(err) => return Response::error(err),
-    };
-
-    if let Err(err) = perform_mouse_click(x, y, button) {
-        return Response::error(err);
-    }
-
-    Response::success(json!({
-        "clicked": true,
-        "x": x,
-        "y": y,
-        "button": button_name(button),
-    }))
-}
-
-fn parse_optional_display_id(params: &Value) -> Result<Option<u32>, String> {
-    let Some(raw) = params.get("display_id") else {
-        return Ok(None);
-    };
-
-    let value = raw
-        .as_u64()
-        .ok_or_else(|| "display_id must be a non-negative integer".to_string())?;
-    let display_id = u32::try_from(value).map_err(|_| "display_id is too large".to_string())?;
-    Ok(Some(display_id))
-}
-
-fn parse_required_i32(params: &Value, field: &str) -> Result<i32, String> {
-    let raw = params
-        .get(field)
-        .ok_or_else(|| format!("{field} is required"))?;
-    let value = raw
-        .as_i64()
-        .ok_or_else(|| format!("{field} must be an integer"))?;
-    i32::try_from(value).map_err(|_| format!("{field} is out of i32 range"))
-}
-
-fn parse_click_button(params: &Value) -> Result<ClickButton, String> {
-    let raw = params
-        .get("button")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("left");
-
-    match raw.to_ascii_lowercase().as_str() {
-        "left" => Ok(ClickButton::Left),
-        "right" => Ok(ClickButton::Right),
-        "middle" => Ok(ClickButton::Middle),
-        _ => Err("button must be one of: left, right, middle".to_string()),
-    }
-}
-
-fn button_name(button: ClickButton) -> &'static str {
-    match button {
-        ClickButton::Left => "left",
-        ClickButton::Right => "right",
-        ClickButton::Middle => "middle",
-    }
-}
-
-fn encode_png(image: xcap::image::RgbaImage) -> Result<Vec<u8>, String> {
-    let mut cursor = std::io::Cursor::new(Vec::new());
-    xcap::image::DynamicImage::ImageRgba8(image)
-        .write_to(&mut cursor, xcap::image::ImageFormat::Png)
-        .map_err(|err| format!("encode png failed: {err}"))?;
-    Ok(cursor.into_inner())
-}
-
-#[cfg(target_os = "linux")]
-fn perform_mouse_click(x: i32, y: i32, button: ClickButton) -> Result<(), String> {
-    let button_id = match button {
-        ClickButton::Left => "1",
-        ClickButton::Middle => "2",
-        ClickButton::Right => "3",
-    };
-
-    let status = Command::new("xdotool")
-        .args([
-            "mousemove",
-            "--sync",
-            &x.to_string(),
-            &y.to_string(),
-            "click",
-            button_id,
-        ])
-        .status()
-        .map_err(|err| format!("spawn xdotool failed: {err}"))?;
-
-    if !status.success() {
-        return Err(format!(
-            "xdotool exited with status {status}; ensure xdotool is installed and graphical session is active"
-        ));
-    }
+fn write_response_line<W: Write>(writer: &mut W, response: &Response) -> Result<(), String> {
+    let mut bytes =
+        serde_json::to_vec(response).map_err(|err| format!("encode response failed: {err}"))?;
+    bytes.push(b'\n');
+    writer
+        .write_all(&bytes)
+        .map_err(|err| format!("write response failed: {err}"))?;
+    writer
+        .flush()
+        .map_err(|err| format!("flush response failed: {err}"))?;
     Ok(())
-}
-
-#[cfg(any(target_os = "macos", target_os = "windows"))]
-fn perform_mouse_click(x: i32, y: i32, button: ClickButton) -> Result<(), String> {
-    let mut enigo = Enigo::new();
-    enigo.mouse_move_to(x, y);
-
-    let native_button = match button {
-        ClickButton::Left => MouseButton::Left,
-        ClickButton::Right => MouseButton::Right,
-        ClickButton::Middle => MouseButton::Middle,
-    };
-    enigo.mouse_click(native_button);
-    Ok(())
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-fn perform_mouse_click(_x: i32, _y: i32, _button: ClickButton) -> Result<(), String> {
-    Err("mouse click is not supported on this platform".to_string())
-}
-
-// emit 负责写出单行 JSON 响应，失败时静默返回。
-fn emit(response: Response) {
-    let mut stdout = io::stdout();
-    if let Ok(mut bytes) = serde_json::to_vec(&response) {
-        bytes.push(b'\n');
-        let _ = stdout.write_all(&bytes);
-        let _ = stdout.flush();
-    }
 }
 
 #[cfg(test)]
+mod main_startup_tests;
+
+#[cfg(test)]
 mod tests {
-    use super::{button_name, handle_bash_exec, parse_click_button};
+    use super::{Response, serve_persistent_session, write_response_line};
     use serde_json::json;
+    use std::io::{Cursor, Error, Write};
 
     #[test]
-    fn parse_click_button_defaults_to_left() {
-        let button = parse_click_button(&json!({})).expect("button should parse");
-        assert_eq!(button_name(button), "left");
+    fn serve_persistent_session_handles_multiple_requests() {
+        let mut input = Vec::new();
+        input.extend(frame_request(&json!({
+            "action": "PING",
+            "params": {},
+            "trace_id": "trace-a",
+            "request_id": "req-a"
+        })));
+        input.extend(frame_request(&json!({
+            "action": "PING",
+            "params": {},
+            "trace_id": "trace-b",
+            "request_id": "req-b"
+        })));
+
+        let mut reader = Cursor::new(input);
+        let mut writer = Vec::new();
+        serve_persistent_session(&mut reader, &mut writer).expect("session should complete");
+
+        let mut output = Cursor::new(writer);
+        let first = read_response_frame(&mut output);
+        let second = read_response_frame(&mut output);
+
+        assert_eq!(first.request_id.as_deref(), Some("req-a"));
+        assert_eq!(first.payload["message"], "PONG");
+        assert_eq!(second.request_id.as_deref(), Some("req-b"));
+        assert_eq!(second.payload["trace_id"], "trace-b");
     }
 
     #[test]
-    fn parse_click_button_rejects_unsupported_values() {
-        let err = parse_click_button(&json!({"button":"forward"})).expect_err("must fail");
-        assert!(err.contains("button must be one of"));
+    fn write_response_line_returns_error_when_writer_fails() {
+        let mut writer = BrokenWriter;
+        let err = write_response_line(&mut writer, &Response::success(json!({})))
+            .expect_err("write failure should be surfaced");
+        assert!(err.contains("write response failed"));
     }
 
-    #[test]
-    fn handle_bash_exec_returns_error_when_command_is_missing() {
-        let response = handle_bash_exec(&json!({}));
-        assert_eq!(response.status, "error");
-        assert_eq!(response.error, "command is required");
+    struct BrokenWriter;
+
+    impl Write for BrokenWriter {
+        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+            Err(Error::other("broken pipe"))
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
     }
 
-    #[test]
-    fn handle_bash_exec_returns_error_when_unimplemented() {
-        let response = handle_bash_exec(&json!({"command":"echo hi"}));
-        assert_eq!(response.status, "error");
-        assert!(response.error.contains("not implemented"));
+    fn frame_request(payload: &serde_json::Value) -> Vec<u8> {
+        let encoded = serde_json::to_vec(payload).expect("request should encode");
+        let mut frame = Vec::with_capacity(4 + encoded.len());
+        frame.extend_from_slice(&(encoded.len() as u32).to_be_bytes());
+        frame.extend_from_slice(&encoded);
+        frame
+    }
+
+    fn read_response_frame(reader: &mut Cursor<Vec<u8>>) -> Response {
+        let mut length_buf = [0u8; 4];
+        std::io::Read::read_exact(reader, &mut length_buf).expect("length should decode");
+        let length = u32::from_be_bytes(length_buf) as usize;
+        let mut payload = vec![0u8; length];
+        std::io::Read::read_exact(reader, &mut payload).expect("payload should decode");
+        serde_json::from_slice(&payload).expect("response should decode")
     }
 }

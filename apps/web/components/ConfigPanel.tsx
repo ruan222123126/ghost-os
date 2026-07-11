@@ -1,458 +1,220 @@
-// ConfigPanel component used by the web console chat/session interface.
-
 'use client';
 
-import type { FC, FormEvent } from 'react';
-import { useEffect, useMemo, useState } from 'react';
-import { createProvider, deleteProvider, getProviders, setActiveProvider, updateProvider } from '@/lib/api';
-import { ignorePromise, toErrorMessage } from '@/lib/errors';
-import type { BridgeConfig, ConfigUpdate, ProviderConfig, ProviderConfigInput, ProviderListResponse } from '@/lib/types';
+import type { CSSProperties, FC } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  SettingsNavigation,
+  type SettingsTab,
+} from '@/components/config/ConfigPanelNavigation';
+import { CloseButton } from '@/components/CloseButton';
+import { ConfigPanelSectionContent } from '@/components/config/ConfigPanelSectionContent';
+import { resolveConfigPanelTabError } from '@/components/config/configPanelTabError';
+import { useConfigProviders } from '@/hooks/useConfigProviders';
+import { useConfigPresets } from '@/hooks/useConfigPresets';
+import { useConfigPrompts } from '@/hooks/useConfigPrompts';
+import { useConfigSkills } from '@/hooks/useConfigSkills';
+import { useConfigTasks } from '@/hooks/useConfigTasks';
+import { useConfigTools } from '@/hooks/useConfigTools';
+import { useWebLocale } from '@/lib/i18n/provider';
+import type { BridgeConfig, ConfigUpdate, WorkflowTaskPayload } from '@/lib/types';
 
-interface ConfigPanelProps {
+const CONFIG_PANEL_TRANSITION_MS = 300;
+const CONFIG_PANEL_CLOSED_TRANSFORM = [
+  'translate3d(',
+  'calc(var(--settings-panel-origin-x, 48px) - 50vw),',
+  'calc(var(--settings-panel-origin-y, calc(100vh - 40px)) - 50vh),',
+  '0',
+  ')',
+  'scale(0.18)',
+].join(' ');
+
+export interface ConfigPanelProps {
   open: boolean;
+  initialTab?: SettingsTab;
   loading: boolean;
   saving: boolean;
   config: BridgeConfig | null;
   error: string;
   onClose: () => void;
+  onOpenWorkflowCreate: () => void;
+  onOpenWorkflowEdit: (task: WorkflowTaskPayload) => void;
   onSave: (update: ConfigUpdate) => Promise<boolean>;
   onReload: () => Promise<void>;
 }
 
-type EditorMode = 'create' | 'edit';
+export type { SettingsTab };
 
-interface ProviderEditorState {
-  name: string;
-  providerType: ProviderConfig['type'];
-  baseURL: string;
-  apiKey: string;
-  models: string;
-}
-
-const providerTypeOptions: Array<{ value: ProviderConfig['type']; label: string; defaultBaseURL: string | null }> = [
-  { value: 'openai', label: 'OpenAI', defaultBaseURL: 'https://api.openai.com/v1' },
-  { value: 'anthropic', label: 'Anthropic', defaultBaseURL: 'https://api.anthropic.com' },
-  { value: 'custom', label: 'OpenAI-Compatible', defaultBaseURL: null },
-];
-
-const emptyEditorState: ProviderEditorState = {
-  name: '',
-  providerType: 'openai',
-  baseURL: '',
-  apiKey: '',
-  models: '',
-};
-
-function defaultBaseURLForProviderType(providerType: ProviderConfig['type']): string {
-  return providerTypeOptions.find((option) => option.value === providerType)?.defaultBaseURL ?? '';
-}
-
-function labelForProviderType(providerType: ProviderConfig['type']): string {
-  return providerTypeOptions.find((option) => option.value === providerType)?.label ?? providerType;
-}
-
-function parseModels(raw: string): string[] {
-  return raw
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function editorStateFromProvider(provider: ProviderConfig): ProviderEditorState {
-  return {
-    name: provider.name,
-    providerType: provider.type,
-    baseURL: provider.base_url,
-    apiKey: '',
-    models: provider.models?.join(', ') ?? '',
-  };
-}
-
-export const ConfigPanel: FC<ConfigPanelProps> = ({ open, loading, saving, config, error, onClose, onSave, onReload }) => {
-  const [model, setModel] = useState('');
-  const [chatPath, setChatPath] = useState('');
-  const [providers, setProviders] = useState<ProviderConfig[]>([]);
-  const [activeProvider, setActiveProviderName] = useState('');
-  const [providersLoading, setProvidersLoading] = useState(false);
-  const [providerSaving, setProviderSaving] = useState(false);
-  const [providerError, setProviderError] = useState('');
-  const [editorMode, setEditorMode] = useState<EditorMode>('create');
-  const [editingName, setEditingName] = useState('');
-  const [editor, setEditor] = useState<ProviderEditorState>(emptyEditorState);
-
-  const runtimeControlsDisabled = saving || loading;
-  const providerControlsDisabled = providerSaving || providersLoading;
-  const combinedError = useMemo(() => providerError || error, [error, providerError]);
+export const ConfigPanel: FC<ConfigPanelProps> = ({
+  open,
+  initialTab = 'general',
+  loading,
+  saving,
+  config,
+  error,
+  onClose,
+  onOpenWorkflowCreate,
+  onOpenWorkflowEdit,
+  onSave,
+  onReload,
+}) => {
+  const { copy } = useWebLocale();
+  const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+  const [present, setPresent] = useState(open);
+  const [visible, setVisible] = useState(open);
+  const providersMachine = useConfigProviders({
+    open,
+    onReloadConfig: onReload,
+    onActivateRuntimeConfig: onSave,
+    modelSelectionEnabled: config?.model_selection_enabled ?? true,
+  });
+  const presetsState = useConfigPresets({ open });
+  const promptsState = useConfigPrompts({ open });
+  const skillsState = useConfigSkills({ open });
+  const tasksMachine = useConfigTasks({ open, config });
+  const toolsState = useConfigTools({ open });
 
   useEffect(() => {
-    if (!config) {
-      return;
+    if (open) {
+      setActiveTab(initialTab);
     }
-    setModel(config.model);
-    setChatPath(config.chat_path || '');
-  }, [config, open]);
+  }, [initialTab, open]);
 
   useEffect(() => {
-    if (!open) {
-      return;
+    if (open) {
+      setPresent(true);
+      if (visible) {
+        return undefined;
+      }
+      return requestTransitionFrame(() => setVisible(true));
     }
 
-    ignorePromise(
-      (async () => {
-        setProvidersLoading(true);
-        try {
-          const result = await getProviders();
-          applyProviderList(result);
-          setProviderError('');
-        } catch (loadError) {
-          setProviderError(toErrorMessage(loadError, 'failed to load providers'));
-        } finally {
-          setProvidersLoading(false);
-        }
-      })(),
-    );
-  }, [open]);
-
-  function applyProviderList(payload: ProviderListResponse) {
-    setProviders(payload.providers);
-    setActiveProviderName(payload.active_provider);
-  }
-
-  function resetEditor(mode: EditorMode = 'create') {
-    setEditorMode(mode);
-    setEditingName('');
-    setEditor(emptyEditorState);
-  }
-
-  function handleRuntimeSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    ignorePromise(onSave({ model, chat_path: chatPath }));
-  }
-
-  async function runProviderMutation(
-    action: () => Promise<ProviderListResponse>,
-    errorMessage: string,
-    onSuccess?: () => void | Promise<void>
-  ) {
-    setProviderSaving(true);
-    setProviderError('');
-    try {
-      const result = await action();
-      applyProviderList(result);
-      await onReload();
-      await onSuccess?.();
-    } catch (operationError) {
-      setProviderError(toErrorMessage(operationError, errorMessage));
-    } finally {
-      setProviderSaving(false);
-    }
-  }
-
-  function handleProviderSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const input: ProviderConfigInput = {
-      name: editor.name.trim(),
-      type: editor.providerType,
-      models: parseModels(editor.models),
-    };
-    if (editor.baseURL.trim()) {
-      input.base_url = editor.baseURL.trim();
-    }
-    if (editor.apiKey.trim()) {
-      input.api_key = editor.apiKey.trim();
+    setVisible(false);
+    if (!present) {
+      return undefined;
     }
 
-    ignorePromise(
-      runProviderMutation(
-        () => (editorMode === 'edit' ? updateProvider(editingName, input) : createProvider(input)),
-        'failed to save provider',
-        () => {
-          resetEditor();
-        }
-      ),
-    );
-  }
+    const timeout = setTimeout(() => setPresent(false), CONFIG_PANEL_TRANSITION_MS);
+    return () => clearTimeout(timeout);
+  }, [open, present, visible]);
 
-  function handleEditProvider(provider: ProviderConfig) {
-    setEditorMode('edit');
-    setEditingName(provider.name);
-    setEditor(editorStateFromProvider(provider));
-    setProviderError('');
-  }
+  const tabError = useMemo(() => {
+    return resolveConfigPanelTabError({
+      activeTab,
+      generalError: error,
+      providerError: providersMachine.state.error,
+      presetError: presetsState.presetError,
+      promptError: promptsState.promptError,
+      taskError: tasksMachine.state.error,
+      skillError: skillsState.skillError,
+      toolError: toolsState.toolError,
+    });
+  }, [
+    activeTab,
+    error,
+    providersMachine.state.error,
+    presetsState.presetError,
+    promptsState.promptError,
+    tasksMachine.state.error,
+    skillsState.skillError,
+    toolsState.toolError,
+  ]);
 
-  function handleActivateProvider(name: string) {
-    ignorePromise(runProviderMutation(() => setActiveProvider(name), 'failed to switch provider'));
-  }
+  const handleSelectTab = useCallback((tab: SettingsTab) => {
+    setActiveTab(tab);
+    providersMachine.actions.cancelEditing();
+    tasksMachine.actions.cancelEditing();
+  }, [providersMachine.actions, tasksMachine.actions]);
 
-  function handleDeleteProvider(name: string) {
-    if (!window.confirm(`Delete provider \"${name}\"?`)) {
-      return;
-    }
+  const tabSuccess = activeTab === 'tasks' ? tasksMachine.state.success : '';
 
-    ignorePromise(
-      runProviderMutation(() => deleteProvider(name), 'failed to delete provider', () => {
-        if (stringsEqualIgnoreCase(editingName, name)) {
-          resetEditor();
-        }
-      }),
-    );
-  }
-
-  if (!open) {
+  if (!present) {
     return null;
   }
 
   return (
-    <div className="ui-panel animate-riseSoft p-4">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-app-text">Model Providers</h2>
-        <button
-          type="button"
+    <div
+      className={`fixed inset-0 z-40 flex items-center justify-center p-4 ${
+        visible ? 'pointer-events-auto' : 'pointer-events-none'
+      }`}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="settings-title"
+    >
+      <button
+        type="button"
+        className={`absolute inset-0 bg-gray-300/45 transition-opacity duration-300 ease-in-out ${
+          visible ? 'opacity-100' : 'opacity-0'
+        }`}
+        onClick={onClose}
+        aria-label={copy.settings.closeSettingsAria}
+      />
+
+      <section
+        data-testid="config-panel-shell"
+        className={`relative z-10 flex h-[80vh] min-h-[600px] w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-xl transition-all duration-300 ease-in-out ${
+          visible ? 'opacity-100' : 'opacity-0'
+        }`}
+        style={configPanelShellStyle(visible)}
+      >
+        <CloseButton
           onClick={onClose}
-          className="ui-btn-secondary px-2 py-1 text-xs text-app-muted hover:text-app-text"
-        >
-          Close
-        </button>
-      </div>
+          className="absolute right-6 top-6 z-20"
+          aria-label={copy.settings.closeSettingsAria}
+        />
 
-      <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-        <section className="ui-panel-soft p-3">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-medium text-app-text">Providers</h3>
-              <p className="ui-hint">Switch the active model backend and manage saved endpoints.</p>
-            </div>
-            <button
-              type="button"
-              disabled={providerControlsDisabled}
-              onClick={() => resetEditor('create')}
-              className="ui-btn px-3 py-1.5 text-xs"
-            >
-              Add Provider
-            </button>
-          </div>
+        <SettingsNavigation activeTab={activeTab} onSelectTab={handleSelectTab} />
 
-          {providersLoading && <p className="text-sm text-app-muted">Loading providers...</p>}
-          {!providersLoading && providers.length === 0 && (
-            <p className="ui-empty px-3 py-4 text-sm">
-              No providers configured yet. Add one to create `~/.ghost-os/config.toml` provider entries.
-            </p>
-          )}
-
-          <div className="grid gap-2">
-            {providers.map((provider) => {
-              const isActive = stringsEqualIgnoreCase(activeProvider, provider.name);
-              return (
-                <div
-                  key={provider.name}
-                  className={`ui-panel-soft px-3 py-3 transition ${
-                    isActive
-                      ? 'border-app-accent/60 bg-app-accent/10 shadow-lift'
-                      : 'hover:border-app-fieldBorderHover/80 hover:shadow-lift'
-                  }`}
-                >
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="mono text-sm font-medium text-app-text">{provider.name}</span>
-                        <span className="rounded-full border border-app-border/90 px-2 py-0.5 text-[11px] text-app-muted">{labelForProviderType(provider.type)}</span>
-                        {isActive && (
-                          <span className="rounded-full border border-app-accent/40 bg-app-accent/15 px-2 py-0.5 text-[11px] text-app-text">
-                            active
-                          </span>
-                        )}
-                        {provider.api_key_set && (
-                          <span className="rounded-full border border-app-border/90 px-2 py-0.5 text-[11px] text-app-muted">key set</span>
-                        )}
-                      </div>
-                      <p className="mono mt-1 truncate text-xs text-app-muted">{provider.base_url}</p>
-                      {!!provider.models?.length && (
-                        <p className="mono mt-1 text-xs text-app-muted">models: {provider.models.join(', ')}</p>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={providerControlsDisabled || isActive}
-                        onClick={() => handleActivateProvider(provider.name)}
-                        className="ui-btn-secondary px-3 py-1.5 text-xs"
-                      >
-                        {isActive ? 'Active' : 'Use'}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={providerControlsDisabled}
-                        onClick={() => handleEditProvider(provider)}
-                        className="ui-btn-secondary px-3 py-1.5 text-xs"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        disabled={providerControlsDisabled}
-                        onClick={() => handleDeleteProvider(provider.name)}
-                        className="ui-btn-secondary border-rose-400/30 px-3 py-1.5 text-xs text-rose-200 hover:border-rose-300/60 hover:text-rose-100"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="grid gap-4">
-          <form className="ui-panel-soft grid gap-3 p-3" onSubmit={handleProviderSubmit}>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-medium text-app-text">{editorMode === 'edit' ? 'Edit Provider' : 'Add Provider'}</h3>
-                <p className="ui-hint">Provider names must be unique. API keys stay hidden after save.</p>
+        <div className="relative flex-1 overflow-y-auto overscroll-contain touch-pan-y bg-white">
+          <div
+            data-testid="config-panel-content"
+            className="w-full max-w-2xl p-10"
+          >
+            {tabError ? (
+              <div className="mb-4 rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {tabError}
               </div>
-              {editorMode === 'edit' && (
-                <button
-                  type="button"
-                  onClick={() => resetEditor()}
-                  className="ui-btn-secondary px-2 py-1 text-xs text-app-muted hover:text-app-text"
-                >
-                  Cancel
-                </button>
-              )}
-            </div>
+            ) : tabSuccess ? (
+              <div className="mb-4 rounded-[12px] border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+                {tabSuccess}
+              </div>
+            ) : null}
 
-            <label className="ui-label">
-              Name
-              <input
-                value={editor.name}
-                disabled={providerControlsDisabled}
-                onChange={(event) => setEditor((state) => ({ ...state, name: event.target.value }))}
-                className="ui-input mono"
-              />
-            </label>
-
-            <label className="ui-label">
-              Provider Type
-              <select
-                value={editor.providerType}
-                disabled={providerControlsDisabled}
-                onChange={(event) => {
-                  const providerType = event.target.value as ProviderConfig['type'];
-                  setEditor((state) => {
-                    const nextBaseURL = state.baseURL.trim();
-                    const currentDefault = defaultBaseURLForProviderType(state.providerType);
-                    const shouldReplaceBaseURL = nextBaseURL === '' || nextBaseURL === currentDefault;
-                    return {
-                      ...state,
-                      providerType,
-                      baseURL: shouldReplaceBaseURL ? defaultBaseURLForProviderType(providerType) : state.baseURL,
-                    };
-                  });
-                }}
-                className="ui-select"
-              >
-                {providerTypeOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="ui-label">
-              Base URL
-              <input
-                value={editor.baseURL}
-                disabled={providerControlsDisabled}
-                placeholder={editor.providerType === 'custom' ? 'https://example.com/v1' : defaultBaseURLForProviderType(editor.providerType)}
-                onChange={(event) => setEditor((state) => ({ ...state, baseURL: event.target.value }))}
-                className="ui-input mono"
-              />
-            </label>
-
-            <label className="ui-label">
-              API Key (optional)
-              <input
-                type="password"
-                value={editor.apiKey}
-                disabled={providerControlsDisabled}
-                placeholder={editorMode === 'edit' ? 'Leave blank to keep current key' : 'Enter API key'}
-                onChange={(event) => setEditor((state) => ({ ...state, apiKey: event.target.value }))}
-                className="ui-input"
-              />
-            </label>
-
-            <label className="ui-label">
-              Models (optional)
-              <input
-                value={editor.models}
-                disabled={providerControlsDisabled}
-                onChange={(event) => setEditor((state) => ({ ...state, models: event.target.value }))}
-                placeholder="gpt-5.4, gpt-4.1"
-                className="ui-input mono"
-              />
-            </label>
-
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                disabled={providerControlsDisabled}
-                className="ui-btn px-4 py-2 text-sm"
-              >
-                {providerSaving ? 'Saving...' : editorMode === 'edit' ? 'Update Provider' : 'Create Provider'}
-              </button>
-            </div>
-          </form>
-
-          <form className="ui-panel-soft grid gap-3 p-3" onSubmit={handleRuntimeSubmit}>
-            <div>
-              <h3 className="text-sm font-medium text-app-text">Runtime</h3>
-              <p className="ui-hint">Model and chat path stay on the active runtime config.</p>
-            </div>
-
-            {loading && <p className="text-sm text-app-muted">Loading runtime config...</p>}
-
-            <label className="ui-label">
-              Model
-              <input
-                value={model}
-                disabled={runtimeControlsDisabled}
-                onChange={(event) => setModel(event.target.value)}
-                className="ui-input mono"
-              />
-            </label>
-
-            <label className="ui-label">
-              Chat Path (optional)
-              <input
-                value={chatPath}
-                disabled={runtimeControlsDisabled}
-                onChange={(event) => setChatPath(event.target.value)}
-                className="ui-input mono"
-              />
-            </label>
-
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                disabled={runtimeControlsDisabled}
-                className="ui-btn px-4 py-2 text-sm"
-              >
-                {saving ? 'Saving...' : 'Save Runtime'}
-              </button>
-            </div>
-          </form>
-        </section>
-      </div>
-
-      {combinedError && (
-        <p className="mt-4 rounded-xl border border-rose-300/30 bg-rose-300/10 px-3 py-2 text-sm text-rose-200">{combinedError}</p>
-      )}
+            <ConfigPanelSectionContent
+              activeTab={activeTab}
+              loading={loading}
+              saving={saving}
+              config={config}
+              onSave={onSave}
+              onRefreshConfig={onReload}
+              onOpenWorkflowCreate={onOpenWorkflowCreate}
+              onOpenWorkflowEdit={onOpenWorkflowEdit}
+              providersState={providersMachine}
+              presetsState={presetsState}
+              promptsState={promptsState}
+              skillsState={skillsState}
+              tasksState={tasksMachine}
+              toolsState={toolsState}
+            />
+          </div>
+        </div>
+      </section>
     </div>
   );
 };
 
-function stringsEqualIgnoreCase(left: string, right: string): boolean {
-  return left.trim().toLowerCase() === right.trim().toLowerCase();
+function requestTransitionFrame(callback: () => void): () => void {
+  if (typeof window === 'undefined') {
+    const timeout = setTimeout(callback, 0);
+    return () => clearTimeout(timeout);
+  }
+
+  const frame = window.requestAnimationFrame(callback);
+  return () => window.cancelAnimationFrame(frame);
+}
+
+function configPanelShellStyle(visible: boolean): CSSProperties {
+  return {
+    transform: visible ? 'translate3d(0, 0, 0) scale(1)' : CONFIG_PANEL_CLOSED_TRANSFORM,
+    transformOrigin: 'center center',
+  };
 }

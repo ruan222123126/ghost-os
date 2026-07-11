@@ -1,0 +1,27 @@
+.scroll-down-button {
+  position: fixed;
+  left: 50%;
+  bottom: 96px;
+  z-index: 20;
+  width: 38px;
+  height: 38px;
+  border: 1px solid #dfe4ea;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #4b5563;
+  background: #ffffff;
+  box-shadow: 0 8px 18px rgba(31, 41, 55, 0.16);
+  transform: translateX(-50%);
+  cursor: pointer;
+}
+
+@media (prefers-color-scheme: dark) {
+  .scroll-down-button {
+    border-color: #303236;
+    color: #d2d6dc;
+    background: #1e1f20;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
+  }
+}

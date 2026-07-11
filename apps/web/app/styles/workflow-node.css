@@ -1,0 +1,205 @@
+.workflow-arch-edge-curve {
+  fill: none;
+  stroke: #000000;
+  stroke-width: 1.5;
+  opacity: 0.2;
+  transition: opacity 220ms ease;
+}
+
+.workflow-arch-edge-group:hover .workflow-arch-edge-curve {
+  opacity: 1;
+}
+
+.workflow-arch-edge-hitbox {
+  fill: none;
+  stroke: transparent;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.workflow-arch-node {
+  position: absolute;
+  width: 256px;
+  background: #ffffff;
+  cursor: move;
+  pointer-events: auto;
+  transition:
+    box-shadow 220ms ease,
+    outline-color 220ms ease,
+    border-color 220ms ease;
+}
+
+.workflow-arch-node--idle {
+  border: 1px solid #e5e5e5;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+}
+
+.workflow-arch-node--selected {
+  outline: 2px solid #000000;
+  box-shadow: 0 24px 32px rgb(0 0 0 / 0.2);
+}
+
+.workflow-arch-node-topline {
+  width: 100%;
+  height: 6px;
+  background: #d4d4d4;
+}
+
+.workflow-arch-node-topline.workflow-arch-node-topline--active {
+  background: #000000;
+}
+
+.workflow-arch-node-header {
+  padding: 20px;
+  border-bottom: 1px solid #f5f5f5;
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.workflow-arch-node-body {
+  min-height: 110px;
+  padding: 32px 20px;
+  color: #525252;
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  opacity: 0.8;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.workflow-arch-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.workflow-arch-summary-label {
+  margin: 0 0 8px;
+  color: #a3a3a3;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.workflow-arch-terminus {
+  margin: 0;
+  text-align: center;
+  font-style: italic;
+  opacity: 0.4;
+}
+
+.workflow-arch-port {
+  position: absolute;
+  top: 40px;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 50;
+}
+
+.workflow-arch-port--input {
+  left: -12px;
+}
+
+.workflow-arch-port--output {
+  right: -12px;
+}
+
+.workflow-arch-port-dot {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #000000;
+  border-radius: 999px;
+  background: #ffffff;
+  transition: transform 140ms ease, background-color 140ms ease;
+}
+
+.workflow-arch-port:hover .workflow-arch-port-dot {
+  transform: scale(1.5);
+}
+
+.workflow-arch-port-dot.workflow-arch-port-dot--targetable {
+  background: #e5e5e5;
+  transform: scale(1.28);
+  animation: workflow-arch-pulse 1.15s ease-in-out infinite;
+}
+
+.workflow-arch-port-dot.workflow-arch-port-dot--active {
+  background: #000000;
+  transform: scale(1.25);
+}
+
+@keyframes workflow-arch-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgb(115 115 115 / 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgb(115 115 115 / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(115 115 115 / 0);
+  }
+}
+
+.workflow-arch-node-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: transparent;
+}
+
+.workflow-arch-node-menu {
+  position: fixed;
+  z-index: 80;
+  width: 144px;
+  border: 1px solid #d4d4d4;
+  background: #ffffff;
+  box-shadow: 0 14px 28px rgb(0 0 0 / 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  animation: workflowNodeMenuIn 120ms ease-out;
+}
+
+.workflow-arch-node-menu-button {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: #111111;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 9px 10px;
+  cursor: pointer;
+}
+
+.workflow-arch-node-menu-button:hover {
+  background: #f5f5f5;
+}
+
+.workflow-arch-node-menu-button--danger {
+  color: #b91c1c;
+}
+
+.workflow-arch-node-menu-button--danger:hover {
+  background: #fef2f2;
+}
+
+@keyframes workflowNodeMenuIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

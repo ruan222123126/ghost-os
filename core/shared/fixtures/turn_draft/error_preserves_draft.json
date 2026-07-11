@@ -1,0 +1,97 @@
+{
+  "events": [
+    {
+      "id": "trace-error-draft:000001",
+      "step_id": "turn-0006-assistant",
+      "trace_id": "trace-error-draft",
+      "session_id": "session-fixture-5",
+      "turn": 6,
+      "type": "run_started",
+      "payload": {
+        "session_id": "session-fixture-5"
+      }
+    },
+    {
+      "id": "trace-error-draft:000002",
+      "step_id": "turn-0006-assistant",
+      "trace_id": "trace-error-draft",
+      "session_id": "session-fixture-5",
+      "turn": 6,
+      "type": "completion_delta",
+      "payload": {
+        "kind": "thinking",
+        "thinking": "step 1"
+      }
+    },
+    {
+      "id": "trace-error-draft:000003",
+      "step_id": "turn-0006-tool-0001",
+      "trace_id": "trace-error-draft",
+      "session_id": "session-fixture-5",
+      "turn": 6,
+      "type": "tool_call_started",
+      "payload": {
+        "tool": "script_exec",
+        "tool_call_id": "call-err",
+        "arguments_json": "{\"script\":\"exit 1\"}"
+      }
+    },
+    {
+      "id": "trace-error-draft:000004",
+      "step_id": "turn-0006-assistant",
+      "trace_id": "trace-error-draft",
+      "session_id": "session-fixture-5",
+      "turn": 6,
+      "type": "completion_delta",
+      "payload": {
+        "kind": "text",
+        "text": "partial answer"
+      }
+    },
+    {
+      "id": "trace-error-draft:000005",
+      "step_id": "turn-0006-assistant",
+      "trace_id": "trace-error-draft",
+      "session_id": "session-fixture-5",
+      "turn": 6,
+      "type": "error",
+      "payload": {
+        "message": "tool crashed"
+      }
+    }
+  ],
+  "expected_turn_draft": {
+    "trace_id": "trace-error-draft",
+    "turn": 6,
+    "status": "error",
+    "error": "tool crashed",
+    "pending_questions": [],
+    "assistant_segments": [
+      {
+        "id": "stream-segment:assistant:1",
+        "content": "partial answer"
+      }
+    ],
+    "thinking_segments": [
+      {
+        "id": "stream-segment:thinking:1",
+        "content": "step 1"
+      }
+    ],
+    "tools": [
+      {
+        "id": "stream-tool:trace-error-draft:call-err",
+        "content": "{\"script\":\"exit 1\"}",
+        "tool_name": "script_exec",
+        "tool_status": "running",
+        "tool_call_id": "call-err",
+        "trace_id": "trace-error-draft"
+      }
+    ],
+    "item_order": [
+      "thinking:stream-segment:thinking:1",
+      "tool:stream-tool:trace-error-draft:call-err",
+      "assistant:stream-segment:assistant:1"
+    ]
+  }
+}

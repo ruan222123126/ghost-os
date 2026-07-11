@@ -1,0 +1,201 @@
+{
+  "$defs": {
+    "askHumanOption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "label"
+      ],
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "allow_custom": {
+          "type": "boolean"
+        }
+      },
+      "x-codegen": {
+        "order": 30,
+        "go": { "name": "askHumanOption" },
+        "ts": { "name": "AskHumanOption" },
+        "rust": { "name": "AskHumanOption" },
+        "kotlin": { "name": "AskHumanOption" }
+      }
+    },
+    "agentAwaitingHumanPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "session_id",
+        "question_id",
+        "prompt"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "awaiting_human"
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "question_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "prompt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "selection_mode": {
+          "type": "string",
+          "enum": [
+            "single",
+            "multiple"
+          ]
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/askHumanOption"
+          }
+        }
+      },
+      "x-codegen": {
+        "order": 50,
+        "go": { "name": "askHumanAwaitingResponse" },
+        "ts": { "name": "AgentSendAwaitingHumanResponse" },
+        "rust": { "name": "AgentSendAwaitingHumanResponse" },
+        "kotlin": { "name": "AgentAwaitingHumanResponse" }
+      }
+    },
+    "agentStopRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "trace_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "session_id"
+          ]
+        },
+        {
+          "required": [
+            "trace_id"
+          ]
+        }
+      ],
+      "x-codegen": {
+        "order": 55,
+        "go": { "name": "agentStopParams" },
+        "ts": { "name": "AgentStopRequest" },
+        "rust": { "name": "AgentStopRequest" },
+        "kotlin": { "name": "AgentStopRequest" }
+      }
+    },
+    "agentStopResponsePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "message"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "stopped",
+            "not_running"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "x-codegen": {
+        "order": 60,
+        "go": { "name": "agentStopResponse" },
+        "ts": { "name": "AgentStopResponsePayload" },
+        "rust": { "name": "AgentStopResponsePayload" },
+        "kotlin": { "name": "AgentStopResponsePayload" }
+      }
+    },
+    "humanResponseRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "session_id",
+        "question_id",
+        "answer"
+      ],
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "question_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "answer": {
+          "type": "string"
+        },
+        "cancelled": {
+          "type": "boolean"
+        }
+      },
+      "x-codegen": {
+        "order": 70,
+        "go": { "name": "humanResponseParams" },
+        "ts": { "name": "HumanResponseRequest" },
+        "rust": { "name": "HumanResponseRequest" },
+        "kotlin": { "name": "HumanResponseRequest" }
+      }
+    },
+    "humanResponseAck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "session_id",
+        "question_id",
+        "accepted"
+      ],
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "question_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accepted": {
+          "type": "boolean"
+        }
+      },
+      "x-codegen": {
+        "order": 80,
+        "go": { "name": "humanResponseAck" },
+        "ts": { "name": "HumanResponseAck" },
+        "rust": { "name": "HumanResponseAck" },
+        "kotlin": { "name": "HumanResponseAck" }
+      }
+    }
+  }
+}

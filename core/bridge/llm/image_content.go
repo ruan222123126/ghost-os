@@ -27,6 +27,9 @@ func resolveImageSource(image *ImageContent) (imageSource, error) {
 	}
 
 	if url := strings.TrimSpace(image.URL); url != "" {
+		if source, handled, err := parseInlineDataURL(url, image.MimeType); handled {
+			return source, err
+		}
 		return imageSource{URL: url}, nil
 	}
 
@@ -43,6 +46,58 @@ func resolveImageSource(image *ImageContent) (imageSource, error) {
 		MediaType:  resolveImageMimeType(image.MimeType, path),
 		Base64Data: base64.StdEncoding.EncodeToString(data),
 	}, nil
+}
+
+func parseInlineDataURL(rawURL string, explicitMime string) (imageSource, bool, error) {
+	if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(rawURL)), "data:") {
+		return imageSource{}, false, nil
+	}
+
+	mediaType, data, err := decodeInlineDataURL(rawURL, explicitMime)
+	if err != nil {
+		return imageSource{}, true, err
+	}
+	return imageSource{
+		MediaType:  mediaType,
+		Base64Data: data,
+	}, true, nil
+}
+
+func decodeInlineDataURL(rawURL string, explicitMime string) (string, string, error) {
+	body := strings.TrimSpace(rawURL[5:])
+	header, payload, ok := strings.Cut(body, ",")
+	if !ok {
+		return "", "", fmt.Errorf("invalid data url: missing payload")
+	}
+
+	mediaType, isBase64 := parseInlineDataHeader(header, explicitMime)
+	if !isBase64 {
+		return "", "", fmt.Errorf("invalid data url: image data must be base64-encoded")
+	}
+	payload = strings.TrimSpace(payload)
+	if payload == "" {
+		return "", "", fmt.Errorf("invalid data url: payload is empty")
+	}
+	if _, err := base64.StdEncoding.DecodeString(payload); err != nil {
+		return "", "", fmt.Errorf("invalid data url: decode base64 payload: %w", err)
+	}
+	return mediaType, payload, nil
+}
+
+func parseInlineDataHeader(header string, explicitMime string) (string, bool) {
+	parts := strings.Split(strings.TrimSpace(header), ";")
+	mediaType := resolveImageMimeType(explicitMime, "")
+	if len(parts) > 0 {
+		if candidate := strings.TrimSpace(parts[0]); candidate != "" {
+			mediaType = candidate
+		}
+	}
+	for _, part := range parts[1:] {
+		if strings.EqualFold(strings.TrimSpace(part), "base64") {
+			return mediaType, true
+		}
+	}
+	return mediaType, false
 }
 
 func readLocalImageWithLimit(path string, maxBytes int64) ([]byte, error) {

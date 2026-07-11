@@ -1,0 +1,92 @@
+{
+  "events": [
+    {
+      "id": "trace-awaiting:000001",
+      "step_id": "turn-0005-assistant",
+      "trace_id": "trace-awaiting",
+      "session_id": "session-fixture-4",
+      "turn": 5,
+      "type": "run_started",
+      "payload": {
+        "session_id": "session-fixture-4"
+      }
+    },
+    {
+      "id": "trace-awaiting:000002",
+      "step_id": "turn-0005-tool-0001",
+      "trace_id": "trace-awaiting",
+      "session_id": "session-fixture-4",
+      "turn": 5,
+      "type": "tool_call_started",
+      "payload": {
+        "tool": "read_file",
+        "tool_call_id": "call-2",
+        "arguments_json": "{\"path\":\"README.md\"}"
+      }
+    },
+    {
+      "id": "trace-awaiting:000003",
+      "step_id": "turn-0005-tool-0001",
+      "trace_id": "trace-awaiting",
+      "session_id": "session-fixture-4",
+      "turn": 5,
+      "type": "tool_call_finished",
+      "payload": {
+        "tool": "read_file",
+        "tool_call_id": "call-2",
+        "status": "success",
+        "output": "ok"
+      }
+    },
+    {
+      "id": "trace-awaiting:000004",
+      "step_id": "turn-0005-tool-0001",
+      "trace_id": "trace-awaiting",
+      "session_id": "session-fixture-4",
+      "turn": 5,
+      "type": "awaiting_human",
+      "payload": {
+        "question_id": "q-approve",
+        "prompt": "Ship it?",
+        "selection_mode": "single",
+        "options": [
+          { "label": "Yes" },
+          { "label": "No" }
+        ]
+      }
+    }
+  ],
+  "expected_turn_draft": {
+    "trace_id": "trace-awaiting",
+    "turn": 5,
+    "status": "awaiting_human",
+    "pending_questions": [
+      {
+        "question_id": "q-approve",
+        "prompt": "Ship it?",
+        "selection_mode": "single",
+        "options": [
+          { "label": "Yes" },
+          { "label": "No" }
+        ]
+      }
+    ],
+    "assistant_segments": [],
+    "thinking_segments": [],
+    "tools": [
+      {
+        "id": "stream-tool:trace-awaiting:call-2",
+        "content": "ok",
+        "tool_input": "{\"path\":\"README.md\"}",
+        "tool_name": "read_file",
+        "tool_status": "success",
+        "tool_call_id": "call-2",
+        "trace_id": "trace-awaiting"
+      }
+    ],
+    "item_order": [
+      "tool:stream-tool:trace-awaiting:call-2",
+      "question:q-approve"
+    ]
+  }
+}

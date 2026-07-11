@@ -1,1499 +1,349 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ghost-os.dev/schemas/bus-envelope.schema.json",
-  "title": "Ghost-OS Bus Contract",
-  "description": "Single source of truth for cross-process request/response envelopes and core action schemas.",
-  "oneOf": [
-    {
-      "$ref": "#/$defs/requestEnvelope"
-    },
-    {
-      "$ref": "#/$defs/responseEnvelope"
-    }
-  ],
-  "$defs": {
-    "action": {
-      "type": "string",
-      "enum": [
-        "PING",
-        "AGENT_SEND",
-        "AGENT_STOP",
-        "HUMAN_RESPONSE",
-        "CONFIG_GET",
-        "CONFIG_UPDATE",
-        "MEMORY_QUERY",
-        "MEMORY_ARCHIVE",
-        "MEMORY_DECISION_QUERY",
-        "MEMORY_DECISION_STATS",
-        "MEMORY_DECISION_REBUILD",
-        "MEMORY_HYGIENE_RUN",
-        "MEMORY_DECISION_RELATION_RUN",
-        "MEMORY_PALACE_CURATE_RUN",
-        "TASK_CREATE",
-        "TASK_LIST",
-        "TASK_SYSTEM_LIST",
-        "TASK_GET",
-        "TASK_UPDATE",
-        "TASK_RUN_NOW",
-        "TASK_LOGS",
-        "TASK_DELETE",
-        "LIST_FILES",
-        "READ_FILE",
-        "SEARCH_FILES",
-        "APPLY_DIFF",
-        "EXPORT_FILE",
-        "BASH_EXEC",
-        "SCRIPT_EXEC",
-        "SCREEN_SHOT",
-        "SCREEN_OCR",
-        "TEXT_INPUT",
-        "MOUSE_CLICK",
-        "ICON_MATCH",
-        "BROWSER_QUERY"
-      ]
-    },
-    "status": {
-      "type": "string",
-      "enum": [
-        "success",
-        "error"
-      ]
-    },
-    "requestEnvelope": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "action",
-        "params",
-        "trace_id"
-      ],
-      "properties": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://ghost-os.dev/schemas/bus-envelope.schema.json",
+    "title": "Ghost-OS Bus Contract",
+    "description": "Single source of truth for cross-process request/response envelopes, stream event envelopes, and core action schemas.",
+    "oneOf": [
+        {
+            "$ref": "#/$defs/requestEnvelope"
+        },
+        {
+            "$ref": "#/$defs/responseEnvelope"
+        },
+        {
+            "$ref": "#/$defs/agentStreamEvent"
+        },
+        {
+            "$ref": "#/$defs/sessionPushEvent"
+        }
+    ],
+    "$defs": {
         "action": {
-          "$ref": "#/$defs/action"
+            "$ref": "./schema/defs/base.json#/$defs/action"
         },
-        "params": {
-          "type": "object"
-        },
-        "trace_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "request_id": {
-          "type": "string",
-          "minLength": 1
-        }
-      }
-    },
-    "responseEnvelope": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "status",
-        "payload",
-        "error"
-      ],
-      "properties": {
         "status": {
-          "$ref": "#/$defs/status"
+            "$ref": "./schema/defs/base.json#/$defs/status"
         },
-        "payload": {
-          "type": "object"
+        "requestEnvelope": {
+            "$ref": "./schema/defs/base.json#/$defs/requestEnvelope"
         },
-        "error": {
-          "type": "string"
+        "responseEnvelope": {
+            "$ref": "./schema/defs/base.json#/$defs/responseEnvelope"
         },
-        "request_id": {
-          "type": "string",
-          "minLength": 1
+        "providerType": {
+            "$ref": "./schema/defs/base.json#/$defs/providerType"
+        },
+        "bashExecParams": {
+            "$ref": "./schema/defs/execution.json#/$defs/bashExecParams"
+        },
+        "bashExecPayload": {
+            "$ref": "./schema/defs/execution.json#/$defs/bashExecPayload"
+        },
+        "scriptExecParams": {
+            "$ref": "./schema/defs/execution.json#/$defs/scriptExecParams"
+        },
+        "scriptExecPayload": {
+            "$ref": "./schema/defs/execution.json#/$defs/scriptExecPayload"
+        },
+        "assistantSessionEndSignal": {
+            "$ref": "./schema/defs/agent_core.json#/$defs/assistantSessionEndSignal"
+        },
+        "agentRequest": {
+            "$ref": "./schema/defs/agent_core.json#/$defs/agentRequest"
+        },
+        "agentResponsePayload": {
+            "$ref": "./schema/defs/agent_core.json#/$defs/agentResponsePayload"
+        },
+        "askHumanOption": {
+            "$ref": "./schema/defs/agent_human.json#/$defs/askHumanOption"
+        },
+        "agentAwaitingHumanPayload": {
+            "$ref": "./schema/defs/agent_human.json#/$defs/agentAwaitingHumanPayload"
+        },
+        "agentStopRequest": {
+            "$ref": "./schema/defs/agent_human.json#/$defs/agentStopRequest"
+        },
+        "agentStopResponsePayload": {
+            "$ref": "./schema/defs/agent_human.json#/$defs/agentStopResponsePayload"
+        },
+        "externalAgentRequest": {
+            "$ref": "./schema/defs/external_agent.json#/$defs/externalAgentRequest"
+        },
+        "externalAgentStopParams": {
+            "$ref": "./schema/defs/external_agent.json#/$defs/externalAgentStopParams"
+        },
+        "externalAgentApprovalParams": {
+            "$ref": "./schema/defs/external_agent.json#/$defs/externalAgentApprovalParams"
+        },
+        "externalAgentResponse": {
+            "$ref": "./schema/defs/external_agent.json#/$defs/externalAgentResponse"
+        },
+        "externalAgentApprovalResponse": {
+            "$ref": "./schema/defs/external_agent.json#/$defs/externalAgentApprovalResponse"
+        },
+        "humanResponseRequest": {
+            "$ref": "./schema/defs/agent_human.json#/$defs/humanResponseRequest"
+        },
+        "humanResponseAck": {
+            "$ref": "./schema/defs/agent_human.json#/$defs/humanResponseAck"
+        },
+        "agentSendResultPayload": {
+            "$ref": "./schema/defs/agent_core.json#/$defs/agentSendResultPayload"
+        },
+        "agentStreamEvent": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/agentStreamEvent"
+        },
+        "sessionPushEvent": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/sessionPushEvent"
+        },
+        "agentRunStartedPayload": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/agentRunStartedPayload"
+        },
+        "agentCompletionDeltaPayload": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/agentCompletionDeltaPayload"
+        },
+        "agentToolCallStartedPayload": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/agentToolCallStartedPayload"
+        },
+        "agentToolCallFinishedPayload": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/agentToolCallFinishedPayload"
+        },
+        "agentAwaitingHumanStreamPayload": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/agentAwaitingHumanStreamPayload"
+        },
+        "agentStreamMessagePayload": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/agentStreamMessagePayload"
+        },
+        "agentDonePayload": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/agentDonePayload"
+        },
+        "agentErrorPayload": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/agentErrorPayload"
+        },
+        "sessionPushAssistantMessagePayload": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/sessionPushAssistantMessagePayload"
+        },
+        "sessionPushAwaitingHumanPayload": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/sessionPushAwaitingHumanPayload"
+        },
+        "taskRunCardStartedPayload": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/taskRunCardStartedPayload"
+        },
+        "taskRunCardEventPayload": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/taskRunCardEventPayload"
+        },
+        "taskRunCardFinishedPayload": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/taskRunCardFinishedPayload"
+        },
+        "sessionImageContent": {
+            "$ref": "./schema/defs/session_content.json#/$defs/sessionImageContent"
+        },
+        "sessionFileContent": {
+            "$ref": "./schema/defs/session_content.json#/$defs/sessionFileContent"
+        },
+        "sessionContentPart": {
+            "$ref": "./schema/defs/session_content.json#/$defs/sessionContentPart"
+        },
+        "sessionToolCall": {
+            "$ref": "./schema/defs/session_content.json#/$defs/sessionToolCall"
+        },
+        "sessionToolResult": {
+            "$ref": "./schema/defs/session_content.json#/$defs/sessionToolResult"
+        },
+        "sessionHumanInteraction": {
+            "$ref": "./schema/defs/session_content.json#/$defs/sessionHumanInteraction"
+        },
+        "sessionMessage": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionMessage"
+        },
+        "sessionMetadata": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionMetadata"
+        },
+        "sessionSidebarPartition": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionSidebarPartition"
+        },
+        "sessionSidebarPartitionState": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionSidebarPartitionState"
+        },
+        "sessionSidebarPartitionPutRequest": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionSidebarPartitionPutRequest"
+        },
+        "sessionSourceAssignment": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionSourceAssignment"
+        },
+        "sessionSourceResolution": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionSourceResolution"
+        },
+        "sessionMessagePage": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionMessagePage"
+        },
+        "sessionTurnDraftSegment": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionTurnDraftSegment"
+        },
+        "sessionTurnDraftTool": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionTurnDraftTool"
+        },
+        "sessionTurnDraftPendingQuestion": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionTurnDraftPendingQuestion"
+        },
+        "sessionTurnDraft": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionTurnDraft"
+        },
+        "sessionDetail": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionDetail"
+        },
+        "sessionAppendMessage": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionAppendMessage"
+        },
+        "sessionAppendRequest": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionAppendRequest"
+        },
+        "sessionAppendResponse": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionAppendResponse"
+        },
+        "bridgeConfig": {
+            "$ref": "./schema/defs/config_runtime.json#/$defs/bridgeConfig"
+        },
+        "configUpdate": {
+            "$ref": "./schema/defs/config_runtime.json#/$defs/configUpdate"
+        },
+        "providerConfig": {
+            "$ref": "./schema/defs/config_provider.json#/$defs/providerConfig"
+        },
+        "providerSyncRecord": {
+            "$ref": "./schema/defs/config_provider.json#/$defs/providerSyncRecord"
+        },
+        "providerConfigInput": {
+            "$ref": "./schema/defs/config_provider.json#/$defs/providerConfigInput"
+        },
+        "providerListResponse": {
+            "$ref": "./schema/defs/config_provider.json#/$defs/providerListResponse"
+        },
+        "providerBusUpdateRequest": {
+            "$ref": "./schema/defs/config_provider.json#/$defs/providerBusUpdateRequest"
+        },
+        "providerBusDeleteRequest": {
+            "$ref": "./schema/defs/config_provider.json#/$defs/providerBusDeleteRequest"
+        },
+        "setActiveProviderRequest": {
+            "$ref": "./schema/defs/config_runtime.json#/$defs/setActiveProviderRequest"
+        },
+        "taskRuntimeOverrides": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskRuntimeOverrides"
+        },
+        "taskRelayConfig": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskRelayConfig"
+        },
+        "agentMessageTaskCreateRequest": {
+            "$ref": "./schema/defs/tasks.json#/$defs/agentMessageTaskCreateRequest"
+        },
+        "workflowTaskCreateRequest": {
+            "$ref": "./schema/defs/tasks.json#/$defs/workflowTaskCreateRequest"
+        },
+        "orchestrationTaskCreateRequest": {
+            "$ref": "./schema/defs/tasks.json#/$defs/orchestrationTaskCreateRequest"
+        },
+        "taskCreateRequest": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskCreateRequest"
+        },
+        "taskUpdateRequest": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskUpdateRequest"
+        },
+        "taskPatchRequest": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskPatchRequest"
+        },
+        "taskListRequest": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskListRequest"
+        },
+        "taskIDRequest": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskIDRequest"
+        },
+        "taskRunNowRequest": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskRunNowRequest"
+        },
+        "taskLogsRequest": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskLogsRequest"
+        },
+        "taskStopRequest": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskStopRequest"
+        },
+        "taskPayload": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskPayload"
+        },
+        "agentMessageTaskPayload": {
+            "$ref": "./schema/defs/tasks.json#/$defs/agentMessageTaskPayload"
+        },
+        "workflowTaskPayload": {
+            "$ref": "./schema/defs/tasks.json#/$defs/workflowTaskPayload"
+        },
+        "orchestrationTaskPayload": {
+            "$ref": "./schema/defs/tasks.json#/$defs/orchestrationTaskPayload"
+        },
+        "taskRunNodeResult": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskRunNodeResult"
+        },
+        "taskRunCard": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskRunCard"
+        },
+        "taskRunLog": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskRunLog"
+        },
+        "taskRunPayload": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskRunPayload"
+        },
+        "taskRunStopRequest": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskRunStopRequest"
+        },
+        "taskRunStopResponse": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskRunStopResponse"
+        },
+        "taskDeletePayload": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskDeletePayload"
+        },
+        "workflowDefinition": {
+            "$ref": "./schema/defs/tasks.json#/$defs/workflowDefinition"
+        },
+        "workflowNode": {
+            "$ref": "./schema/defs/tasks.json#/$defs/workflowNode"
+        },
+        "workflowStartNode": {
+            "$ref": "./schema/defs/tasks.json#/$defs/workflowStartNode"
+        },
+        "workflowInputVariable": {
+            "$ref": "./schema/defs/tasks.json#/$defs/workflowInputVariable"
+        },
+        "workflowToolNode": {
+            "$ref": "./schema/defs/tasks.json#/$defs/workflowToolNode"
+        },
+        "workflowLLMNode": {
+            "$ref": "./schema/defs/tasks.json#/$defs/workflowLLMNode"
+        },
+        "workflowAgentNode": {
+            "$ref": "./schema/defs/tasks.json#/$defs/workflowAgentNode"
+        },
+        "workflowIfNode": {
+            "$ref": "./schema/defs/tasks.json#/$defs/workflowIfNode"
+        },
+        "workflowLoopNode": {
+            "$ref": "./schema/defs/tasks.json#/$defs/workflowLoopNode"
+        },
+        "workflowEdge": {
+            "$ref": "./schema/defs/tasks.json#/$defs/workflowEdge"
+        },
+        "orchestrationDefinition": {
+            "$ref": "./schema/defs/tasks.json#/$defs/orchestrationDefinition"
+        },
+        "orchestrationNode": {
+            "$ref": "./schema/defs/tasks.json#/$defs/orchestrationNode"
+        },
+        "orchestrationGroupNode": {
+            "$ref": "./schema/defs/tasks.json#/$defs/orchestrationGroupNode"
+        },
+        "orchestrationAgentNode": {
+            "$ref": "./schema/defs/tasks.json#/$defs/orchestrationAgentNode"
+        },
+        "orchestrationEdge": {
+            "$ref": "./schema/defs/tasks.json#/$defs/orchestrationEdge"
         }
-      }
-    },
-    "bashExecParams": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "command"
-      ],
-      "properties": {
-        "command": {
-          "type": "string",
-          "minLength": 1
-        },
-        "timeout_ms": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 60000,
-          "default": 30000
-        }
-      }
-    },
-    "bashExecPayload": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "stdout",
-        "stderr"
-      ],
-      "properties": {
-        "stdout": {
-          "type": "string"
-        },
-        "stderr": {
-          "type": "string"
-        }
-      }
-    },
-    "scriptExecParams": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "script"
-      ],
-      "properties": {
-        "script": {
-          "type": "string",
-          "minLength": 1
-        },
-        "timeout_ms": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 60000,
-          "default": 30000
-        },
-        "max_memory_mb": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 512,
-          "default": 256
-        }
-      }
-    },
-    "scriptExecPayload": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "output",
-        "tool_calls_log"
-      ],
-      "properties": {
-        "output": {
-          "type": "string"
-        },
-        "tool_calls_log": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
-        }
-      }
-    },
-    "exportFileParams": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "path",
-        "session_id",
-        "artifact_root",
-        "artifact_id"
-      ],
-      "properties": {
-        "path": {
-          "type": "string",
-          "minLength": 1
-        },
-        "session_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "artifact_root": {
-          "type": "string",
-          "minLength": 1
-        },
-        "artifact_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "max_bytes": {
-          "type": "integer",
-          "minimum": 1
-        }
-      }
-    },
-    "exportFilePayload": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "artifact_id",
-        "filename",
-        "mime_type",
-        "bytes",
-        "sha256",
-        "stored_path",
-        "original_path"
-      ],
-      "properties": {
-        "artifact_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "filename": {
-          "type": "string",
-          "minLength": 1
-        },
-        "mime_type": {
-          "type": "string",
-          "minLength": 1
-        },
-        "bytes": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "sha256": {
-          "type": "string",
-          "minLength": 1
-        },
-        "stored_path": {
-          "type": "string",
-          "minLength": 1
-        },
-        "original_path": {
-          "type": "string",
-          "minLength": 1
-        }
-      }
-    },
-    "assistantSessionEndSignal": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "signal",
-        "message"
-      ],
-      "properties": {
-        "signal": {
-          "type": "string",
-          "const": "END_SESSION"
-        },
-        "message": {
-          "type": "string",
-          "minLength": 1
-        }
-      }
-    },
-    "agentRequest": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "message"
-      ],
-      "properties": {
-        "message": {
-          "type": "string",
-          "minLength": 1
-        },
-        "session_id": {
-          "type": "string",
-          "description": "Optional. Omit/empty to start a new session. If provided, must refer to an existing session; otherwise the server returns 404 (omit session_id to start a new session)."
-        },
-        "trace_id": {
-          "type": "string",
-          "description": "Optional. Client-provided trace identifier echoed back via X-Trace-ID and event envelopes."
-        }
-      }
-    },
-    "agentResponsePayload": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "message",
-        "session_id",
-        "session_ended"
-      ],
-      "properties": {
-        "message": {
-          "type": "string",
-          "minLength": 1
-        },
-        "session_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "session_ended": {
-          "type": "boolean"
-        },
-        "session_end": {
-          "oneOf": [
-            {
-              "$ref": "#/$defs/assistantSessionEndSignal"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "allOf": [
-        {
-          "if": {
-            "required": [
-              "session_ended"
-            ],
-            "properties": {
-              "session_ended": {
-                "const": true
-              }
-            }
-          },
-          "then": {
-            "required": [
-              "session_end"
-            ],
-            "properties": {
-              "session_end": {
-                "$ref": "#/$defs/assistantSessionEndSignal"
-              }
-            }
-          }
-        }
-      ]
-    },
-    "memoryHygieneRunRequest": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "scope",
-        "limit"
-      ],
-      "properties": {
-        "scope": {
-          "type": "string",
-          "enum": [
-            "working_memory",
-            "warm",
-            "projection",
-            "all",
-            "report"
-          ]
-        },
-        "limit": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "dry_run": {
-          "type": "boolean"
-        },
-        "min_confidence": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1
-        },
-        "session_id": {
-          "type": "string"
-        },
-        "window_start": {
-          "type": "string"
-        },
-        "window_end": {
-          "type": "string"
-        },
-        "force_refresh": {
-          "type": "boolean"
-        },
-        "max_votes_per_run": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "reason_codes": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    "memoryHygieneRunPayload": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "scanned",
-        "selected",
-        "created",
-        "updated",
-        "skipped_duplicates",
-        "dry_run",
-        "trace_id"
-      ],
-      "properties": {
-        "scanned": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "selected": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "created": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "updated": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "skipped_duplicates": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "scored": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "dry_run": {
-          "type": "boolean"
-        },
-        "trace_id": {
-          "type": "string",
-          "minLength": 1
-        }
-      }
-    },
-    "askHumanOption": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "label"
-      ],
-      "properties": {
-        "label": {
-          "type": "string",
-          "minLength": 1
-        },
-        "allow_custom": {
-          "type": "boolean"
-        }
-      }
-    },
-    "agentAwaitingHumanPayload": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "status",
-        "session_id",
-        "question_id",
-        "prompt"
-      ],
-      "properties": {
-        "status": {
-          "type": "string",
-          "const": "awaiting_human"
-        },
-        "session_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "question_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "prompt": {
-          "type": "string",
-          "minLength": 1
-        },
-        "selection_mode": {
-          "type": "string",
-          "enum": [
-            "single",
-            "multiple"
-          ]
-        },
-        "options": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/askHumanOption"
-          }
-        }
-      }
-    },
-    "humanResponseRequest": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "session_id",
-        "question_id",
-        "answer"
-      ],
-      "properties": {
-        "session_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "question_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "answer": {
-          "type": "string"
-        },
-        "cancelled": {
-          "type": "boolean"
-        }
-      }
-    },
-    "humanResponseAck": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "session_id",
-        "question_id",
-        "accepted"
-      ],
-      "properties": {
-        "session_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "question_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "accepted": {
-          "type": "boolean"
-        }
-      }
-    },
-    "memoryDecisionQueryRequest": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "namespace": {
-          "type": "string"
-        },
-        "time_range": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "start": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "end": {
-              "type": "string",
-              "format": "date-time"
-            }
-          }
-        },
-        "limit": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "semantic_query": {
-          "type": "string"
-        },
-        "keywords": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "decision_types": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "enum": [
-              "memo",
-              "recipe",
-              "warning"
-            ]
-          }
-        },
-        "decision_reuse_only": {
-          "type": "boolean"
-        },
-        "environment_strict": {
-          "type": "boolean"
-        },
-        "min_reuse_score": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1
-        }
-      }
-    },
-    "memoryDecisionStatsRequest": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "namespace": {
-          "type": "string"
-        }
-      }
-    },
-    "memoryDecisionRebuildRequest": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "namespace": {
-          "type": "string"
-        },
-        "time_range": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "start": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "end": {
-              "type": "string",
-              "format": "date-time"
-            }
-          }
-        },
-        "max_sessions": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "dry_run": {
-          "type": "boolean"
-        },
-        "include_recipes": {
-          "type": "boolean"
-        },
-        "rebuild_memos": {
-          "type": "boolean"
-        },
-        "reset_namespace": {
-          "type": "boolean"
-        }
-      }
-    },
-    "memoryDecisionQueryPayload": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "entries": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
-        },
-        "decision_hits": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
-        }
-      }
-    },
-    "memoryDecisionStatsPayload": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "namespace": {
-          "type": "string"
-        },
-        "memo_count": {
-          "type": "integer"
-        },
-        "recipe_count": {
-          "type": "integer"
-        },
-        "cluster_count": {
-          "type": "integer"
-        },
-        "success_count": {
-          "type": "integer"
-        },
-        "partial_count": {
-          "type": "integer"
-        },
-        "failure_count": {
-          "type": "integer"
-        },
-        "awaiting_human_count": {
-          "type": "integer"
-        },
-        "cancelled_count": {
-          "type": "integer"
-        },
-        "human_blocked_count": {
-          "type": "integer"
-        }
-      }
-    },
-    "memoryDecisionRebuildPayload": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "namespace": {
-          "type": "string"
-        },
-        "sessions_scanned": {
-          "type": "integer"
-        },
-        "markdown_scanned": {
-          "type": "integer"
-        },
-        "memos_captured": {
-          "type": "integer"
-        },
-        "recipes_created": {
-          "type": "integer"
-        },
-        "recipes_updated": {
-          "type": "integer"
-        },
-        "clusters_updated": {
-          "type": "integer"
-        },
-        "skipped_entries": {
-          "type": "integer"
-        }
-      }
-    },
-    "sessionImageContent": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "path": {
-          "type": "string"
-        },
-        "url": {
-          "type": "string"
-        },
-        "mime_type": {
-          "type": "string"
-        },
-        "width": {
-          "type": "integer"
-        },
-        "height": {
-          "type": "integer"
-        },
-        "sha256": {
-          "type": "string"
-        },
-        "bytes": {
-          "type": "integer"
-        }
-      }
-    },
-    "sessionFileContent": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "artifact_id",
-        "name",
-        "download_url"
-      ],
-      "properties": {
-        "artifact_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "name": {
-          "type": "string",
-          "minLength": 1
-        },
-        "mime_type": {
-          "type": "string"
-        },
-        "bytes": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "sha256": {
-          "type": "string"
-        },
-        "download_url": {
-          "type": "string",
-          "minLength": 1
-        },
-        "source_path": {
-          "type": "string"
-        },
-        "note": {
-          "type": "string"
-        }
-      }
-    },
-    "sessionContentPart": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "type"
-      ],
-      "properties": {
-        "type": {
-          "type": "string",
-          "minLength": 1
-        },
-        "text": {
-          "type": "string"
-        },
-        "image": {
-          "oneOf": [
-            {
-              "$ref": "#/$defs/sessionImageContent"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "file": {
-          "oneOf": [
-            {
-              "$ref": "#/$defs/sessionFileContent"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      }
-    },
-    "sessionToolCall": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "id",
-        "name",
-        "arguments"
-      ],
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "name": {
-          "type": "string",
-          "minLength": 1
-        },
-        "arguments": {
-          "type": "object",
-          "additionalProperties": true
-        }
-      }
-    },
-    "sessionToolResult": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "status",
-        "tool"
-      ],
-      "properties": {
-        "status": {
-          "type": "string",
-          "enum": [
-            "success",
-            "error"
-          ]
-        },
-        "tool": {
-          "type": "string",
-          "minLength": 1
-        },
-        "trace_id": {
-          "type": "string"
-        },
-        "output": {
-          "type": "string"
-        },
-        "error": {
-          "type": "string"
-        }
-      }
-    },
-    "sessionHumanInteraction": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "question_id",
-        "prompt"
-      ],
-      "properties": {
-        "question_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "prompt": {
-          "type": "string",
-          "minLength": 1
-        },
-        "selection_mode": {
-          "type": "string",
-          "enum": [
-            "single",
-            "multiple"
-          ]
-        },
-        "options": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/askHumanOption"
-          }
-        },
-        "answer": {
-          "type": "string"
-        }
-      }
-    },
-    "sessionMessage": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "role"
-      ],
-      "properties": {
-        "role": {
-          "type": "string",
-          "enum": [
-            "system",
-            "user",
-            "assistant",
-            "tool"
-          ]
-        },
-        "text": {
-          "type": "string"
-        },
-        "content": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/sessionContentPart"
-          }
-        },
-        "tool_calls": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/sessionToolCall"
-          }
-        },
-        "tool_result": {
-          "oneOf": [
-            {
-              "$ref": "#/$defs/sessionToolResult"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "human_interaction": {
-          "oneOf": [
-            {
-              "$ref": "#/$defs/sessionHumanInteraction"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "tool_call_id": {
-          "type": "string"
-        }
-      }
-    },
-    "sessionMetadata": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "id",
-        "created_at",
-        "updated_at",
-        "message_count",
-        "token_count"
-      ],
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "created_at": {
-          "type": "string",
-          "minLength": 1
-        },
-        "updated_at": {
-          "type": "string",
-          "minLength": 1
-        },
-        "message_count": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "token_count": {
-          "type": "integer",
-          "minimum": 0
-        }
-      }
-    },
-    "sessionDetail": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "id",
-        "messages",
-        "created_at",
-        "updated_at",
-        "token_count"
-      ],
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "messages": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/sessionMessage"
-          }
-        },
-        "created_at": {
-          "type": "string",
-          "minLength": 1
-        },
-        "updated_at": {
-          "type": "string",
-          "minLength": 1
-        },
-        "token_count": {
-          "type": "integer",
-          "minimum": 0
-        }
-      }
-    },
-    "bridgeConfig": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "provider",
-        "provider_type",
-        "base_url",
-        "model",
-        "chat_path",
-        "api_key_set"
-      ],
-      "properties": {
-        "provider": {
-          "type": "string"
-        },
-        "provider_type": {
-          "$ref": "#/$defs/providerType"
-        },
-        "base_url": {
-          "type": "string"
-        },
-        "model": {
-          "type": "string"
-        },
-        "chat_path": {
-          "type": "string"
-        },
-        "api_key_set": {
-          "type": "boolean"
-        }
-      }
-    },
-    "providerType": {
-      "type": "string",
-      "enum": [
-        "openai",
-        "anthropic",
-        "custom",
-        "codex"
-      ]
-    },
-    "configUpdate": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "provider": {
-          "type": "string",
-          "x-go-pointer": true
-        },
-        "api_key": {
-          "type": "string",
-          "x-go-pointer": true
-        },
-        "base_url": {
-          "type": "string",
-          "x-go-pointer": true
-        },
-        "model": {
-          "type": "string",
-          "x-go-pointer": true
-        },
-        "chat_path": {
-          "type": "string",
-          "x-go-pointer": true
-        },
-        "trace_id": {
-          "type": "string"
-        }
-      }
-    },
-    "providerConfig": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "name",
-        "type",
-        "base_url",
-        "api_key_set"
-      ],
-      "properties": {
-        "name": {
-          "type": "string",
-          "minLength": 1
-        },
-        "type": {
-          "$ref": "#/$defs/providerType"
-        },
-        "base_url": {
-          "type": "string",
-          "minLength": 1
-        },
-        "models": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "api_key_set": {
-          "type": "boolean"
-        }
-      }
-    },
-    "providerConfigInput": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "name",
-        "type"
-      ],
-      "properties": {
-        "name": {
-          "type": "string",
-          "minLength": 1
-        },
-        "type": {
-          "$ref": "#/$defs/providerType"
-        },
-        "base_url": {
-          "type": "string",
-          "minLength": 1,
-          "x-go-pointer": true
-        },
-        "api_key": {
-          "type": "string",
-          "x-go-pointer": true
-        },
-        "models": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "trace_id": {
-          "type": "string"
-        }
-      }
-    },
-    "providerListResponse": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "providers",
-        "active_provider"
-      ],
-      "properties": {
-        "providers": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/providerConfig"
-          }
-        },
-        "active_provider": {
-          "type": "string"
-        }
-      }
-    },
-    "setActiveProviderRequest": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "name"
-      ],
-      "properties": {
-        "name": {
-          "type": "string",
-          "minLength": 1
-        },
-        "trace_id": {
-          "type": "string"
-        }
-      }
-    },
-    "taskCreateRequest": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "message"
-      ],
-      "properties": {
-        "message": {
-          "type": "string",
-          "minLength": 1
-        },
-        "session_id": {
-          "type": "string"
-        },
-        "interval_seconds": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "cron_expr": {
-          "type": "string",
-          "minLength": 1
-        },
-        "trace_id": {
-          "type": "string"
-        }
-      }
-    },
-    "taskIDRequest": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "id"
-      ],
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
-        }
-      }
-    },
-    "taskPayload": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "id",
-        "message",
-        "schedule_type",
-        "enabled",
-        "created_at",
-        "updated_at"
-      ],
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "message": {
-          "type": "string",
-          "minLength": 1
-        },
-        "session_id": {
-          "type": "string"
-        },
-        "schedule_type": {
-          "type": "string",
-          "enum": [
-            "interval",
-            "cron"
-          ]
-        },
-        "interval_seconds": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "cron_expr": {
-          "type": "string"
-        },
-        "enabled": {
-          "type": "boolean"
-        },
-        "created_at": {
-          "type": "string",
-          "minLength": 1
-        },
-        "updated_at": {
-          "type": "string",
-          "minLength": 1
-        },
-        "last_run_at": {
-          "type": "string"
-        },
-        "next_run_at": {
-          "type": "string"
-        },
-        "last_error": {
-          "type": "string"
-        }
-      }
-    },
-    "taskDeletePayload": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "id",
-        "deleted"
-      ],
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "deleted": {
-          "type": "boolean"
-        }
-      }
-    },
-    "memoryPalaceCurateRunRequest": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "scope": {
-          "type": "string",
-          "enum": [
-            "global",
-            "session"
-          ]
-        },
-        "session_id": {
-          "type": "string"
-        },
-        "window_days": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "max_topics": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "max_evidence_per_topic": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "include_layers": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "enum": [
-              "decision",
-              "warm",
-              "cold",
-              "markdown",
-              "graph",
-              "truth"
-            ]
-          }
-        },
-        "dry_run": {
-          "type": "boolean"
-        },
-        "write_report": {
-          "type": "boolean"
-        },
-        "trace_id": {
-          "type": "string"
-        }
-      }
-    },
-    "memoryPalaceCurateRunPayload": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "topics_scanned",
-        "topics_selected",
-        "stable_count",
-        "candidate_count",
-        "rejected_count",
-        "dry_run"
-      ],
-      "properties": {
-        "report_id": {
-          "type": "string"
-        },
-        "markdown_path": {
-          "type": "string"
-        },
-        "json_path": {
-          "type": "string"
-        },
-        "topics_scanned": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "topics_selected": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "stable_count": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "candidate_count": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "rejected_count": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "dry_run": {
-          "type": "boolean"
-        },
-        "trace_id": {
-          "type": "string"
-        }
-      }
-    },
-    "agentSendResultPayload": {
-      "oneOf": [
-        {
-          "$ref": "#/$defs/agentResponsePayload"
-        },
-        {
-          "$ref": "#/$defs/agentAwaitingHumanPayload"
-        }
-      ]
-    },
-    "agentStopResponsePayload": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "status",
-        "message"
-      ],
-      "properties": {
-        "status": {
-          "type": "string",
-          "enum": [
-            "stopped",
-            "not_running"
-          ]
-        },
-        "message": {
-          "type": "string",
-          "minLength": 1
-        }
-      }
     }
-  },
-  "x-ghost-os": {
-    "version": "1.0",
-    "tool_surface": {
-      "tools.bash_exec": "Execute shell command; stdout is auto-truncated for long output",
-      "tools.list_files": "List entries in a directory",
-      "tools.read_file": "Read file with optional line range (max 200 lines per call)",
-      "tools.write_file": "Write or append file content (max 1MB per call)",
-      "tools.apply_diff": "Apply unified diff text to a file",
-      "tools.search_files": "Regex search across files, returns grep-style matches",
-      "tools.fetch_webpage": "Fetch HTTPS webpage and return cleaned markdown"
-    }
-  }
 }

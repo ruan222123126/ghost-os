@@ -15,10 +15,11 @@ type openAIRequest struct {
 }
 
 type openAIMessage struct {
-	Role       string           `json:"role"`
-	Content    any              `json:"content"`
-	ToolCalls  []openAIToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string           `json:"tool_call_id,omitempty"`
+	Role             string           `json:"role"`
+	Content          any              `json:"content"`
+	ReasoningContent json.RawMessage  `json:"reasoning_content,omitempty"`
+	ToolCalls        []openAIToolCall `json:"tool_calls,omitempty"`
+	ToolCallID       string           `json:"tool_call_id,omitempty"`
 }
 
 type openAIContentPart struct {
@@ -84,9 +85,11 @@ type openAIStreamChoice struct {
 }
 
 type openAIStreamDelta struct {
-	Role      string                 `json:"role,omitempty"`
-	Content   string                 `json:"content,omitempty"`
-	ToolCalls []openAIStreamToolCall `json:"tool_calls,omitempty"`
+	Role             string                 `json:"role,omitempty"`
+	Content          string                 `json:"content,omitempty"`
+	ReasoningContent any                    `json:"reasoning_content,omitempty"`
+	Reasoning        any                    `json:"reasoning,omitempty"`
+	ToolCalls        []openAIStreamToolCall `json:"tool_calls,omitempty"`
 }
 
 type openAIStreamToolCall struct {
@@ -101,48 +104,22 @@ type openAIStreamFunctionCall struct {
 	Arguments string `json:"arguments,omitempty"`
 }
 
-type openAIStreamAccumulator struct {
-	message      Message
-	finishReason string
-	usage        Usage
-	toolStates   map[int]*openAIStreamToolState
-	toolOrder    []int
-}
-
-type openAIStreamToolState struct {
-	index   int
-	call    ToolCall
-	args    strings.Builder
-	started bool
-	ended   bool
-}
-
 func (c *Client) buildOpenAIProviderRequest(request CompletionRequest) (providerRequest, error) {
 	body, err := toOpenAIRequest(c.opts.Model, request)
 	if err != nil {
 		return providerRequest{}, err
 	}
 
-	headers := make(map[string]string, len(c.opts.Headers)+1)
-	if c.opts.APIKey != "" {
-		headers["Authorization"] = "Bearer " + c.opts.APIKey
+	defaults := map[string]string{}
+	if apiKey := strings.TrimSpace(c.opts.APIKey); apiKey != "" {
+		defaults["Authorization"] = "Bearer " + apiKey
 	}
-	mergeStringHeaders(headers, c.opts.Headers)
 
 	return providerRequest{
 		path:    c.opts.ChatPath,
 		body:    body,
-		headers: headers,
+		headers: c.providerHeaders(defaults),
 	}, nil
-}
-
-func (c *Client) parseOpenAIProviderResponse(raw []byte) (*CompletionResponse, error) {
-	var response openAIResponse
-	if err := json.Unmarshal(raw, &response); err != nil {
-		return nil, fmt.Errorf("decode openai-compatible response: %w", err)
-	}
-
-	return openAIToCompletionResponse(response)
 }
 
 func (c *Client) streamOpenAICompletion(ctx context.Context, request CompletionRequest, sink LLMStreamSink) (*CompletionResponse, error) {
@@ -152,14 +129,13 @@ func (c *Client) streamOpenAICompletion(ctx context.Context, request CompletionR
 	}
 	body.Stream = true
 
-	headers := make(map[string]string, len(c.opts.Headers)+1)
-	if c.opts.APIKey != "" {
-		headers["Authorization"] = "Bearer " + c.opts.APIKey
+	defaults := map[string]string{}
+	if apiKey := strings.TrimSpace(c.opts.APIKey); apiKey != "" {
+		defaults["Authorization"] = "Bearer " + apiKey
 	}
-	mergeStringHeaders(headers, c.opts.Headers)
 
 	accumulator := newOpenAIStreamAccumulator()
-	if err := c.streamJSON(ctx, c.opts.ChatPath, body, headers, func(line []byte) error {
+	if err := c.streamJSON(ctx, c.opts.ChatPath, body, c.providerHeaders(defaults), func(line []byte) error {
 		return c.processOpenAIStreamChunk(ctx, line, sink, accumulator)
 	}); err != nil {
 		return nil, err
@@ -185,12 +161,16 @@ func toOpenAIRequest(model string, request CompletionRequest) (openAIRequest, er
 
 	tools := make([]openAITool, 0, len(request.Tools))
 	for _, tool := range request.Tools {
+		parameters, err := sanitizeOpenAIToolParameters(tool.Parameters, tool.Name)
+		if err != nil {
+			return openAIRequest{}, err
+		}
 		tools = append(tools, openAITool{
 			Type: "function",
 			Function: openAIFunction{
 				Name:        tool.Name,
 				Description: tool.Description,
-				Parameters:  normalizeJSONObject(tool.Parameters),
+				Parameters:  parameters,
 			},
 		})
 	}
@@ -209,9 +189,20 @@ func toOpenAIMessage(msg Message) (openAIMessage, error) {
 	}
 
 	switch msg.Role {
-	case RoleSystem, RoleUser:
+	case RoleSystem:
 		out.Content = msg.Text
+	case RoleUser:
+		content, err := toOpenAIContent(msg.Text, msg.Content)
+		if err != nil {
+			return openAIMessage{}, err
+		}
+		out.Content = content
 	case RoleAssistant:
+		reasoningContent, err := normalizeOpenAIReasoningContent(msg.ReasoningContent)
+		if err != nil {
+			return openAIMessage{}, err
+		}
+		out.ReasoningContent = reasoningContent
 		if strings.TrimSpace(msg.Text) != "" {
 			out.Content = msg.Text
 		}
@@ -230,7 +221,7 @@ func toOpenAIMessage(msg Message) (openAIMessage, error) {
 			out.ToolCalls = toolCalls
 		}
 	case RoleTool:
-		content, err := toOpenAIToolContent(msg.Text, msg.Content)
+		content, err := toOpenAIContent(msg.Text, msg.Content)
 		if err != nil {
 			return openAIMessage{}, err
 		}
@@ -243,7 +234,18 @@ func toOpenAIMessage(msg Message) (openAIMessage, error) {
 	return out, nil
 }
 
-func toOpenAIToolContent(text string, content []ContentPart) (any, error) {
+func normalizeOpenAIReasoningContent(raw json.RawMessage) (json.RawMessage, error) {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return nil, nil
+	}
+	if !json.Valid([]byte(trimmed)) {
+		return nil, fmt.Errorf("assistant reasoning_content must be valid JSON")
+	}
+	return cloneRawJSON(json.RawMessage(trimmed)), nil
+}
+
+func toOpenAIContent(text string, content []ContentPart) (any, error) {
 	if len(content) == 0 {
 		return text, nil
 	}
@@ -257,251 +259,33 @@ func toOpenAIToolContent(text string, content []ContentPart) (any, error) {
 		})
 	}
 	for _, part := range content {
-		if part.Image == nil {
-			continue
+		switch strings.ToLower(strings.TrimSpace(part.Type)) {
+		case "", ContentTypeText:
+			if value := strings.TrimSpace(part.Text); value != "" {
+				parts = append(parts, openAIContentPart{
+					Type: "text",
+					Text: value,
+				})
+			}
+		case ContentTypeImage:
+			if part.Image == nil {
+				continue
+			}
+			imageURL, err := resolveOpenAIImageURL(part.Image)
+			if err != nil {
+				return nil, err
+			}
+			parts = append(parts, openAIContentPart{
+				Type: "image_url",
+				ImageURL: &openAIImagePart{
+					URL: imageURL,
+				},
+			})
 		}
-		imageURL, err := resolveOpenAIImageURL(part.Image)
-		if err != nil {
-			return nil, err
-		}
-		parts = append(parts, openAIContentPart{
-			Type: "image_url",
-			ImageURL: &openAIImagePart{
-				URL: imageURL,
-			},
-		})
 	}
 
 	if len(parts) == 0 {
 		return text, nil
 	}
 	return parts, nil
-}
-
-// openAIToCompletionResponse 把 provider 响应映射回统一结构。
-func openAIToCompletionResponse(response openAIResponse) (*CompletionResponse, error) {
-	if len(response.Choices) == 0 {
-		return nil, fmt.Errorf("openai-compatible response has no choices")
-	}
-
-	choice := response.Choices[0]
-	message, err := openAIToMessage(choice.Message)
-	if err != nil {
-		return nil, err
-	}
-	finishReason, err := openAIFinishReason(normalizeOpenAIFinishReason(choice.FinishReason, message))
-	if err != nil {
-		return nil, err
-	}
-
-	return &CompletionResponse{
-		Message:      message,
-		FinishReason: finishReason,
-		Usage: Usage{
-			PromptTokens:     response.Usage.PromptTokens,
-			CompletionTokens: response.Usage.CompletionTokens,
-			TotalTokens:      response.Usage.TotalTokens,
-		},
-	}, nil
-}
-
-func openAIToMessage(msg openAIMessage) (Message, error) {
-	out := Message{
-		Role:       Role(strings.TrimSpace(msg.Role)),
-		Text:       contentToText(msg.Content),
-		ToolCallID: strings.TrimSpace(msg.ToolCallID),
-	}
-
-	if out.Role == "" {
-		out.Role = RoleAssistant
-	}
-
-	if len(msg.ToolCalls) > 0 {
-		out.ToolCalls = make([]ToolCall, 0, len(msg.ToolCalls))
-		for _, call := range msg.ToolCalls {
-			out.ToolCalls = append(out.ToolCalls, ToolCall{
-				ID:   call.ID,
-				Name: call.Function.Name,
-				// 保留 provider 原始 arguments，避免把空字符串静默归一化为 {}。
-				// 空/非法参数应在 agent 层按无效 tool call 处理。
-				Arguments: json.RawMessage(call.Function.Arguments),
-			})
-		}
-	}
-
-	return out, nil
-}
-
-// normalizeOpenAIFinishReason 为不规范的 OpenAI 兼容实现提供最小兜底。
-// 当 finish_reason 缺失时，优先按 tool_calls 判定，否则回落为 stop。
-func normalizeOpenAIFinishReason(reason string, message Message) string {
-	if strings.TrimSpace(reason) != "" {
-		return reason
-	}
-	if len(message.ToolCalls) > 0 {
-		return "tool_calls"
-	}
-	return "stop"
-}
-
-// openAIFinishReason 采用严格映射，未知值直接返回错误避免静默降级。
-func openAIFinishReason(reason string) (FinishReason, error) {
-	switch strings.TrimSpace(reason) {
-	case "stop":
-		return FinishStop, nil
-	case "tool_calls":
-		return FinishToolCalls, nil
-	case "length":
-		return FinishLength, nil
-	default:
-		return "", fmt.Errorf("unsupported openai finish_reason %q", reason)
-	}
-}
-
-func (c *Client) processOpenAIStreamChunk(
-	ctx context.Context,
-	line []byte,
-	sink LLMStreamSink,
-	accumulator *openAIStreamAccumulator,
-) error {
-	var chunk openAIStreamChunk
-	if err := json.Unmarshal(line, &chunk); err != nil {
-		return fmt.Errorf("parse openai stream chunk: %w", err)
-	}
-	if chunk.Usage != nil {
-		accumulator.usage = Usage{
-			PromptTokens:     chunk.Usage.PromptTokens,
-			CompletionTokens: chunk.Usage.CompletionTokens,
-			TotalTokens:      chunk.Usage.TotalTokens,
-		}
-	}
-	if len(chunk.Choices) == 0 {
-		return nil
-	}
-
-	choice := chunk.Choices[0]
-	if err := accumulator.ApplyDelta(ctx, sink, choice.Delta); err != nil {
-		return err
-	}
-	if choice.FinishReason != nil && strings.TrimSpace(*choice.FinishReason) != "" {
-		return accumulator.SetFinishReason(ctx, sink, *choice.FinishReason)
-	}
-	return nil
-}
-
-func newOpenAIStreamAccumulator() *openAIStreamAccumulator {
-	return &openAIStreamAccumulator{
-		message: Message{
-			Role: RoleAssistant,
-		},
-		toolStates: make(map[int]*openAIStreamToolState),
-	}
-}
-
-func (a *openAIStreamAccumulator) ApplyDelta(ctx context.Context, sink LLMStreamSink, delta openAIStreamDelta) error {
-	if role := strings.TrimSpace(delta.Role); role != "" {
-		a.message.Role = Role(role)
-	}
-	if text := delta.Content; text != "" {
-		a.message.Text += text
-		if err := sink.OnDelta(ctx, LLMDelta{
-			Kind: DeltaKindText,
-			Text: text,
-		}); err != nil {
-			return err
-		}
-	}
-
-	for _, toolDelta := range delta.ToolCalls {
-		state := a.ensureToolState(toolDelta.Index)
-		if id := strings.TrimSpace(toolDelta.ID); id != "" {
-			state.call.ID = id
-		}
-		if name := strings.TrimSpace(toolDelta.Function.Name); name != "" {
-			state.call.Name = name
-		}
-		if !state.started {
-			if err := sink.OnDelta(ctx, LLMDelta{
-				Kind:          DeltaKindToolCallStart,
-				ToolCallIndex: state.index,
-				ToolCallID:    state.call.ID,
-				ToolName:      state.call.Name,
-			}); err != nil {
-				return err
-			}
-			state.started = true
-		}
-		if fragment := toolDelta.Function.Arguments; fragment != "" {
-			state.args.WriteString(fragment)
-			if err := sink.OnDelta(ctx, LLMDelta{
-				Kind:              DeltaKindToolCallDelta,
-				ToolCallIndex:     state.index,
-				ArgumentsFragment: fragment,
-			}); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-func (a *openAIStreamAccumulator) SetFinishReason(ctx context.Context, sink LLMStreamSink, reason string) error {
-	a.finishReason = strings.TrimSpace(reason)
-	if a.finishReason == "tool_calls" {
-		for _, index := range a.toolOrder {
-			state := a.toolStates[index]
-			if state == nil || state.ended {
-				continue
-			}
-			if err := sink.OnDelta(ctx, LLMDelta{
-				Kind:          DeltaKindToolCallEnd,
-				ToolCallIndex: index,
-			}); err != nil {
-				return err
-			}
-			state.ended = true
-		}
-	}
-	return nil
-}
-
-func (a *openAIStreamAccumulator) CompletionResponse() (*CompletionResponse, error) {
-	if a.message.Role == "" {
-		a.message.Role = RoleAssistant
-	}
-	if len(a.toolOrder) > 0 {
-		a.message.ToolCalls = make([]ToolCall, 0, len(a.toolOrder))
-		for _, index := range a.toolOrder {
-			state := a.toolStates[index]
-			if state == nil {
-				continue
-			}
-			state.call.Arguments = json.RawMessage(state.args.String())
-			a.message.ToolCalls = append(a.message.ToolCalls, ToolCall{
-				ID:        state.call.ID,
-				Name:      state.call.Name,
-				Arguments: cloneRawJSON(state.call.Arguments),
-			})
-		}
-	}
-	finishReason, err := openAIFinishReason(normalizeOpenAIFinishReason(a.finishReason, a.message))
-	if err != nil {
-		return nil, err
-	}
-	return &CompletionResponse{
-		Message:      a.message,
-		FinishReason: finishReason,
-		Usage:        a.usage,
-	}, nil
-}
-
-func (a *openAIStreamAccumulator) ensureToolState(index int) *openAIStreamToolState {
-	if state, ok := a.toolStates[index]; ok {
-		return state
-	}
-	state := &openAIStreamToolState{index: index}
-	a.toolStates[index] = state
-	a.toolOrder = append(a.toolOrder, index)
-	return state
 }

@@ -1,0 +1,2000 @@
+{
+    "$defs": {
+        "workflowNode": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "id",
+                "type"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "start",
+                        "tool",
+                        "llm",
+                        "agent",
+                        "if",
+                        "loop",
+                        "end"
+                    ]
+                },
+                "start": {
+                    "$ref": "#/$defs/workflowStartNode"
+                },
+                "tool": {
+                    "$ref": "#/$defs/workflowToolNode"
+                },
+                "llm": {
+                    "$ref": "#/$defs/workflowLLMNode"
+                },
+                "agent": {
+                    "$ref": "#/$defs/workflowAgentNode"
+                },
+                "if": {
+                    "$ref": "#/$defs/workflowIfNode"
+                },
+                "loop": {
+                    "$ref": "#/$defs/workflowLoopNode"
+                }
+            },
+            "x-codegen": {
+                "order": 240,
+                "go": {
+                    "name": "workflowNodeContract"
+                },
+                "ts": {
+                    "name": "WorkflowNode"
+                },
+                "rust": {
+                    "name": "WorkflowNode"
+                },
+                "kotlin": {
+                    "name": "WorkflowNode"
+                }
+            }
+        },
+        "workflowStartNode": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "inputs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/workflowInputVariable"
+                    }
+                }
+            },
+            "x-codegen": {
+                "order": 258,
+                "go": {
+                    "name": "workflowStartNodeContract"
+                },
+                "ts": {
+                    "name": "WorkflowStartNode"
+                },
+                "rust": {
+                    "name": "WorkflowStartNode"
+                },
+                "kotlin": {
+                    "name": "WorkflowStartNode"
+                }
+            }
+        },
+        "workflowInputVariable": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "name",
+                "type"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "string",
+                        "number",
+                        "boolean",
+                        "object",
+                        "array"
+                    ]
+                },
+                "required": {
+                    "type": "boolean"
+                },
+                "default": {},
+                "description": {
+                    "type": "string"
+                }
+            },
+            "x-codegen": {
+                "order": 259,
+                "go": {
+                    "name": "workflowInputVariableContract"
+                },
+                "ts": {
+                    "name": "WorkflowInputVariable"
+                },
+                "rust": {
+                    "name": "WorkflowInputVariable"
+                },
+                "kotlin": {
+                    "name": "WorkflowInputVariable"
+                }
+            }
+        },
+        "workflowToolNode": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "tool_name"
+            ],
+            "properties": {
+                "tool_name": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "arguments": {
+                    "type": "object",
+                    "additionalProperties": true
+                }
+            },
+            "x-codegen": {
+                "order": 245,
+                "go": {
+                    "name": "workflowToolNodeContract"
+                },
+                "ts": {
+                    "name": "WorkflowToolNode"
+                },
+                "rust": {
+                    "name": "WorkflowToolNode"
+                },
+                "kotlin": {
+                    "name": "WorkflowToolNode"
+                }
+            }
+        },
+        "workflowLLMNode": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "prompt"
+            ],
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "system_prompt": {
+                    "type": "string"
+                }
+            },
+            "x-codegen": {
+                "order": 246,
+                "go": {
+                    "name": "workflowLLMNodeContract"
+                },
+                "ts": {
+                    "name": "WorkflowLLMNode"
+                },
+                "rust": {
+                    "name": "WorkflowLLMNode"
+                },
+                "kotlin": {
+                    "name": "WorkflowLLMNode"
+                }
+            }
+        },
+        "workflowAgentNode": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "message"
+            ],
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "runtime_overrides": {
+                    "$ref": "#/$defs/taskRuntimeOverrides"
+                }
+            },
+            "x-codegen": {
+                "order": 247,
+                "go": {
+                    "name": "workflowAgentNodeContract"
+                },
+                "ts": {
+                    "name": "WorkflowAgentNode"
+                },
+                "rust": {
+                    "name": "WorkflowAgentNode"
+                },
+                "kotlin": {
+                    "name": "WorkflowAgentNode"
+                }
+            }
+        },
+        "workflowIfNode": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "operator",
+                "true_node_id",
+                "false_node_id"
+            ],
+            "properties": {
+                "source_node_id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "operator": {
+                    "type": "string",
+                    "enum": [
+                        "equals",
+                        "not_equals",
+                        "contains",
+                        "not_contains",
+                        "is_empty",
+                        "not_empty"
+                    ]
+                },
+                "value": {
+                    "type": "string"
+                },
+                "true_node_id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "false_node_id": {
+                    "type": "string",
+                    "minLength": 1
+                }
+            },
+            "x-codegen": {
+                "order": 248,
+                "go": {
+                    "name": "workflowIfNodeContract"
+                },
+                "ts": {
+                    "name": "WorkflowIfNode"
+                },
+                "rust": {
+                    "name": "WorkflowIfNode"
+                },
+                "kotlin": {
+                    "name": "WorkflowIfNode"
+                }
+            }
+        },
+        "workflowLoopNode": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "max_iterations",
+                "body_node_id",
+                "exit_node_id"
+            ],
+            "properties": {
+                "max_iterations": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "body_node_id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "exit_node_id": {
+                    "type": "string",
+                    "minLength": 1
+                }
+            },
+            "x-codegen": {
+                "order": 249,
+                "go": {
+                    "name": "workflowLoopNodeContract"
+                },
+                "ts": {
+                    "name": "WorkflowLoopNode"
+                },
+                "rust": {
+                    "name": "WorkflowLoopNode"
+                },
+                "kotlin": {
+                    "name": "WorkflowLoopNode"
+                }
+            }
+        },
+        "workflowEdge": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "from_node_id",
+                "to_node_id"
+            ],
+            "properties": {
+                "from_node_id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "to_node_id": {
+                    "type": "string",
+                    "minLength": 1
+                }
+            },
+            "x-codegen": {
+                "order": 241,
+                "go": {
+                    "name": "workflowEdgeContract"
+                },
+                "ts": {
+                    "name": "WorkflowEdge"
+                },
+                "rust": {
+                    "name": "WorkflowEdge"
+                },
+                "kotlin": {
+                    "name": "WorkflowEdge"
+                }
+            }
+        },
+        "workflowDefinition": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "nodes",
+                "edges"
+            ],
+            "properties": {
+                "nodes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/workflowNode"
+                    }
+                },
+                "edges": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/workflowEdge"
+                    }
+                }
+            },
+            "x-codegen": {
+                "order": 242,
+                "go": {
+                    "name": "workflowDefinitionContract"
+                },
+                "ts": {
+                    "name": "WorkflowDefinition"
+                },
+                "rust": {
+                    "name": "WorkflowDefinition"
+                },
+                "kotlin": {
+                    "name": "WorkflowDefinition"
+                }
+            }
+        },
+        "orchestrationNode": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "id",
+                "type"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "group",
+                        "agent"
+                    ]
+                },
+                "group": {
+                    "$ref": "#/$defs/orchestrationGroupNode"
+                },
+                "agent": {
+                    "$ref": "#/$defs/orchestrationAgentNode"
+                }
+            },
+            "x-codegen": {
+                "order": 243,
+                "go": {
+                    "name": "orchestrationNodeContract"
+                },
+                "ts": {
+                    "name": "OrchestrationNode"
+                },
+                "rust": {
+                    "name": "OrchestrationNode"
+                },
+                "kotlin": {
+                    "name": "OrchestrationNode"
+                }
+            }
+        },
+        "orchestrationGroupNode": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "title",
+                "shared_context",
+                "speaking_mode",
+                "max_rounds"
+            ],
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "shared_context": {
+                    "type": "string"
+                },
+                "speaking_mode": {
+                    "type": "string",
+                    "enum": [
+                        "sequential",
+                        "parallel",
+                        "owner"
+                    ]
+                },
+                "owner_agent_id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "max_rounds": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "x-codegen": {
+                "order": 244,
+                "go": {
+                    "name": "orchestrationGroupNodeContract"
+                },
+                "ts": {
+                    "name": "OrchestrationGroupNode"
+                },
+                "rust": {
+                    "name": "OrchestrationGroupNode"
+                },
+                "kotlin": {
+                    "name": "OrchestrationGroupNode"
+                }
+            }
+        },
+        "orchestrationAgentNode": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "title",
+                "message"
+            ],
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "message": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "runtime_overrides": {
+                    "$ref": "#/$defs/taskRuntimeOverrides"
+                }
+            },
+            "x-codegen": {
+                "order": 245,
+                "go": {
+                    "name": "orchestrationAgentNodeContract"
+                },
+                "ts": {
+                    "name": "OrchestrationAgentNode"
+                },
+                "rust": {
+                    "name": "OrchestrationAgentNode"
+                },
+                "kotlin": {
+                    "name": "OrchestrationAgentNode"
+                }
+            }
+        },
+        "orchestrationEdge": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "from_node_id",
+                "to_node_id",
+                "kind"
+            ],
+            "properties": {
+                "from_node_id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "to_node_id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "kind": {
+                    "type": "string",
+                    "enum": [
+                        "control",
+                        "member"
+                    ]
+                }
+            },
+            "x-codegen": {
+                "order": 246,
+                "go": {
+                    "name": "orchestrationEdgeContract"
+                },
+                "ts": {
+                    "name": "OrchestrationEdge"
+                },
+                "rust": {
+                    "name": "OrchestrationEdge"
+                },
+                "kotlin": {
+                    "name": "OrchestrationEdge"
+                }
+            }
+        },
+        "orchestrationDefinition": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "nodes",
+                "edges"
+            ],
+            "properties": {
+                "nodes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/orchestrationNode"
+                    }
+                },
+                "edges": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/orchestrationEdge"
+                    }
+                }
+            },
+            "x-codegen": {
+                "order": 247,
+                "go": {
+                    "name": "orchestrationDefinitionContract"
+                },
+                "ts": {
+                    "name": "OrchestrationDefinition"
+                },
+                "rust": {
+                    "name": "OrchestrationDefinition"
+                },
+                "kotlin": {
+                    "name": "OrchestrationDefinition"
+                }
+            }
+        },
+        "taskRuntimeOverrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "provider_name": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "model": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "system_prompt": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "preset_id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "tool_allowlist": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "minLength": 1
+                    }
+                },
+                "tool_allowlist_only": {
+                    "type": "boolean",
+                    "x-go-pointer": true
+                },
+                "max_turns": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "x-go-pointer": true
+                }
+            },
+            "x-codegen": {
+                "order": 245,
+                "go": {
+                    "name": "taskRuntimeOverridesContract"
+                },
+                "ts": {
+                    "name": "TaskRuntimeOverrides"
+                },
+                "rust": {
+                    "name": "TaskRuntimeOverrides"
+                },
+                "kotlin": {
+                    "name": "TaskRuntimeOverrides"
+                }
+            }
+        },
+        "taskRelayConfig": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "stop_policy",
+                "max_rounds"
+            ],
+            "properties": {
+                "stop_policy": {
+                    "type": "string",
+                    "enum": [
+                        "ai_decides",
+                        "max_rounds"
+                    ]
+                },
+                "max_rounds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "execution_timeout_ms": {
+                    "type": "integer",
+                    "minimum": 0
+                }
+            },
+            "x-codegen": {
+                "order": 246,
+                "go": {
+                    "name": "taskRelayConfigContract"
+                },
+                "ts": {
+                    "name": "TaskRelayConfig"
+                },
+                "rust": {
+                    "name": "TaskRelayConfig"
+                },
+                "kotlin": {
+                    "name": "TaskRelayConfig"
+                }
+            }
+        },
+        "agentMessageTaskCreateRequest": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "message"
+            ],
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "session_id": {
+                    "type": "string"
+                },
+                "runtime_overrides": {
+                    "$ref": "#/$defs/taskRuntimeOverrides"
+                },
+                "agent_mode": {
+                    "type": "string",
+                    "enum": [
+                        "single",
+                        "relay"
+                    ]
+                },
+                "relay": {
+                    "$ref": "#/$defs/taskRelayConfig"
+                },
+                "task_kind": {
+                    "type": "string",
+                    "enum": [
+                        "agent_message"
+                    ]
+                },
+                "interval_seconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "cron_expr": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "trace_id": {
+                    "type": "string"
+                },
+                "scope": {
+                    "type": "string",
+                    "enum": [
+                        "user",
+                        "system",
+                        "orchestration"
+                    ]
+                }
+            },
+            "oneOf": [
+                {
+                    "required": [
+                        "interval_seconds"
+                    ]
+                },
+                {
+                    "required": [
+                        "cron_expr"
+                    ]
+                }
+            ],
+            "x-codegen": {
+                "order": 245,
+                "ts": {
+                    "name": "AgentMessageTaskCreateRequest"
+                },
+                "rust": {
+                    "name": "AgentMessageTaskCreateRequest"
+                },
+                "kotlin": {
+                    "name": "AgentMessageTaskCreateRequest"
+                }
+            }
+        },
+        "workflowTaskCreateRequest": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "task_kind",
+                "workflow"
+            ],
+            "properties": {
+                "task_kind": {
+                    "type": "string",
+                    "enum": [
+                        "workflow"
+                    ]
+                },
+                "workflow": {
+                    "$ref": "#/$defs/workflowDefinition"
+                },
+                "interval_seconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "cron_expr": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "trace_id": {
+                    "type": "string"
+                },
+                "scope": {
+                    "type": "string",
+                    "enum": [
+                        "user",
+                        "system",
+                        "orchestration"
+                    ]
+                }
+            },
+            "oneOf": [
+                {
+                    "required": [
+                        "interval_seconds"
+                    ]
+                },
+                {
+                    "required": [
+                        "cron_expr"
+                    ]
+                }
+            ],
+            "x-codegen": {
+                "order": 248,
+                "ts": {
+                    "name": "WorkflowTaskCreateRequest"
+                },
+                "rust": {
+                    "name": "WorkflowTaskCreateRequest"
+                },
+                "kotlin": {
+                    "name": "WorkflowTaskCreateRequest"
+                }
+            }
+        },
+        "orchestrationTaskCreateRequest": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "task_kind",
+                "name",
+                "orchestration"
+            ],
+            "properties": {
+                "task_kind": {
+                    "type": "string",
+                    "enum": [
+                        "orchestration"
+                    ]
+                },
+                "name": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "orchestration": {
+                    "$ref": "#/$defs/orchestrationDefinition"
+                },
+                "interval_seconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "cron_expr": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "trace_id": {
+                    "type": "string"
+                },
+                "scope": {
+                    "type": "string",
+                    "enum": [
+                        "user",
+                        "system",
+                        "orchestration"
+                    ]
+                }
+            },
+            "oneOf": [
+                {
+                    "required": [
+                        "interval_seconds"
+                    ]
+                },
+                {
+                    "required": [
+                        "cron_expr"
+                    ]
+                }
+            ],
+            "x-codegen": {
+                "order": 249,
+                "ts": {
+                    "name": "OrchestrationTaskCreateRequest"
+                },
+                "rust": {
+                    "name": "OrchestrationTaskCreateRequest"
+                },
+                "kotlin": {
+                    "name": "OrchestrationTaskCreateRequest"
+                }
+            }
+        },
+        "taskCreateRequest": {
+            "oneOf": [
+                {
+                    "$ref": "#/$defs/agentMessageTaskCreateRequest"
+                },
+                {
+                    "$ref": "#/$defs/workflowTaskCreateRequest"
+                },
+                {
+                    "$ref": "#/$defs/orchestrationTaskCreateRequest"
+                }
+            ],
+            "x-codegen": {
+                "order": 250,
+                "ts": {
+                    "name": "TaskCreateRequest"
+                },
+                "rust": {
+                    "name": "TaskCreateRequest",
+                    "variants": {
+                        "agentMessageTaskCreateRequest": "AgentMessage",
+                        "workflowTaskCreateRequest": "Workflow",
+                        "orchestrationTaskCreateRequest": "Orchestration"
+                    }
+                },
+                "kotlin": {
+                    "name": "TaskCreateRequest",
+                    "kind": "sealed_interface"
+                }
+            }
+        },
+        "taskListRequest": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "scope": {
+                    "type": "string",
+                    "enum": [
+                        "user",
+                        "system",
+                        "orchestration"
+                    ]
+                }
+            }
+        },
+        "taskIDRequest": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "id"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "scope": {
+                    "type": "string",
+                    "enum": [
+                        "user",
+                        "system",
+                        "orchestration"
+                    ]
+                }
+            }
+        },
+        "taskRunNowRequest": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "id"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "scope": {
+                    "type": "string",
+                    "enum": [
+                        "user",
+                        "system",
+                        "orchestration"
+                    ]
+                },
+                "start_only": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "taskLogsRequest": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "id"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "scope": {
+                    "type": "string",
+                    "enum": [
+                        "user",
+                        "system",
+                        "orchestration"
+                    ]
+                }
+            }
+        },
+        "taskStopRequest": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "id",
+                "run_id"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "run_id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "scope": {
+                    "type": "string",
+                    "enum": [
+                        "user",
+                        "system",
+                        "orchestration"
+                    ]
+                }
+            }
+        },
+        "taskUpdateRequest": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "id"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "message": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "name": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "session_id": {
+                    "type": "string"
+                },
+                "runtime_overrides": {
+                    "$ref": "#/$defs/taskRuntimeOverrides"
+                },
+                "agent_mode": {
+                    "type": "string",
+                    "enum": [
+                        "single",
+                        "relay"
+                    ]
+                },
+                "relay": {
+                    "$ref": "#/$defs/taskRelayConfig"
+                },
+                "task_kind": {
+                    "type": "string",
+                    "enum": [
+                        "agent_message",
+                        "workflow",
+                        "orchestration"
+                    ]
+                },
+                "workflow": {
+                    "$ref": "#/$defs/workflowDefinition"
+                },
+                "orchestration": {
+                    "$ref": "#/$defs/orchestrationDefinition"
+                },
+                "interval_seconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "cron_expr": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "trace_id": {
+                    "type": "string"
+                },
+                "scope": {
+                    "type": "string",
+                    "enum": [
+                        "user",
+                        "system",
+                        "orchestration"
+                    ]
+                }
+            },
+            "not": {
+                "required": [
+                    "interval_seconds",
+                    "cron_expr"
+                ]
+            },
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {
+                            "task_kind": {
+                                "const": "agent_message"
+                            }
+                        },
+                        "required": [
+                            "task_kind"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "message"
+                        ]
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "task_kind": {
+                                "const": "workflow"
+                            }
+                        },
+                        "required": [
+                            "task_kind"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "workflow"
+                        ]
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "task_kind": {
+                                "const": "orchestration"
+                            }
+                        },
+                        "required": [
+                            "task_kind"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "orchestration"
+                        ]
+                    }
+                }
+            ],
+            "x-codegen": {
+                "order": 251,
+                "ts": {
+                    "name": "TaskUpdateRequest"
+                },
+                "rust": {
+                    "name": "TaskUpdateRequest"
+                },
+                "kotlin": {
+                    "name": "TaskUpdateRequest"
+                }
+            }
+        },
+        "taskPatchRequest": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "name": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "session_id": {
+                    "type": "string"
+                },
+                "runtime_overrides": {
+                    "$ref": "#/$defs/taskRuntimeOverrides"
+                },
+                "agent_mode": {
+                    "type": "string",
+                    "enum": [
+                        "single",
+                        "relay"
+                    ]
+                },
+                "relay": {
+                    "$ref": "#/$defs/taskRelayConfig"
+                },
+                "task_kind": {
+                    "type": "string",
+                    "enum": [
+                        "agent_message",
+                        "workflow",
+                        "orchestration"
+                    ]
+                },
+                "workflow": {
+                    "$ref": "#/$defs/workflowDefinition"
+                },
+                "orchestration": {
+                    "$ref": "#/$defs/orchestrationDefinition"
+                },
+                "interval_seconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "cron_expr": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "trace_id": {
+                    "type": "string"
+                }
+            },
+            "not": {
+                "required": [
+                    "interval_seconds",
+                    "cron_expr"
+                ]
+            },
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {
+                            "task_kind": {
+                                "const": "agent_message"
+                            }
+                        },
+                        "required": [
+                            "task_kind"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "message"
+                        ]
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "task_kind": {
+                                "const": "workflow"
+                            }
+                        },
+                        "required": [
+                            "task_kind"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "workflow"
+                        ]
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "task_kind": {
+                                "const": "orchestration"
+                            }
+                        },
+                        "required": [
+                            "task_kind"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "orchestration"
+                        ]
+                    }
+                }
+            ],
+            "x-codegen": {
+                "order": 252,
+                "ts": {
+                    "name": "TaskPatchRequest"
+                },
+                "rust": {
+                    "name": "TaskPatchRequest"
+                },
+                "kotlin": {
+                    "name": "TaskPatchRequest"
+                }
+            }
+        },
+        "agentMessageTaskPayload": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "id",
+                "message",
+                "task_kind",
+                "schedule_type",
+                "enabled",
+                "created_at",
+                "updated_at"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "message": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "session_id": {
+                    "type": "string"
+                },
+                "runtime_overrides": {
+                    "$ref": "#/$defs/taskRuntimeOverrides"
+                },
+                "agent_mode": {
+                    "type": "string",
+                    "enum": [
+                        "single",
+                        "relay"
+                    ]
+                },
+                "relay": {
+                    "$ref": "#/$defs/taskRelayConfig"
+                },
+                "task_kind": {
+                    "type": "string",
+                    "enum": [
+                        "agent_message"
+                    ]
+                },
+                "schedule_type": {
+                    "type": "string",
+                    "enum": [
+                        "interval",
+                        "cron"
+                    ]
+                },
+                "interval_seconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "cron_expr": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "created_at": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "updated_at": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "last_run_at": {
+                    "type": "string"
+                },
+                "next_run_at": {
+                    "type": "string"
+                },
+                "last_error": {
+                    "type": "string"
+                }
+            },
+            "oneOf": [
+                {
+                    "properties": {
+                        "schedule_type": {
+                            "const": "interval"
+                        }
+                    },
+                    "required": [
+                        "schedule_type",
+                        "interval_seconds"
+                    ]
+                },
+                {
+                    "properties": {
+                        "schedule_type": {
+                            "const": "cron"
+                        }
+                    },
+                    "required": [
+                        "schedule_type",
+                        "cron_expr"
+                    ]
+                }
+            ],
+            "x-codegen": {
+                "order": 251,
+                "ts": {
+                    "name": "AgentMessageTaskPayload"
+                },
+                "rust": {
+                    "name": "AgentMessageTaskPayload"
+                },
+                "kotlin": {
+                    "name": "AgentMessageTaskPayload"
+                }
+            }
+        },
+        "workflowTaskPayload": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "id",
+                "task_kind",
+                "workflow",
+                "schedule_type",
+                "enabled",
+                "created_at",
+                "updated_at"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "task_kind": {
+                    "type": "string",
+                    "enum": [
+                        "workflow"
+                    ]
+                },
+                "workflow": {
+                    "$ref": "#/$defs/workflowDefinition"
+                },
+                "schedule_type": {
+                    "type": "string",
+                    "enum": [
+                        "interval",
+                        "cron"
+                    ]
+                },
+                "interval_seconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "cron_expr": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "created_at": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "updated_at": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "last_run_at": {
+                    "type": "string"
+                },
+                "next_run_at": {
+                    "type": "string"
+                },
+                "last_error": {
+                    "type": "string"
+                }
+            },
+            "oneOf": [
+                {
+                    "properties": {
+                        "schedule_type": {
+                            "const": "interval"
+                        }
+                    },
+                    "required": [
+                        "schedule_type",
+                        "interval_seconds"
+                    ]
+                },
+                {
+                    "properties": {
+                        "schedule_type": {
+                            "const": "cron"
+                        }
+                    },
+                    "required": [
+                        "schedule_type",
+                        "cron_expr"
+                    ]
+                }
+            ],
+            "x-codegen": {
+                "order": 254,
+                "ts": {
+                    "name": "WorkflowTaskPayload"
+                },
+                "rust": {
+                    "name": "WorkflowTaskPayload"
+                },
+                "kotlin": {
+                    "name": "WorkflowTaskPayload"
+                }
+            }
+        },
+        "orchestrationTaskPayload": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "id",
+                "name",
+                "task_kind",
+                "orchestration",
+                "schedule_type",
+                "enabled",
+                "created_at",
+                "updated_at"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "name": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "task_kind": {
+                    "type": "string",
+                    "enum": [
+                        "orchestration"
+                    ]
+                },
+                "orchestration": {
+                    "$ref": "#/$defs/orchestrationDefinition"
+                },
+                "schedule_type": {
+                    "type": "string",
+                    "enum": [
+                        "interval",
+                        "cron"
+                    ]
+                },
+                "interval_seconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "cron_expr": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "created_at": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "updated_at": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "last_run_at": {
+                    "type": "string"
+                },
+                "next_run_at": {
+                    "type": "string"
+                },
+                "last_error": {
+                    "type": "string"
+                }
+            },
+            "oneOf": [
+                {
+                    "properties": {
+                        "schedule_type": {
+                            "const": "interval"
+                        }
+                    },
+                    "required": [
+                        "schedule_type",
+                        "interval_seconds"
+                    ]
+                },
+                {
+                    "properties": {
+                        "schedule_type": {
+                            "const": "cron"
+                        }
+                    },
+                    "required": [
+                        "schedule_type",
+                        "cron_expr"
+                    ]
+                }
+            ],
+            "x-codegen": {
+                "order": 255,
+                "ts": {
+                    "name": "OrchestrationTaskPayload"
+                },
+                "rust": {
+                    "name": "OrchestrationTaskPayload"
+                },
+                "kotlin": {
+                    "name": "OrchestrationTaskPayload"
+                }
+            }
+        },
+        "taskPayload": {
+            "oneOf": [
+                {
+                    "$ref": "#/$defs/agentMessageTaskPayload"
+                },
+                {
+                    "$ref": "#/$defs/workflowTaskPayload"
+                },
+                {
+                    "$ref": "#/$defs/orchestrationTaskPayload"
+                }
+            ],
+            "x-codegen": {
+                "order": 256,
+                "ts": {
+                    "name": "TaskPayload"
+                },
+                "rust": {
+                    "name": "TaskPayload",
+                    "variants": {
+                        "agentMessageTaskPayload": "AgentMessage",
+                        "workflowTaskPayload": "Workflow",
+                        "orchestrationTaskPayload": "Orchestration"
+                    }
+                },
+                "kotlin": {
+                    "name": "TaskPayload",
+                    "kind": "sealed_interface"
+                }
+            }
+        },
+        "taskRunNodeResult": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "node_id",
+                "node_type",
+                "status"
+            ],
+            "properties": {
+                "node_id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "node_type": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "status": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "completed_seq": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "branch_id": {
+                    "type": "string"
+                },
+                "input": {},
+                "output": {},
+                "preview": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                }
+            },
+            "x-codegen": {
+                "order": 257,
+                "ts": {
+                    "name": "TaskRunNodeResult"
+                },
+                "rust": {
+                    "name": "TaskRunNodeResult"
+                },
+                "kotlin": {
+                    "name": "TaskRunNodeResult"
+                }
+            }
+        },
+        "taskRunCard": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "card_id",
+                "kind"
+            ],
+            "properties": {
+                "card_id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "run_id": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "title": {
+                    "type": "string"
+                },
+                "node_id": {
+                    "type": "string"
+                },
+                "node_type": {
+                    "type": "string"
+                },
+                "round": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "iteration": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "branch_id": {
+                    "type": "string"
+                },
+                "source_session_id": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "preview": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "final_text": {
+                    "type": "string"
+                },
+                "source_events": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "./streaming_events.json#/$defs/agentStreamEvent"
+                    }
+                }
+            },
+            "x-codegen": {
+                "order": 258,
+                "ts": {
+                    "name": "TaskRunCard"
+                },
+                "rust": {
+                    "name": "TaskRunCard"
+                },
+                "kotlin": {
+                    "name": "TaskRunCard"
+                }
+            }
+        },
+        "taskRunLog": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "task_id",
+                "run_id",
+                "trace_id",
+                "scheduled_at",
+                "status"
+            ],
+            "properties": {
+                "task_id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "run_id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "trace_id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "task_kind": {
+                    "type": "string",
+                    "enum": [
+                        "agent_message",
+                        "workflow",
+                        "orchestration"
+                    ]
+                },
+                "scheduled_at": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "running",
+                        "success",
+                        "incomplete",
+                        "cancelled",
+                        "error",
+                        "skipped",
+                        "awaiting_human"
+                    ]
+                },
+                "session_id_input": {
+                    "type": "string"
+                },
+                "session_id_output": {
+                    "type": "string"
+                },
+                "response_preview": {
+                    "type": "string"
+                },
+                "node_results": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/taskRunNodeResult"
+                    }
+                },
+                "run_cards": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/taskRunCard"
+                    }
+                },
+                "error": {
+                    "type": "string"
+                }
+            },
+            "x-codegen": {
+                "order": 259,
+                "ts": {
+                    "name": "TaskRunLog"
+                },
+                "rust": {
+                    "name": "TaskRunLog"
+                },
+                "kotlin": {
+                    "name": "TaskRunLog"
+                }
+            }
+        },
+        "taskRunPayload": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "task",
+                "run"
+            ],
+            "properties": {
+                "task": {
+                    "$ref": "#/$defs/taskPayload"
+                },
+                "run": {
+                    "$ref": "#/$defs/taskRunLog"
+                }
+            },
+            "x-codegen": {
+                "order": 260,
+                "ts": {
+                    "name": "TaskRunPayload"
+                },
+                "rust": {
+                    "name": "TaskRunPayload"
+                },
+                "kotlin": {
+                    "name": "TaskRunPayload"
+                }
+            }
+        },
+        "taskRunStopRequest": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "run_id"
+            ],
+            "properties": {
+                "run_id": {
+                    "type": "string",
+                    "minLength": 1
+                }
+            },
+            "x-codegen": {
+                "order": 261,
+                "ts": {
+                    "name": "TaskRunStopRequest"
+                },
+                "rust": {
+                    "name": "TaskRunStopRequest"
+                },
+                "kotlin": {
+                    "name": "TaskRunStopRequest"
+                }
+            }
+        },
+        "taskRunStopResponse": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "status",
+                "message",
+                "task_id"
+            ],
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "stopped",
+                        "not_running"
+                    ]
+                },
+                "message": {
+                    "type": "string"
+                },
+                "task_id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "run_id": {
+                    "type": "string"
+                },
+                "run": {
+                    "$ref": "#/$defs/taskRunLog"
+                }
+            },
+            "x-codegen": {
+                "order": 262,
+                "ts": {
+                    "name": "TaskRunStopResponse"
+                },
+                "rust": {
+                    "name": "TaskRunStopResponse"
+                },
+                "kotlin": {
+                    "name": "TaskRunStopResponse"
+                }
+            }
+        },
+        "taskDeletePayload": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "id",
+                "deleted"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "deleted": {
+                    "type": "boolean"
+                }
+            }
+        }
+    }
+}

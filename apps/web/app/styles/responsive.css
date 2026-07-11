@@ -1,31 +1,17 @@
 /* Shared responsive overrides for the MVP console layout. */
 
-@media (max-width: 1400px) {
-  .chat-layout {
-    grid-template-columns: 300px minmax(0, 1fr);
-  }
-
-  .sidebar {
-    grid-row: 1 / span 2;
-  }
-
-  .briefing-rail {
-    grid-column: 2;
-    border-left: none;
-    border-top: 1px solid rgb(var(--border) / 0.58);
-    min-height: 320px;
-  }
-}
-
 @media (max-width: 1080px) {
   .chat-layout,
   .sidebar,
   .chat,
-  .briefing-rail,
   .topbar + .chat-layout {
     height: auto;
     min-height: 0;
     max-height: none;
+  }
+
+  .sidebar {
+    width: 100%;
   }
 
   .chat-layout,
@@ -34,9 +20,18 @@
     grid-template-columns: 1fr;
   }
 
+  .settings-sidebar {
+    border-right: 0;
+    border-bottom: 1px solid rgb(229 229 229);
+  }
+
   .settings-nav {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .settings-form-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -75,6 +70,13 @@
   .settings-panel {
     width: min(100vw - 24px, 960px);
     max-height: calc(100vh - 24px);
+    height: calc(100vh - 24px);
+  }
+
+  .settings-sidebar-head,
+  .settings-content-frame {
+    padding-left: 20px;
+    padding-right: 20px;
   }
 
   .settings-nav {
@@ -85,12 +87,64 @@
     min-width: 0;
   }
 
+  .composer {
+    padding-left: 22px;
+    padding-right: 22px;
+  }
+
+  .composer-shell {
+    padding: 10px 12px;
+    border-radius: 28px;
+  }
+
+  .composer-row {
+    gap: 6px;
+  }
+
   .composer-model-trigger {
-    max-width: min(100%, calc(100vw - 132px));
+    max-width: min(42vw, 180px);
   }
 
   .composer-model-panel {
-    width: max(220px, 100%);
-    max-width: min(280px, calc(100vw - 36px));
+    --composer-model-panel-width: 320px;
+  }
+
+  .chat-session-notch {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) 0;
+    gap: 10px;
+    height: 44px;
+    flex-basis: 44px;
+    padding: 0 14px;
+  }
+
+  .chat-session-notch-id {
+    font-size: 10px;
+  }
+
+  .chat-session-notch-title {
+    font-size: 13px;
+  }
+
+  .chat-session-notch-spacer {
+    display: none;
+  }
+
+  .chat-empty-home {
+    gap: 24px;
+    padding: 24px 16px;
+  }
+
+  .chat-empty-hero {
+    gap: 10px;
+    width: min(100%, 560px);
+  }
+
+  .chat-empty-hero-title {
+    font-size: 28px;
+  }
+
+  .chat-empty-hero-subtitle {
+    font-size: 14px;
+    line-height: 1.6;
   }
 }

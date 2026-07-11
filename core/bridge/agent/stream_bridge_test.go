@@ -5,13 +5,18 @@ import (
 	"testing"
 
 	"ghost-os/bridge/llm"
+	"ghost-os/bridge/streaming"
 )
 
 func TestLLMDeltaBridgeConvertsTextDelta(t *testing.T) {
 	sink := &recordingEventSink{}
-	bridge := newLLMDeltaBridge(sink, "trace-bridge", 2)
+	attemptState := &completionAttemptState{}
+	bridge, err := newLLMDeltaBridge(sink, "trace-bridge", "session-bridge", 2, attemptState)
+	if err != nil {
+		t.Fatalf("newLLMDeltaBridge returned error: %v", err)
+	}
 
-	err := bridge.OnDelta(context.Background(), llm.LLMDelta{
+	err = bridge.OnDelta(context.Background(), llm.LLMDelta{
 		Kind: llm.DeltaKindText,
 		Text: "Hello",
 	})
@@ -22,23 +27,36 @@ func TestLLMDeltaBridgeConvertsTextDelta(t *testing.T) {
 		t.Fatalf("unexpected event count: got %d want %d", len(sink.events), 1)
 	}
 	event := sink.events[0]
-	if event.Type != EventCompletionDelta {
-		t.Fatalf("unexpected event type: got %q want %q", event.Type, EventCompletionDelta)
+	if event.Type != streaming.EventCompletionDelta {
+		t.Fatalf("unexpected event type: got %q want %q", event.Type, streaming.EventCompletionDelta)
 	}
-	if event.StepID != AssistantStepID(2) {
-		t.Fatalf("unexpected step id: got %q want %q", event.StepID, AssistantStepID(2))
+	stepID, err := streaming.AssistantStepID(2)
+	if err != nil {
+		t.Fatalf("AssistantStepID returned error: %v", err)
+	}
+	if event.StepID != stepID {
+		t.Fatalf("unexpected step id: got %q want %q", event.StepID, stepID)
+	}
+	if event.SessionID != "session-bridge" {
+		t.Fatalf("unexpected session id: got %q want %q", event.SessionID, "session-bridge")
 	}
 	payload := event.Payload.(map[string]any)
 	if payload["kind"] != string(llm.DeltaKindText) || payload["text"] != "Hello" {
 		t.Fatalf("unexpected payload: %+v", payload)
 	}
+	if !attemptState.hasCompletionDeltaEmitted() {
+		t.Fatal("expected attempt state to mark completion delta emitted")
+	}
 }
 
 func TestLLMDeltaBridgeConvertsToolCallDelta(t *testing.T) {
 	sink := &recordingEventSink{}
-	bridge := newLLMDeltaBridge(sink, "trace-bridge", 1)
+	bridge, err := newLLMDeltaBridge(sink, "trace-bridge", "session-bridge", 1, nil)
+	if err != nil {
+		t.Fatalf("newLLMDeltaBridge returned error: %v", err)
+	}
 
-	err := bridge.OnDelta(context.Background(), llm.LLMDelta{
+	err = bridge.OnDelta(context.Background(), llm.LLMDelta{
 		Kind:              llm.DeltaKindToolCallDelta,
 		ToolCallIndex:     0,
 		ArgumentsFragment: `{"query":`,
@@ -55,5 +73,29 @@ func TestLLMDeltaBridgeConvertsToolCallDelta(t *testing.T) {
 	}
 	if payload["arguments_fragment"] != `{"query":` {
 		t.Fatalf("unexpected arguments fragment: got %v want %q", payload["arguments_fragment"], `{"query":`)
+	}
+}
+
+func TestLLMDeltaBridgeConvertsThinkingDelta(t *testing.T) {
+	sink := &recordingEventSink{}
+	bridge, err := newLLMDeltaBridge(sink, "trace-bridge", "session-bridge", 1, nil)
+	if err != nil {
+		t.Fatalf("newLLMDeltaBridge returned error: %v", err)
+	}
+
+	err = bridge.OnDelta(context.Background(), llm.LLMDelta{
+		Kind:     llm.DeltaKindThinking,
+		Thinking: "let me reason...",
+	})
+	if err != nil {
+		t.Fatalf("OnDelta returned error: %v", err)
+	}
+
+	payload := sink.events[0].Payload.(map[string]any)
+	if payload["kind"] != string(llm.DeltaKindThinking) {
+		t.Fatalf("unexpected kind: got %v want %q", payload["kind"], llm.DeltaKindThinking)
+	}
+	if payload["thinking"] != "let me reason..." {
+		t.Fatalf("unexpected thinking: got %v", payload["thinking"])
 	}
 }

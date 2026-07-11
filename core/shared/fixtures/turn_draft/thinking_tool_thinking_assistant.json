@@ -1,0 +1,103 @@
+{
+  "events": [
+    {
+      "id": "trace-thinking-order:000001",
+      "step_id": "turn-0002-assistant",
+      "trace_id": "trace-thinking-order",
+      "session_id": "session-fixture-1",
+      "turn": 2,
+      "type": "run_started",
+      "payload": {
+        "session_id": "session-fixture-1"
+      }
+    },
+    {
+      "id": "trace-thinking-order:000002",
+      "step_id": "turn-0002-assistant",
+      "trace_id": "trace-thinking-order",
+      "session_id": "session-fixture-1",
+      "turn": 2,
+      "type": "completion_delta",
+      "payload": {
+        "kind": "thinking",
+        "thinking": "before tool"
+      }
+    },
+    {
+      "id": "trace-thinking-order:000003",
+      "step_id": "turn-0002-tool-0001",
+      "trace_id": "trace-thinking-order",
+      "session_id": "session-fixture-1",
+      "turn": 2,
+      "type": "tool_call_started",
+      "payload": {
+        "tool": "bash_exec",
+        "tool_call_id": "call-1",
+        "arguments_json": "{\"command\":\"pwd\"}"
+      }
+    },
+    {
+      "id": "trace-thinking-order:000004",
+      "step_id": "turn-0002-assistant",
+      "trace_id": "trace-thinking-order",
+      "session_id": "session-fixture-1",
+      "turn": 2,
+      "type": "completion_delta",
+      "payload": {
+        "kind": "thinking",
+        "thinking": "after tool"
+      }
+    },
+    {
+      "id": "trace-thinking-order:000005",
+      "step_id": "turn-0002-assistant",
+      "trace_id": "trace-thinking-order",
+      "session_id": "session-fixture-1",
+      "turn": 2,
+      "type": "completion_delta",
+      "payload": {
+        "kind": "text",
+        "text": "done"
+      }
+    }
+  ],
+  "expected_turn_draft": {
+    "trace_id": "trace-thinking-order",
+    "turn": 2,
+    "status": "streaming",
+    "pending_questions": [],
+    "assistant_segments": [
+      {
+        "id": "stream-segment:assistant:1",
+        "content": "done"
+      }
+    ],
+    "thinking_segments": [
+      {
+        "id": "stream-segment:thinking:1",
+        "content": "before tool"
+      },
+      {
+        "id": "stream-segment:thinking:2",
+        "content": "after tool"
+      }
+    ],
+    "tools": [
+      {
+        "id": "stream-tool:trace-thinking-order:call-1",
+        "content": "{\"command\":\"pwd\"}",
+        "tool_input": "{\"command\":\"pwd\"}",
+        "tool_name": "bash_exec",
+        "tool_status": "running",
+        "tool_call_id": "call-1",
+        "trace_id": "trace-thinking-order"
+      }
+    ],
+    "item_order": [
+      "thinking:stream-segment:thinking:1",
+      "tool:stream-tool:trace-thinking-order:call-1",
+      "thinking:stream-segment:thinking:2",
+      "assistant:stream-segment:assistant:1"
+    ]
+  }
+}

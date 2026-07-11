@@ -4,25 +4,45 @@ import (
 	"context"
 
 	"ghost-os/bridge/llm"
+	"ghost-os/bridge/streaming"
 )
 
 type llmDeltaBridge struct {
-	sink    EventSink
-	traceID string
-	turn    int
-	stepID  string
+	sink      streaming.Sink
+	traceID   string
+	sessionID string
+	turn      int
+	stepID    string
+	emitted   bool
+	attempt   *completionAttemptState
 }
 
-func newLLMDeltaBridge(sink EventSink, traceID string, turn int) *llmDeltaBridge {
-	return &llmDeltaBridge{
-		sink:    sink,
-		traceID: traceID,
-		turn:    turn,
-		stepID:  AssistantStepID(turn),
+func newLLMDeltaBridge(
+	sink streaming.Sink,
+	traceID string,
+	sessionID string,
+	turn int,
+	attempt *completionAttemptState,
+) (*llmDeltaBridge, error) {
+	stepID, err := streaming.AssistantStepID(turn)
+	if err != nil {
+		return nil, err
 	}
+	return &llmDeltaBridge{
+		sink:      sink,
+		traceID:   traceID,
+		sessionID: sessionID,
+		turn:      turn,
+		stepID:    stepID,
+		attempt:   attempt,
+	}, nil
 }
 
 func (b *llmDeltaBridge) OnDelta(ctx context.Context, delta llm.LLMDelta) error {
+	b.emitted = true
+	if b.attempt != nil {
+		b.attempt.markCompletionDeltaEmitted()
+	}
 	payload := map[string]any{
 		"kind": string(delta.Kind),
 	}
@@ -30,6 +50,8 @@ func (b *llmDeltaBridge) OnDelta(ctx context.Context, delta llm.LLMDelta) error 
 	switch delta.Kind {
 	case llm.DeltaKindText:
 		payload["text"] = delta.Text
+	case llm.DeltaKindThinking:
+		payload["thinking"] = delta.Thinking
 	case llm.DeltaKindToolCallStart:
 		payload["tool_call_index"] = delta.ToolCallIndex
 		payload["tool_call_id"] = delta.ToolCallID
@@ -41,5 +63,17 @@ func (b *llmDeltaBridge) OnDelta(ctx context.Context, delta llm.LLMDelta) error 
 		payload["tool_call_index"] = delta.ToolCallIndex
 	}
 
-	return b.sink.Emit(ctx, NewEvent(b.traceID, b.turn, b.stepID, EventCompletionDelta, payload))
+	event, err := streaming.NewEvent(b.traceID, b.sessionID, b.turn, b.stepID, streaming.EventCompletionDelta, payload)
+	if err != nil {
+		return err
+	}
+	_, err = b.sink.Emit(ctx, event)
+	return err
+}
+
+func (b *llmDeltaBridge) hasEmitted() bool {
+	if b == nil {
+		return false
+	}
+	return b.emitted
 }

@@ -1,0 +1,217 @@
+.mobile-search-page {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  color: #202124;
+  background: #ffffff;
+}
+
+.mobile-search-header {
+  min-height: 56px;
+  border-bottom: 1px solid rgba(229, 231, 235, 0.72);
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #ffffff;
+}
+
+.mobile-search-header .ui-icon-search {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  color: #202124;
+}
+
+.mobile-search-header input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  flex: 1;
+  color: #202124;
+  background: transparent;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.mobile-search-header input::placeholder {
+  color: #9ca3af;
+  opacity: 1;
+}
+
+.mobile-search-header input::-webkit-search-decoration,
+.mobile-search-header input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.mobile-search-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #202124;
+  background: transparent;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.mobile-search-close:hover,
+.mobile-search-close:focus-visible {
+  background: #f1f3f4;
+}
+
+.mobile-search-close .ui-icon-x {
+  width: 20px;
+  height: 20px;
+}
+
+.mobile-search-body {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.mobile-search-loading {
+  min-height: 220px;
+  padding-top: 64px;
+  display: flex;
+  justify-content: center;
+  color: #2563eb;
+}
+
+.mobile-search-loading svg {
+  width: 32px;
+  height: 32px;
+  animation: mobile-search-spin 900ms linear infinite;
+  stroke-width: 2.5;
+}
+
+.mobile-search-results {
+  padding: 20px 16px 32px;
+}
+
+.mobile-search-results h2 {
+  margin: 0 0 12px;
+  color: #6b7280;
+  font-size: 0.94rem;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: 0;
+}
+
+.mobile-search-results ul {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0;
+  list-style: none;
+}
+
+.mobile-search-results li {
+  min-width: 0;
+}
+
+.mobile-search-results li > button {
+  width: 100%;
+  min-height: 56px;
+  border-radius: 8px;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: #202124;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.mobile-search-results li > button:hover,
+.mobile-search-results li > button:focus-visible {
+  background: #f8fafd;
+}
+
+.mobile-search-results li > button:active {
+  background: #f1f3f4;
+}
+
+.mobile-search-results span {
+  min-width: 0;
+  overflow: hidden;
+  color: #3c4043;
+  font-size: 1rem;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-search-results time {
+  flex: 0 0 auto;
+  color: #9ca3af;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  white-space: nowrap;
+}
+
+.mobile-search-empty {
+  margin: 0;
+  padding-top: 40px;
+  color: #9ca3af;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+@keyframes mobile-search-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .mobile-search-page,
+  .mobile-search-header {
+    color: #e8eaed;
+    background: #131314;
+  }
+
+  .mobile-search-header {
+    border-bottom-color: rgba(63, 63, 70, 0.72);
+  }
+
+  .mobile-search-header .ui-icon-search,
+  .mobile-search-header input,
+  .mobile-search-close {
+    color: #e8eaed;
+  }
+
+  .mobile-search-header input::placeholder,
+  .mobile-search-empty,
+  .mobile-search-results time {
+    color: #8f9399;
+  }
+
+  .mobile-search-close:hover,
+  .mobile-search-close:focus-visible,
+  .mobile-search-results li > button:hover,
+  .mobile-search-results li > button:focus-visible {
+    background: #1f1f20;
+  }
+
+  .mobile-search-results li > button:active {
+    background: #282a2c;
+  }
+
+  .mobile-search-results h2 {
+    color: #9aa0a6;
+  }
+
+  .mobile-search-results span {
+    color: #e8eaed;
+  }
+}

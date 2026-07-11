@@ -5,6 +5,7 @@
 import type { FC } from 'react';
 import { useMemo, useState } from 'react';
 import { ignorePromise } from '@/lib/errors';
+import { useWebLocale } from '@/lib/i18n/provider';
 import type { AskHumanOption } from '@/lib/types';
 
 interface QuestionInputProps {
@@ -60,6 +61,7 @@ export const QuestionInput: FC<QuestionInputProps> = ({
   onAnswer,
   onCancel,
 }) => {
+  const { copy } = useWebLocale();
   const normalizedOptions = useMemo(() => normalizeOptions(options), [options]);
   const hasOptions = normalizedOptions.length > 0;
   const mode = selectionMode === 'multiple' ? 'multiple' : 'single';
@@ -114,43 +116,36 @@ export const QuestionInput: FC<QuestionInputProps> = ({
   }
 
   return (
-    <div className="ui-panel-soft mt-3 border-amber-300/30 bg-amber-300/8 p-3">
-      {hasOptions && (
-        <div className="space-y-2">
-          <div className="ui-hint text-amber-100/70">
-            {mode === 'multiple' ? 'Choose one or more options' : 'Choose one option'}
-          </div>
-          {normalizedOptions.map((option, index) => {
-            const checked = effectiveSelections.includes(index);
-            return (
-              <label
-                key={`${option.label}-${index}`}
-                className={`flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2 transition ${
-                  checked
-                    ? 'border-amber-200/55 bg-amber-200/10 text-amber-50 shadow-lift'
-                    : 'border-amber-200/15 bg-app-field/80 text-amber-100'
-                } ${loading ? 'cursor-not-allowed opacity-70' : 'hover:border-amber-300/35'}`}
-              >
-                <input
-                  type={mode === 'multiple' ? 'checkbox' : 'radio'}
-                  name="ask-human-option"
-                  checked={checked}
-                  disabled={loading}
-                  onChange={() => toggleOption(index)}
-                  className="mt-1 h-4 w-4 accent-amber-300"
-                />
-                <span className="text-sm leading-relaxed">{option.label}</span>
-              </label>
-            );
-          })}
-        </div>
-      )}
+    <div className="question-card">
+      {hasOptions ? (
+        <>
+          <div className="field-hint">{mode === 'multiple' ? copy.chat.questionChooseMultiple : copy.chat.questionChooseSingle}</div>
+          <div className="choice-list">
+            {normalizedOptions.map((option, index) => {
+              const checked = effectiveSelections.includes(index);
 
-      {(!hasOptions || customSelected) && (
+              return (
+                <label key={`${option.label}-${index}`} className={`choice-option${checked ? ' is-selected' : ''}`}>
+                  <input
+                    type={mode === 'multiple' ? 'checkbox' : 'radio'}
+                    name="ask-human-option"
+                    checked={checked}
+                    disabled={loading}
+                    onChange={() => toggleOption(index)}
+                  />
+                  <span>{option.label}</span>
+                </label>
+              );
+            })}
+          </div>
+        </>
+      ) : null}
+
+      {(!hasOptions || customSelected) ? (
         <textarea
           value={customText}
           disabled={loading}
-          aria-label={hasOptions ? 'Custom answer' : 'Answer question'}
+          aria-label={hasOptions ? copy.chat.questionCustomAnswerAria : copy.chat.questionAnswerAria}
           onChange={(event) => setCustomText(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey) {
@@ -158,26 +153,27 @@ export const QuestionInput: FC<QuestionInputProps> = ({
               ignorePromise(submit());
             }
           }}
-          placeholder={hasOptions ? 'Type your custom answer...' : 'Type your answer...'}
+          placeholder={hasOptions ? copy.chat.questionCustomPlaceholder : copy.chat.questionAnswerPlaceholder}
           rows={hasOptions ? 3 : 2}
-          className="ui-textarea mono mt-3 min-h-[84px] w-full resize-none border-amber-200/20 bg-app-field/85 text-amber-100 focus:border-amber-300/50 focus:shadow-[inset_0_1px_0_rgb(255_255_255_/_0.04),0_0_0_3px_rgb(252_211_77_/_0.16)]"
+          className="textarea mono"
         />
-      )}
+      ) : null}
 
-      <div className="mt-3 flex items-center justify-between gap-3">
-        <span className="ui-hint text-amber-100/70">
-          {hasOptions ? 'Submit your selection, or cancel this question' : 'Enter to submit answer, or cancel'}
+      <div className="question-actions">
+        <span className="field-hint">
+          {hasOptions ? copy.chat.questionSelectionHint : copy.chat.questionAnswerHint}
         </span>
-        <div className="flex items-center gap-2">
+
+        <div className="question-actions">
           <button
             type="button"
             onClick={() => {
               ignorePromise(onCancel());
             }}
             disabled={loading}
-            className="ui-btn-secondary border-rose-300/35 bg-rose-300/12 px-3 py-1.5 text-sm text-rose-100 hover:border-rose-300/55 hover:bg-rose-300/18"
+            className="button-secondary"
           >
-            Cancel
+            {copy.chat.questionCancel}
           </button>
           <button
             type="button"
@@ -185,9 +181,9 @@ export const QuestionInput: FC<QuestionInputProps> = ({
               ignorePromise(submit());
             }}
             disabled={loading || !canSubmit}
-            className="ui-btn border-amber-300/40 bg-amber-300/18 px-3 py-1.5 text-sm text-amber-100 hover:border-amber-300/55 hover:bg-amber-300/24"
+            className="button"
           >
-            {loading ? 'Submitting...' : 'Submit'}
+            {loading ? copy.chat.questionSubmitting : copy.chat.questionSubmit}
           </button>
         </div>
       </div>

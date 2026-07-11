@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -15,9 +16,20 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	output, err := app.Run(ctx, os.Args[1:])
+	args := os.Args[1:]
+	if app.IsServeSubcommand(args) {
+		log.Print("startup checkpoint stage=process status=begin")
+	}
+
+	output, err := app.Run(ctx, args)
 	if err != nil {
+		if app.IsServeSubcommand(args) {
+			log.Printf("startup checkpoint stage=process status=error error=%v", err)
+		}
 		fatal(err)
+	}
+	if app.IsServeSubcommand(args) {
+		log.Print("startup checkpoint stage=process status=ready")
 	}
 	if output != "" {
 		fmt.Println(output)

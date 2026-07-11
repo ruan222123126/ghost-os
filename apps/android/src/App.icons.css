@@ -1,0 +1,27 @@
+.ui-icon {
+  width: 22px;
+  height: 22px;
+  display: block;
+  flex: 0 0 auto;
+  color: currentColor;
+}
+
+.icon-button-header .ui-icon-menu {
+  width: 24px;
+  height: 24px;
+}
+
+.icon-button-composer .ui-icon-plus {
+  width: 24px;
+  height: 24px;
+}
+
+.send-button .ui-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.runtime-selector .ui-icon-chevron-down {
+  width: 18px;
+  height: 18px;
+}

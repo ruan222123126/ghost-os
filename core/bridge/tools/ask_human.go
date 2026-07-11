@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"ghost-os/bridge/session"
 )
@@ -17,13 +16,17 @@ import (
 type AskHumanTool struct{}
 
 type askHumanArgs struct {
-	Prompt string `json:"prompt"`
+	Prompt        string           `json:"prompt"`
+	SelectionMode string           `json:"selection_mode,omitempty"`
+	Options       []AskHumanOption `json:"options,omitempty"`
 }
 
 type askHumanAwaitingPayload struct {
-	Status     string `json:"status"`
-	QuestionID string `json:"question_id"`
-	Prompt     string `json:"prompt"`
+	Status        string           `json:"status"`
+	QuestionID    string           `json:"question_id"`
+	Prompt        string           `json:"prompt"`
+	SelectionMode string           `json:"selection_mode,omitempty"`
+	Options       []AskHumanOption `json:"options,omitempty"`
 }
 
 // NewAskHumanTool 创建 ask_human 工具实例。
@@ -36,14 +39,27 @@ func (AskHumanTool) Name() string {
 }
 
 func (AskHumanTool) Description() string {
-	return "Pause autonomous execution and ask the user for explicit input before continuing."
+	return "Block and ask user for input. If 'options' are provided, the final option MUST set allow_custom=true."
 }
 
 func (AskHumanTool) Parameters() json.RawMessage {
 	return json.RawMessage(`{
 		"type":"object",
 		"properties":{
-			"prompt":{"type":"string","description":"Question that should be presented to the user."}
+			"prompt":{"type":"string"},
+			"selection_mode":{"type":"string","enum":["single","multiple"]},
+			"options":{
+				"type":"array",
+				"items":{
+					"type":"object",
+					"properties":{
+						"label":{"type":"string"},
+						"allow_custom":{"type":"boolean"}
+					},
+					"required":["label"],
+					"additionalProperties":false
+				}
+			}
 		},
 		"required":["prompt"],
 		"additionalProperties":false
@@ -66,10 +82,21 @@ func (AskHumanTool) InterpretResult(output string) ExecuteMeta {
 		return ExecuteMeta{}
 	}
 
+	options, ok := normalizeAskHumanOptions(payload.Options)
+	if !ok {
+		return ExecuteMeta{}
+	}
+	selectionMode, ok := normalizeAskHumanSelectionMode(payload.SelectionMode, len(options) > 0)
+	if !ok {
+		return ExecuteMeta{}
+	}
+
 	return ExecuteMeta{
 		AwaitingHuman: &AwaitingHumanSignal{
-			QuestionID: questionID,
-			Prompt:     prompt,
+			QuestionID:    questionID,
+			Prompt:        prompt,
+			SelectionMode: selectionMode,
+			Options:       options,
 		},
 	}
 }
@@ -81,47 +108,20 @@ func (AskHumanTool) Execute(ctx context.Context, argsJSON json.RawMessage, trace
 		return "", fmt.Errorf("decode args: %w", err)
 	}
 
-	prompt := strings.TrimSpace(args.Prompt)
-	if prompt == "" {
-		return "", fmt.Errorf("prompt is required")
+	question, err := normalizeAskHumanQuestion(args)
+	if err != nil {
+		return "", err
 	}
-	return askHumanExecute(ctx, prompt, traceID)
+	return askHumanExecute(ctx, question, traceID)
 }
 
 // askHumanExecute 依赖会话上下文与 tool_call_id，注册 pending question 并返回等待态 payload。
-func askHumanExecute(ctx context.Context, prompt string, traceID string) (string, error) {
-	sess := SessionFromContext(ctx)
-	if sess == nil {
-		return "", fmt.Errorf("ask_human requires an active session")
-	}
-
-	toolCallID := ToolCallIDFromContext(ctx)
-	if toolCallID == "" {
-		return "", fmt.Errorf("ask_human requires tool call id in context")
-	}
-
+func askHumanExecute(ctx context.Context, question askHumanArgs, traceID string) (string, error) {
 	questionID, err := newQuestionID()
 	if err != nil {
 		return "", fmt.Errorf("generate question id: %w", err)
 	}
-
-	sess.AddPendingQuestion(questionID, session.PendingHumanQuestion{
-		Prompt:     prompt,
-		ToolCallID: toolCallID,
-		TraceID:    strings.TrimSpace(traceID),
-		CreatedAt:  time.Now().UTC(),
-	})
-
-	payload := askHumanAwaitingPayload{
-		Status:     "awaiting_human",
-		QuestionID: questionID,
-		Prompt:     prompt,
-	}
-	encoded, err := json.Marshal(payload)
-	if err != nil {
-		return "", fmt.Errorf("encode awaiting payload: %w", err)
-	}
-	return string(encoded), nil
+	return registerAwaitingHumanQuestion(ctx, questionID, question, traceID, AskHumanToolName)
 }
 
 // newQuestionID 生成全局低冲突问题 ID，用于后续 HUMAN_RESPONSE 关联。
@@ -131,4 +131,100 @@ func newQuestionID() (string, error) {
 		return "", err
 	}
 	return "q-" + hex.EncodeToString(raw[:]), nil
+}
+
+func normalizeAskHumanQuestion(args askHumanArgs) (askHumanArgs, error) {
+	prompt := strings.TrimSpace(args.Prompt)
+	if prompt == "" {
+		return askHumanArgs{}, fmt.Errorf("prompt is required")
+	}
+
+	options, ok := normalizeAskHumanOptions(args.Options)
+	if !ok {
+		return askHumanArgs{}, fmt.Errorf("options must have non-empty labels and only the final option may allow custom input")
+	}
+	selectionMode, ok := normalizeAskHumanSelectionMode(args.SelectionMode, len(options) > 0)
+	if !ok {
+		return askHumanArgs{}, fmt.Errorf("selection_mode must be empty, %q, or %q", session.HumanQuestionSelectionSingle, session.HumanQuestionSelectionMultiple)
+	}
+	if len(options) > 0 && len(options) < 2 {
+		return askHumanArgs{}, fmt.Errorf("options must include at least one predefined choice and a final custom option")
+	}
+	if len(options) > 0 && !options[len(options)-1].AllowCustom {
+		return askHumanArgs{}, fmt.Errorf("the final option must allow custom input")
+	}
+
+	return askHumanArgs{
+		Prompt:        prompt,
+		SelectionMode: selectionMode,
+		Options:       options,
+	}, nil
+}
+
+func normalizeAskHumanSelectionMode(raw string, hasOptions bool) (string, bool) {
+	selectionMode := strings.ToLower(strings.TrimSpace(raw))
+	if !hasOptions {
+		return "", selectionMode == ""
+	}
+	if selectionMode == "" {
+		return session.HumanQuestionSelectionSingle, true
+	}
+	switch selectionMode {
+	case session.HumanQuestionSelectionSingle, session.HumanQuestionSelectionMultiple:
+		return selectionMode, true
+	default:
+		return "", false
+	}
+}
+
+func normalizeAskHumanOptions(options []AskHumanOption) ([]AskHumanOption, bool) {
+	if len(options) == 0 {
+		return nil, true
+	}
+	normalized := make([]AskHumanOption, 0, len(options))
+	for index, option := range options {
+		label := strings.TrimSpace(option.Label)
+		if label == "" {
+			return nil, false
+		}
+		if option.AllowCustom && index != len(options)-1 {
+			return nil, false
+		}
+		normalized = append(normalized, AskHumanOption{
+			Label:       label,
+			AllowCustom: option.AllowCustom,
+		})
+	}
+	if len(normalized) == 0 {
+		return nil, true
+	}
+	return normalized, true
+}
+
+func cloneAskHumanOptions(options []AskHumanOption) []AskHumanOption {
+	if len(options) == 0 {
+		return nil
+	}
+	cloned := make([]AskHumanOption, 0, len(options))
+	for _, option := range options {
+		cloned = append(cloned, AskHumanOption{
+			Label:       option.Label,
+			AllowCustom: option.AllowCustom,
+		})
+	}
+	return cloned
+}
+
+func sessionOptionsFromAskHuman(options []AskHumanOption) []session.HumanQuestionOption {
+	if len(options) == 0 {
+		return nil
+	}
+	mapped := make([]session.HumanQuestionOption, 0, len(options))
+	for _, option := range options {
+		mapped = append(mapped, session.HumanQuestionOption{
+			Label:       option.Label,
+			AllowCustom: option.AllowCustom,
+		})
+	}
+	return mapped
 }

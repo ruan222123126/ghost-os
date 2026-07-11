@@ -1,0 +1,189 @@
+{
+  "$defs": {
+    "assistantSessionEndSignal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "signal",
+        "message"
+      ],
+      "properties": {
+        "signal": {
+          "type": "string",
+          "const": "END_SESSION"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "x-codegen": {
+        "order": 10,
+        "go": { "name": "assistantSessionEndSignalPayload" },
+        "ts": { "name": "AssistantSessionEndSignal" },
+        "rust": { "name": "AssistantSessionEndSignal" },
+        "kotlin": { "name": "AssistantSessionEndSignal" }
+      }
+    },
+    "agentRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "plan"
+          ],
+          "description": "Optional execution mode. `plan` means plan-only orchestration: infer user intent and output a task plan for the main executor AI without running tools or tasks."
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional text prompt. Required when images is empty."
+        },
+        "images": {
+          "type": "array",
+          "description": "Optional image inputs. Each image may reference a local path, remote URL, or data URL.",
+          "items": {
+            "$ref": "./session_content.json#/$defs/sessionImageContent"
+          }
+        },
+        "session_id": {
+          "type": "string",
+          "description": "Optional. Omit/empty to start a new session. If provided, must refer to an existing session; otherwise the server returns 404 (omit session_id to start a new session)."
+        },
+        "project_root": {
+          "type": "string",
+          "description": "Optional per-request project root override. Applies only to this request and is not persisted."
+        },
+        "runtime_overrides": {
+          "$ref": "./tasks.json#/$defs/taskRuntimeOverrides",
+          "description": "Optional per-request runtime overrides. Applies only to this request and is not persisted."
+        },
+        "trace_id": {
+          "type": "string",
+          "description": "Optional. Client-provided trace identifier echoed back via X-Trace-ID and event envelopes."
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "message"
+          ]
+        },
+        {
+          "required": [
+            "images"
+          ],
+          "properties": {
+            "images": {
+              "type": "array",
+              "minItems": 1
+            }
+          }
+        }
+      ],
+      "x-codegen": {
+        "order": 20,
+        "go": { "name": "agentRequest" },
+        "ts": { "name": "AgentRequest" },
+        "rust": { "name": "AgentRequest" },
+        "kotlin": { "name": "AgentRequest" }
+      }
+    },
+    "agentResponsePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "message",
+        "session_id",
+        "session_ended"
+      ],
+      "properties": {
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "session_ended": {
+          "type": "boolean"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "plan"
+          ]
+        },
+        "session_end": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/assistantSessionEndSignal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "session_ended"
+            ],
+            "properties": {
+              "session_ended": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "session_end"
+            ],
+            "properties": {
+              "session_end": {
+                "$ref": "#/$defs/assistantSessionEndSignal"
+              }
+            }
+          }
+        }
+      ],
+      "x-codegen": {
+        "order": 40,
+        "go": { "name": "agentResponse" },
+        "ts": { "name": "AgentSendSuccessResponse" },
+        "rust": { "name": "AgentSendSuccessResponse" },
+        "kotlin": { "name": "AgentSendSuccessResponse" }
+      }
+    },
+    "agentSendResultPayload": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/agentResponsePayload"
+        },
+        {
+          "$ref": "./agent_human.json#/$defs/agentAwaitingHumanPayload"
+        }
+      ],
+      "x-codegen": {
+        "order": 90,
+        "ts": { "name": "AgentSendResponse" },
+        "rust": {
+          "name": "AgentPayload",
+          "variants": {
+            "agentAwaitingHumanPayload": "AwaitingHuman",
+            "agentResponsePayload": "Success"
+          }
+        },
+        "kotlin": {
+          "name": "AgentSendResponse",
+          "kind": "sealed_interface"
+        }
+      }
+    }
+  }
+}

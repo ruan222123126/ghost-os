@@ -1,0 +1,231 @@
+package skills
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+)
+
+func (h *ActionHandler) discoverManagedSkills() ([]managedSkill, Config, skillRoots, error) {
+	cfg, err := h.loadConfig()
+	if err != nil {
+		return nil, Config{}, skillRoots{}, err
+	}
+	roots, err := h.resolveSkillRootsFromConfig(cfg)
+	if err != nil {
+		return nil, Config{}, skillRoots{}, err
+	}
+	items, err := discoverManagedSkillsFromRoots(roots)
+	if err != nil {
+		return nil, Config{}, skillRoots{}, err
+	}
+	return items, cfg, roots, nil
+}
+
+func (h *ActionHandler) resolveSkillRoots() (skillRoots, error) {
+	cfg, err := h.loadConfig()
+	if err != nil {
+		return skillRoots{}, err
+	}
+	return h.resolveSkillRootsFromConfig(cfg)
+}
+
+func (h *ActionHandler) loadConfig() (Config, error) {
+	if h == nil || h.store == nil {
+		return Config{}, errors.New("config store is not configured")
+	}
+	cfg, err := h.store.Config()
+	if err != nil {
+		return Config{}, fmt.Errorf("load config: %w", err)
+	}
+	return cfg, nil
+}
+
+func (h *ActionHandler) resolveSkillRootsFromConfig(cfg Config) (skillRoots, error) {
+	repoRoot, err := resolveManagedRepoRoot(cfg.ProjectRoot)
+	if err != nil {
+		return skillRoots{}, err
+	}
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return skillRoots{}, fmt.Errorf("resolve user home: %w", err)
+	}
+	userRoot := filepath.Join(strings.TrimSpace(homeDir), ".ghost-os", "skills")
+	if err := ensureManagedSkillRoot(userRoot); err != nil {
+		return skillRoots{}, err
+	}
+	return skillRoots{
+		Repo: filepath.Join(repoRoot, ".agents", "skills"),
+		User: userRoot,
+	}, nil
+}
+
+func (h *ActionHandler) findManagedSkillByID(rawID string) (managedSkill, error) {
+	item, _, err := h.findManagedSkillForDelete(rawID)
+	return item, err
+}
+
+func (h *ActionHandler) findManagedSkillForDelete(rawID string) (managedSkill, skillRoots, error) {
+	decoded, err := DecodeSkillID(rawID)
+	if err != nil {
+		return managedSkill{}, skillRoots{}, err
+	}
+	roots, err := h.resolveSkillRoots()
+	if err != nil {
+		return managedSkill{}, skillRoots{}, err
+	}
+	targetRoot, err := managedSkillRootBySource(roots, decoded.Source)
+	if err != nil {
+		return managedSkill{}, skillRoots{}, err
+	}
+	items, err := discoverManagedSkillsBySource(decoded.Source, targetRoot)
+	if err != nil {
+		return managedSkill{}, skillRoots{}, err
+	}
+	item, err := findManagedSkill(items, decoded, strings.TrimSpace(rawID))
+	if err != nil {
+		return managedSkill{}, skillRoots{}, err
+	}
+	return item, roots, nil
+}
+
+func ensureManagedSkillRoot(path string) error {
+	root := strings.TrimSpace(path)
+	if root == "" {
+		return fmt.Errorf("%w: %s", ErrSkillSourceNotFound, skillSourceUser)
+	}
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return fmt.Errorf("ensure user skill root: %w", err)
+	}
+	return nil
+}
+
+func resolveManagedRepoRoot(projectRoot string) (string, error) {
+	root := strings.TrimSpace(projectRoot)
+	if root == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("resolve current directory: %w", err)
+		}
+		root = cwd
+	}
+	absolute, err := filepath.Abs(root)
+	if err != nil {
+		return "", fmt.Errorf("resolve project root: %w", err)
+	}
+	return filepath.Clean(absolute), nil
+}
+
+func discoverManagedSkillsFromRoots(roots skillRoots) ([]managedSkill, error) {
+	repoSkills, err := discoverManagedSkillsBySource(skillSourceRepo, roots.Repo)
+	if err != nil {
+		return nil, err
+	}
+	userSkills, err := discoverManagedSkillsBySource(skillSourceUser, roots.User)
+	if err != nil {
+		return nil, err
+	}
+	items := append(repoSkills, userSkills...)
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Source == items[j].Source {
+			return items[i].Name < items[j].Name
+		}
+		return items[i].Source < items[j].Source
+	})
+	return items, nil
+}
+
+func managedSkillRootBySource(roots skillRoots, source string) (string, error) {
+	switch source {
+	case skillSourceRepo:
+		if strings.TrimSpace(roots.Repo) == "" {
+			return "", fmt.Errorf("%w: %s", ErrSkillSourceNotFound, source)
+		}
+		return roots.Repo, nil
+	case skillSourceUser:
+		if strings.TrimSpace(roots.User) == "" {
+			return "", fmt.Errorf("%w: %s", ErrSkillSourceNotFound, source)
+		}
+		return roots.User, nil
+	default:
+		return "", ErrInvalidSkillID
+	}
+}
+
+func discoverManagedSkillsBySource(source string, root string) ([]managedSkill, error) {
+	if strings.TrimSpace(root) == "" {
+		return nil, fmt.Errorf("%w: %s", ErrSkillSourceNotFound, source)
+	}
+	result := NewCatalogWithRoots([]string{root}).ForceReload()
+	if err := firstSkillDiscoveryError(source, result.Errors); err != nil {
+		return nil, err
+	}
+	items := make([]managedSkill, 0, len(result.Skills))
+	for _, item := range result.Skills {
+		managed, err := managedSkillFromDiscovery(source, root, item)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, managed)
+	}
+	return items, nil
+}
+
+func firstSkillDiscoveryError(source string, errorsList []DiscoveryError) error {
+	if len(errorsList) == 0 {
+		return nil
+	}
+	first := errorsList[0]
+	return fmt.Errorf("discover skills (%s) failed at %s: %s", source, first.Path, first.Error)
+}
+
+func managedSkillFromDiscovery(source string, root string, item Skill) (managedSkill, error) {
+	rootPath, err := normalizeAbsolutePath(root)
+	if err != nil {
+		return managedSkill{}, err
+	}
+	skillPath, err := normalizeAbsolutePath(filepath.Dir(item.Path))
+	if err != nil {
+		return managedSkill{}, err
+	}
+	relative, err := filepath.Rel(rootPath, skillPath)
+	if err != nil {
+		return managedSkill{}, err
+	}
+	if !isValidRelativeSkillPath(relative) {
+		return managedSkill{}, ErrSkillPathForbidden
+	}
+	decoded := decodedSkillID{Source: source, RelativePath: relative}
+	return managedSkill{
+		ID:           EncodeSkillID(decoded),
+		Name:         strings.TrimSpace(item.Name),
+		Description:  strings.TrimSpace(item.Description),
+		Path:         skillPath,
+		Source:       source,
+		Root:         rootPath,
+		RelativePath: relative,
+	}, nil
+}
+
+func refreshManagedSkillCatalog(roots skillRoots) error {
+	rootList := managedSkillRootsList(roots)
+	if len(rootList) == 0 {
+		return nil
+	}
+	result := NewCatalogWithRoots(rootList).ForceReload()
+	return firstSkillDiscoveryError("combined", result.Errors)
+}
+
+func managedSkillRootsList(roots skillRoots) []string {
+	items := make([]string, 0, 2)
+	if root := strings.TrimSpace(roots.Repo); root != "" {
+		items = append(items, root)
+	}
+	if root := strings.TrimSpace(roots.User); root != "" {
+		items = append(items, root)
+	}
+	return items
+}

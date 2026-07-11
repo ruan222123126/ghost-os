@@ -3,54 +3,39 @@ package context
 import (
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strconv"
 	"strings"
+	"sync"
 )
 
 const (
 	defaultPromptVersion = "1.0"
 	defaultPromptPath    = "prompts.yaml"
+	defaultDynamicState  = "- No dynamic tools loaded."
+	defaultSkillContext  = "- No dynamic skills loaded."
 )
 
-const defaultSystemPromptTemplate = `You are Ghost-OS bridge agent, an AI-driven digital twin execution layer.
+var (
+	defaultPromptConfig     PromptConfig
+	defaultPromptConfigErr  error
+	defaultPromptConfigOnce sync.Once
 
-## Core Job
-You can coordinate local execution, web retrieval, browser interaction, and human confirmation.
+	errPromptManagerNil      = errors.New("prompt manager is nil")
+	errPromptTemplateNil     = errors.New("prompt template is empty")
+	errSystemDefaultRequired = errors.New("system.default is required")
+)
 
-## Tool Strategy
-- Prefer atomic tools first: list_files, read_file, search_files, apply_diff, bash_exec.
-- Use read_and_summarize for broad multi-file triage; verify exact code with read_file before editing.
-- Use script_exec only as a fallback sandbox for loops, branching, or complex multi-step work. Never call it with {}.
-- Use feed_subscribe, feed_list, feed_update, and feed_unsubscribe to manage shared RSS sources; use rss_fetch to read a specific RSS/Atom feed; use web_search for broad internet lookup, browser_action for browser-native work, and ask_human only when blocked on required user input.
-- RSS inbox polling and AI filtering run as a backend system pipeline. Do not treat RSS inbox polling as a normal chat-tool chain unless an explicit admin/runtime endpoint is being used.
-- When ask_human needs predefined choices, provide selection_mode and options, and ensure the final option allows custom input.
-
-## Limits
-- read_file: max 200 lines per call.
-- search_files: max 100 matches per call.
-- apply_diff: one file per call.
-- Execution and sandbox budgets are enforced in the native layer.
-- File access may be restricted to allowlisted paths and may block sensitive files.
-
-## Operating Context
-- OS: {{os_type}}
-- Available tools: {{tools_count}}
-- Max turns: {{max_turns}}
-
-## Response Rules
-- If no tool is needed, answer directly.
-- For normal turns, reply with plain natural text.
-- Keep actions concise, deterministic, and traceable.
-- Only when you intentionally end the entire session, output JSON only: {"signal":"END_SESSION","message":"<final reply>"}.`
+type PromptSystemConfig struct {
+	Default            string `yaml:"default"`
+	Rule               string `yaml:"rule"`
+	CoreJob            string `yaml:"core_job"`
+	RuntimeConstraints string `yaml:"runtime_constraints"`
+	ResponseRules      string `yaml:"response_rules"`
+}
 
 // PromptConfig 描述 prompts.yaml 的最小结构。
 type PromptConfig struct {
-	Version string `json:"version"`
-	System  struct {
-		Default string `json:"default"`
-	} `json:"system"`
+	Version string             `yaml:"version"`
+	System  PromptSystemConfig `yaml:"system"`
 }
 
 // PromptManager 负责加载与渲染系统提示词模板。
@@ -59,246 +44,80 @@ type PromptManager struct {
 	template string
 }
 
-// NewPromptManager 从配置文件加载提示词模板。
-func NewPromptManager(configPath string) (*PromptManager, error) {
-	cfgPath := strings.TrimSpace(configPath)
-	if cfgPath == "" {
-		cfgPath = defaultPromptPath
-	}
-
-	raw, resolvedPath, err := readPromptConfigFile(cfgPath)
+// NewPromptManagerWithOptions 允许在加载 prompts.yaml 的基础上覆盖提示词片段。
+func NewPromptManagerWithOptions(options PromptLoadOptions) (*PromptManager, error) {
+	cfg, err := loadPromptConfigFromOptions(options)
 	if err != nil {
-		return nil, fmt.Errorf("read prompts config: %w", err)
+		return nil, err
 	}
-
-	cfg, err := parsePromptYAML(string(raw))
-	if err != nil {
-		return nil, fmt.Errorf("parse prompts config %q: %w", resolvedPath, err)
-	}
-
-	return &PromptManager{
-		config:   cfg,
-		template: cfg.System.Default,
-	}, nil
+	return newPromptManager(cfg), nil
 }
 
-// NewPromptManagerWithDefault 使用内置模板，避免配置缺失时阻塞启动。
+// NewPromptManagerWithDefault 使用仓库内置 prompts.yaml。
 func NewPromptManagerWithDefault() *PromptManager {
-	cfg := PromptConfig{
-		Version: defaultPromptVersion,
-	}
-	cfg.System.Default = defaultSystemPromptTemplate
+	return newPromptManager(mustDefaultPromptConfig())
+}
 
-	return &PromptManager{
-		config:   cfg,
-		template: cfg.System.Default,
-	}
+func newPromptManager(cfg PromptConfig) *PromptManager {
+	return &PromptManager{config: cfg, template: cfg.System.Default}
 }
 
 // Render 渲染系统提示词并替换模板变量。
 func (pm *PromptManager) Render(vars map[string]string) string {
-	if pm == nil || strings.TrimSpace(pm.template) == "" {
-		return strings.TrimSpace(RenderTemplate(defaultSystemPromptTemplate, vars))
+	if pm == nil {
+		panic(errPromptManagerNil)
+	}
+	if strings.TrimSpace(pm.template) == "" {
+		panic(errPromptTemplateNil)
 	}
 
-	return strings.TrimSpace(RenderTemplate(pm.template, vars))
+	merged := map[string]string{
+		"rule":                  strings.TrimSpace(pm.config.System.Rule),
+		"core_job":              strings.TrimSpace(pm.config.System.CoreJob),
+		"memory":                "",
+		"skills_catalog":        "- No visible skills available.",
+		"tool_guidance":         "",
+		"dynamic_tool_state":    defaultDynamicState,
+		"dynamic_skill_context": defaultSkillContext,
+		"runtime_constraints":   strings.TrimSpace(pm.config.System.RuntimeConstraints),
+		"response_rules":        strings.TrimSpace(pm.config.System.ResponseRules),
+	}
+	for key, value := range vars {
+		merged[key] = value
+	}
+	if strings.TrimSpace(merged["context"]) == "" {
+		merged["context"] = defaultContextSection(merged)
+	}
+
+	return strings.TrimSpace(RenderTemplate(pm.template, merged))
 }
 
-func readPromptConfigFile(path string) ([]byte, string, error) {
-	candidates := promptPathCandidates(path)
-	var lastErr error
-
-	for _, candidate := range candidates {
-		raw, err := os.ReadFile(candidate)
-		if err == nil {
-			return raw, candidate, nil
-		}
-		lastErr = err
+func (pm *PromptManager) ReferencesVariable(name string) bool {
+	if pm == nil {
+		return false
 	}
-
-	if lastErr == nil {
-		lastErr = errors.New("prompt config path is empty")
-	}
-	return nil, "", fmt.Errorf("tried %v: %w", candidates, lastErr)
+	return TemplateReferencesVariable(pm.template, name)
 }
 
-func promptPathCandidates(path string) []string {
-	normalized := strings.TrimSpace(path)
-	if normalized == "" {
-		normalized = defaultPromptPath
-	}
-	if filepath.IsAbs(normalized) {
-		return []string{normalized}
-	}
-
-	primary := filepath.Clean(normalized)
-	fallback := filepath.Join("core", "bridge", primary)
-	if fallback == primary {
-		return []string{primary}
-	}
-	return []string{primary, fallback}
-}
-
-func parsePromptYAML(raw string) (PromptConfig, error) {
-	normalized := strings.ReplaceAll(raw, "\r\n", "\n")
-	lines := strings.Split(normalized, "\n")
-
-	cfg := PromptConfig{}
-	inSystem := false
-	systemIndent := 0
-
-	for i := 0; i < len(lines); {
-		line := lines[i]
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			i++
-			continue
-		}
-
-		indent := leadingIndent(line)
-		if indent == 0 {
-			inSystem = false
-			switch {
-			case strings.HasPrefix(trimmed, "version:"):
-				cfg.Version = parseYAMLScalar(strings.TrimSpace(strings.TrimPrefix(trimmed, "version:")))
-			case trimmed == "system:":
-				inSystem = true
-				systemIndent = indent
-			}
-			i++
-			continue
-		}
-
-		if !inSystem || indent <= systemIndent {
-			i++
-			continue
-		}
-
-		local := strings.TrimSpace(line)
-		if !strings.HasPrefix(local, "default:") {
-			i++
-			continue
-		}
-
-		value := strings.TrimSpace(strings.TrimPrefix(local, "default:"))
-		if value == "|" || value == "|+" || value == "|-" {
-			blockValue, next := readYAMLBlock(lines, i+1, indent)
-			cfg.System.Default = blockValue
-			i = next
-			continue
-		}
-
-		cfg.System.Default = parseYAMLScalar(value)
-		i++
-	}
-
-	if strings.TrimSpace(cfg.Version) == "" {
-		cfg.Version = defaultPromptVersion
-	}
-	if strings.TrimSpace(cfg.System.Default) == "" {
-		return PromptConfig{}, errors.New("system.default is required")
-	}
-
-	return cfg, nil
-}
-
-func readYAMLBlock(lines []string, start int, parentIndent int) (string, int) {
-	blockLines := make([]string, 0, len(lines)-start)
-	i := start
-
-	for ; i < len(lines); i++ {
-		line := lines[i]
-		trimmed := strings.TrimSpace(line)
-		indent := leadingIndent(line)
-
-		if trimmed != "" && indent <= parentIndent {
-			break
-		}
-		blockLines = append(blockLines, line)
-	}
-
-	return normalizeBlockLines(blockLines), i
-}
-
-func normalizeBlockLines(lines []string) string {
-	start := 0
-	for start < len(lines) && strings.TrimSpace(lines[start]) == "" {
-		start++
-	}
-
-	end := len(lines)
-	for end > start && strings.TrimSpace(lines[end-1]) == "" {
-		end--
-	}
-
-	lines = lines[start:end]
-	if len(lines) == 0 {
+func defaultContextSection(vars map[string]string) string {
+	osType := strings.TrimSpace(vars["os_type"])
+	projectRoot := strings.TrimSpace(vars["project_root"])
+	maxTurns := strings.TrimSpace(vars["max_turns"])
+	if osType == "" && projectRoot == "" && maxTurns == "" {
 		return ""
 	}
-
-	minIndent := -1
-	for _, line := range lines {
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-		indent := leadingIndent(line)
-		if minIndent == -1 || indent < minIndent {
-			minIndent = indent
-		}
-	}
-
-	if minIndent < 0 {
-		return ""
-	}
-
-	out := make([]string, 0, len(lines))
-	for _, line := range lines {
-		if strings.TrimSpace(line) == "" {
-			out = append(out, "")
-			continue
-		}
-		if len(line) < minIndent {
-			out = append(out, strings.TrimSpace(line))
-			continue
-		}
-		out = append(out, line[minIndent:])
-	}
-
-	return strings.Join(out, "\n")
+	return fmt.Sprintf("OS: %s | Root: %s | Max turns: %s", osType, projectRoot, maxTurns)
 }
 
-func parseYAMLScalar(raw string) string {
-	value := strings.TrimSpace(raw)
-	if value == "" {
-		return ""
+func mustDefaultPromptConfig() PromptConfig {
+	defaultPromptConfigOnce.Do(func() {
+		defaultPromptConfig, defaultPromptConfigErr = parsePromptYAML(
+			[]byte(defaultPromptConfigYAML),
+			promptSectionOptions{},
+		)
+	})
+	if defaultPromptConfigErr != nil {
+		panic(fmt.Sprintf("parse bundled prompts config: %v", defaultPromptConfigErr))
 	}
-
-	if strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"") {
-		unquoted, err := strconv.Unquote(value)
-		if err == nil {
-			return unquoted
-		}
-	}
-
-	if strings.HasPrefix(value, "'") && strings.HasSuffix(value, "'") && len(value) >= 2 {
-		return strings.ReplaceAll(value[1:len(value)-1], "''", "'")
-	}
-
-	return trimInlineComment(value)
-}
-
-func trimInlineComment(raw string) string {
-	if idx := strings.Index(raw, " #"); idx >= 0 {
-		return strings.TrimSpace(raw[:idx])
-	}
-	return strings.TrimSpace(raw)
-}
-
-func leadingIndent(line string) int {
-	for i, ch := range line {
-		if ch != ' ' && ch != '\t' {
-			return i
-		}
-	}
-	return len(line)
+	return defaultPromptConfig
 }

@@ -1,0 +1,102 @@
+{
+  "$defs": {
+    "action": {
+      "type": "string",
+      "enum": [
+        "AGENT_SEND",
+        "AGENT_STOP",
+        "EXTERNAL_AGENT_START",
+        "EXTERNAL_AGENT_SEND",
+        "EXTERNAL_AGENT_STOP",
+        "EXTERNAL_AGENT_APPROVE",
+        "HUMAN_RESPONSE",
+        "SESSIONS_LIST",
+        "SESSIONS_SEARCH",
+        "SESSION_GET",
+        "SESSION_APPEND",
+        "CONFIG_GET",
+        "CONFIG_UPDATE",
+        "CONFIG_PROVIDERS_GET",
+        "CONFIG_PROVIDER_CREATE",
+        "CONFIG_PROVIDER_UPDATE",
+        "CONFIG_PROVIDER_DELETE",
+        "SKILL_LIST",
+        "SKILL_UPDATE",
+        "SKILL_DELETE",
+        "TASK_CREATE",
+        "TASK_LIST",
+        "TASK_GET",
+        "TASK_UPDATE",
+        "TASK_RUN_NOW",
+        "TASK_STOP",
+        "TASK_LOGS",
+        "TASK_DELETE"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "success",
+        "error"
+      ]
+    },
+    "requestEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "params",
+        "trace_id"
+      ],
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/action"
+        },
+        "params": {
+          "type": "object"
+        },
+        "trace_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "responseEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "payload",
+        "error"
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "payload": {
+          "type": "object"
+        },
+        "error": {
+          "type": "string"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "providerType": {
+      "type": "string",
+      "enum": [
+        "openai",
+        "anthropic",
+        "custom",
+        "codex"
+      ]
+    }
+  }
+}

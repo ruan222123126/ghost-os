@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
 	"ghost-os/bridge/llm"
 )
@@ -18,6 +19,101 @@ func TestStoreSaveAndLoadSession(t *testing.T) {
 
 	s := NewSession("system")
 	s.ID = "session-roundtrip"
+	s.TurnIndex = 3
+	s.ConversationState = llm.ConversationState{
+		Provider:           llm.ProviderCodex,
+		BaseURL:            "https://api.openai.com/v1",
+		Model:              "codex-mini-latest",
+		PreviousResponseID: "resp_123",
+	}
+	s.DynamicToolLoads = map[string]DynamicToolLoad{
+		"web_search": {
+			ToolName:       "web_search",
+			LoadedBy:       "tool_search",
+			LoadedAtTurn:   1,
+			LastCalledTurn: 2,
+		},
+	}
+	s.DynamicSkillLoads = map[string]DynamicSkillLoad{
+		"release_flow": {
+			SkillName:      "release_flow",
+			LoadedBy:       "sfind",
+			LoadedAtTurn:   1,
+			LastCalledTurn: 2,
+		},
+	}
+	relayTimeoutMS := 0
+	s.StartRelayRuntime("fix config", "ai_decides", 0, &relayTimeoutMS)
+	s.AppendRelayRecord(RelayRecord{
+		Round:          1,
+		Did:            "inspected config",
+		Remaining:      "apply patch",
+		FailedAttempts: []string{"bad command"},
+		NextStep:       "patch config",
+		TraceID:        "trace-relay-1",
+	})
+	s.FinishRelayRuntime("completed", "relay_complete", "done", "patched config")
+	externalRuntimeAt := time.Date(2026, 6, 27, 12, 0, 0, 0, time.UTC)
+	s.SetExternalRuntime(&ExternalRuntime{
+		Provider:       "codex",
+		Status:         "awaiting_approval",
+		ThreadID:       "thread-1",
+		TurnID:         "turn-1",
+		PermissionMode: "safe-yolo",
+		Model:          "gpt-5-codex",
+		Effort:         "high",
+		CWD:            "/repo",
+		ProjectRoot:    "/repo",
+		PendingApprovals: []ExternalPendingApproval{{
+			ID:        "approval-1",
+			Provider:  "codex",
+			Kind:      "exec",
+			Tool:      "codex_exec",
+			CallID:    "call-1",
+			Prompt:    "Approve command execution",
+			Payload:   map[string]any{"command": "go test ./..."},
+			CreatedAt: externalRuntimeAt,
+		}},
+		StartedAt: externalRuntimeAt,
+		UpdatedAt: externalRuntimeAt,
+	})
+	s.AssistantDraft = &AssistantDraft{
+		Text:      "partial answer",
+		TraceID:   "trace-draft",
+		Turn:      4,
+		UpdatedAt: s.UpdatedAt,
+	}
+	s.TurnDraft = &TurnDraft{
+		TraceID: "trace-draft",
+		Turn:    4,
+		Status:  TurnDraftStatusAwaitingHuman,
+		PendingQuestions: []TurnDraftPendingQuestion{
+			{
+				QuestionID:    "q-1",
+				Prompt:        "Ship it?",
+				SelectionMode: HumanQuestionSelectionSingle,
+				Options: []HumanQuestionOption{
+					{Label: "Yes"},
+					{Label: "No"},
+				},
+			},
+		},
+		AssistantSegments: []TurnDraftSegment{
+			{ID: "stream-segment:assistant:1", Content: "partial answer"},
+		},
+		ThinkingSegments: []TurnDraftSegment{
+			{ID: "stream-segment:thinking:1", Content: "analyzing"},
+		},
+		Tools: []TurnDraftTool{
+			{ID: "stream-tool:trace-draft:call-1", Content: `{"path":"README.md"}`, ToolName: "read_file"},
+		},
+		ItemOrder: []string{
+			"thinking:stream-segment:thinking:1",
+			"tool:stream-tool:trace-draft:call-1",
+			"assistant:stream-segment:assistant:1",
+			"question:q-1",
+		},
+	}
 	s.AddMessage(llm.Message{Role: llm.RoleUser, Text: "hello"})
 	s.AddMessage(llm.Message{Role: llm.RoleAssistant, Text: "hi"})
 
@@ -34,6 +130,30 @@ func TestStoreSaveAndLoadSession(t *testing.T) {
 	}
 	if !reflect.DeepEqual(loaded.Messages, s.Messages) {
 		t.Fatalf("messages mismatch: got=%+v want=%+v", loaded.Messages, s.Messages)
+	}
+	if !reflect.DeepEqual(loaded.ConversationState, s.ConversationState) {
+		t.Fatalf("conversation state mismatch: got=%+v want=%+v", loaded.ConversationState, s.ConversationState)
+	}
+	if loaded.TurnIndex != s.TurnIndex {
+		t.Fatalf("turn index mismatch: got=%d want=%d", loaded.TurnIndex, s.TurnIndex)
+	}
+	if !reflect.DeepEqual(loaded.DynamicToolLoads, s.DynamicToolLoads) {
+		t.Fatalf("dynamic tool loads mismatch: got=%+v want=%+v", loaded.DynamicToolLoads, s.DynamicToolLoads)
+	}
+	if !reflect.DeepEqual(loaded.DynamicSkillLoads, s.DynamicSkillLoads) {
+		t.Fatalf("dynamic skill loads mismatch: got=%+v want=%+v", loaded.DynamicSkillLoads, s.DynamicSkillLoads)
+	}
+	if !reflect.DeepEqual(loaded.RelayRuntime, s.RelayRuntime) {
+		t.Fatalf("relay runtime mismatch: got=%+v want=%+v", loaded.RelayRuntime, s.RelayRuntime)
+	}
+	if !reflect.DeepEqual(loaded.ExternalRuntime, s.ExternalRuntime) {
+		t.Fatalf("external runtime mismatch: got=%+v want=%+v", loaded.ExternalRuntime, s.ExternalRuntime)
+	}
+	if !reflect.DeepEqual(loaded.AssistantDraft, s.AssistantDraft) {
+		t.Fatalf("assistant draft mismatch: got=%+v want=%+v", loaded.AssistantDraft, s.AssistantDraft)
+	}
+	if !reflect.DeepEqual(loaded.TurnDraft, s.TurnDraft) {
+		t.Fatalf("turn draft mismatch: got=%+v want=%+v", loaded.TurnDraft, s.TurnDraft)
 	}
 	if loaded.TokenCount <= 0 {
 		t.Fatalf("unexpected token count: got %d want > 0", loaded.TokenCount)
@@ -65,8 +185,8 @@ func TestStoreLoadCorruptedSession(t *testing.T) {
 	}
 
 	_, err = store.Load("broken-session")
-	if !errors.Is(err, ErrSessionCorrupted) {
-		t.Fatalf("expected ErrSessionCorrupted, got: %v", err)
+	if !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("expected ErrSessionNotFound for non-database session file, got: %v", err)
 	}
 }
 
@@ -99,7 +219,8 @@ func TestStoreListSessions(t *testing.T) {
 }
 
 func TestStoreListMetadata(t *testing.T) {
-	store, err := NewStore(t.TempDir())
+	dir := t.TempDir()
+	store, err := NewStore(dir)
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
@@ -117,6 +238,10 @@ func TestStoreListMetadata(t *testing.T) {
 	second.AddMessage(llm.Message{Role: llm.RoleAssistant, Text: "done"})
 	if err := store.Save(second); err != nil {
 		t.Fatalf("save second: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "session-c.json"), []byte("{invalid json"), 0o600); err != nil {
+		t.Fatalf("write corrupted session: %v", err)
 	}
 
 	got, err := store.ListMetadata()
@@ -153,5 +278,57 @@ func TestStoreRejectsInvalidSessionID(t *testing.T) {
 	_, err = store.Load("../etc/passwd")
 	if !errors.Is(err, ErrInvalidSessionID) {
 		t.Fatalf("expected ErrInvalidSessionID, got: %v", err)
+	}
+}
+
+func TestStoreDeleteRemovesSessionHumanLog(t *testing.T) {
+	baseDir := t.TempDir()
+	store, err := NewStore(baseDir)
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+
+	sess := NewSession("system")
+	sess.ID = "session-delete-with-human-log"
+	sess.AddMessage(llm.Message{Role: llm.RoleUser, Text: "cleanup"})
+	if err := store.Save(sess); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	logPath := filepath.Join(baseDir, "sessions", sess.ID+".md")
+	if _, statErr := os.Stat(logPath); statErr != nil {
+		t.Fatalf("stat human log before delete: %v", statErr)
+	}
+
+	if err := store.Delete(sess.ID); err != nil {
+		t.Fatalf("delete session: %v", err)
+	}
+
+	if _, statErr := os.Stat(logPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("expected human log removed, got stat error: %v", statErr)
+	}
+	if _, loadErr := store.Load(sess.ID); !errors.Is(loadErr, ErrSessionNotFound) {
+		t.Fatalf("expected session removed, got load error: %v", loadErr)
+	}
+}
+
+func TestStoreDeleteRemovesOrphanSessionHumanLog(t *testing.T) {
+	baseDir := t.TempDir()
+	store, err := NewStore(baseDir)
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+
+	sessionID := "session-orphan-human-log"
+	logPath := filepath.Join(baseDir, "sessions", sessionID+".md")
+	if err := os.WriteFile(logPath, []byte("orphan"), 0o600); err != nil {
+		t.Fatalf("write orphan human log: %v", err)
+	}
+
+	if err := store.Delete(sessionID); err != nil {
+		t.Fatalf("delete orphan human log: %v", err)
+	}
+	if _, statErr := os.Stat(logPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("expected orphan human log removed, got stat error: %v", statErr)
 	}
 }

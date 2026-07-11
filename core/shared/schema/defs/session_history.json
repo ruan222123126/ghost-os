@@ -1,0 +1,548 @@
+{
+  "$defs": {
+    "sessionMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "role"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "system",
+            "internal",
+            "user",
+            "assistant",
+            "tool"
+          ]
+        },
+        "text": { "type": "string" },
+        "content": {
+          "type": "array",
+          "items": {
+            "$ref": "./session_content.json#/$defs/sessionContentPart"
+          }
+        },
+        "tool_calls": {
+          "type": "array",
+          "items": {
+            "$ref": "./session_content.json#/$defs/sessionToolCall"
+          }
+        },
+        "tool_result": {
+          "oneOf": [
+            { "$ref": "./session_content.json#/$defs/sessionToolResult" },
+            { "type": "null" }
+          ]
+        },
+        "human_interaction": {
+          "oneOf": [
+            { "$ref": "./session_content.json#/$defs/sessionHumanInteraction" },
+            { "type": "null" }
+          ]
+        },
+        "tool_call_id": { "type": "string" },
+        "in_progress": { "type": "boolean" },
+        "thinking": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 160,
+        "go": { "name": "sessionMessage" },
+        "ts": { "name": "SessionMessage" },
+        "rust": { "name": "SessionMessage" },
+        "kotlin": { "name": "SessionMessage" }
+      }
+    },
+    "sessionMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "created_at",
+        "updated_at",
+        "message_count",
+        "token_count"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string" },
+        "created_at": { "type": "string", "minLength": 1 },
+        "updated_at": { "type": "string", "minLength": 1 },
+        "message_count": { "type": "integer", "minimum": 0 },
+        "token_count": { "type": "integer", "minimum": 0 }
+      },
+      "x-codegen": {
+        "order": 170,
+        "go": { "name": "sessionMetadata" },
+        "ts": { "name": "SessionMetadata" },
+        "rust": { "name": "SessionMetadata" },
+        "kotlin": { "name": "SessionMetadata" }
+      }
+    },
+    "sessionSidebarPartition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 }
+      },
+      "x-codegen": {
+        "order": 172,
+        "go": { "name": "sessionSidebarPartition" },
+        "ts": { "name": "SessionSidebarPartition" },
+        "rust": { "name": "SessionSidebarPartition" },
+        "kotlin": { "name": "SessionSidebarPartition" }
+      }
+    },
+    "sessionSidebarPartitionState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "partitions",
+        "assignments"
+      ],
+      "properties": {
+        "version": {
+          "type": "integer",
+          "enum": [1]
+        },
+        "partitions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sessionSidebarPartition"
+          }
+        },
+        "assignments": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "x-codegen": {
+        "order": 173,
+        "go": { "name": "sessionSidebarPartitionState" },
+        "ts": { "name": "SessionSidebarPartitionState" },
+        "rust": { "name": "SessionSidebarPartitionState" },
+        "kotlin": { "name": "SessionSidebarPartitionState" }
+      }
+    },
+    "sessionSidebarPartitionPutRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "partitions",
+        "assignments"
+      ],
+      "properties": {
+        "version": {
+          "type": "integer",
+          "enum": [1]
+        },
+        "partitions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sessionSidebarPartition"
+          }
+        },
+        "assignments": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "trace_id": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 174,
+        "go": { "name": "sessionSidebarPartitionPutRequest" },
+        "ts": { "name": "SessionSidebarPartitionPutRequest" },
+        "rust": { "name": "SessionSidebarPartitionPutRequest" },
+        "kotlin": { "name": "SessionSidebarPartitionPutRequest" }
+      }
+    },
+    "sessionSourceAssignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "owner_id",
+        "owner_name"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "workflow",
+            "orchestration",
+            "loop",
+            "task"
+          ]
+        },
+        "owner_id": { "type": "string", "minLength": 1 },
+        "owner_name": { "type": "string", "minLength": 1 }
+      },
+      "x-codegen": {
+        "order": 175,
+        "go": { "name": "sessionSourceAssignment" },
+        "ts": { "name": "SessionSourceAssignment" },
+        "rust": { "name": "SessionSourceAssignment" },
+        "kotlin": { "name": "SessionSourceAssignment" }
+      }
+    },
+    "sessionSourceResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assignments",
+        "hidden_session_ids"
+      ],
+      "properties": {
+        "assignments": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/sessionSourceAssignment"
+          }
+        },
+        "hidden_session_ids": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      },
+      "x-codegen": {
+        "order": 176,
+        "go": { "name": "sessionSourceResolution" },
+        "ts": { "name": "SessionSourceResolution" },
+        "rust": { "name": "SessionSourceResolution" },
+        "kotlin": { "name": "SessionSourceResolution" }
+      }
+    },
+    "sessionMessagePage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "limit",
+        "has_more_before"
+      ],
+      "properties": {
+        "limit": { "type": "integer", "minimum": 1 },
+        "before": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "null" }
+          ]
+        },
+        "start_index": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "null" }
+          ]
+        },
+        "end_index": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "null" }
+          ]
+        },
+        "has_more_before": { "type": "boolean" },
+        "next_before": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "null" }
+          ]
+        }
+      },
+      "x-codegen": {
+        "order": 177,
+        "go": { "name": "sessionMessagePage" },
+        "ts": { "name": "SessionMessagePage" },
+        "rust": { "name": "SessionMessagePage" },
+        "kotlin": { "name": "SessionMessagePage" }
+      }
+    },
+    "sessionTurnDraftSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "content"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "content": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 178,
+        "go": { "name": "sessionTurnDraftSegment" },
+        "ts": { "name": "SessionTurnDraftSegment" },
+        "rust": { "name": "SessionTurnDraftSegment" },
+        "kotlin": { "name": "SessionTurnDraftSegment" }
+      }
+    },
+    "sessionTurnDraftTool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "content"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "content": { "type": "string" },
+        "tool_input": { "type": "string" },
+        "tool_name": { "type": "string" },
+        "tool_status": { "type": "string" },
+        "tool_call_id": { "type": "string" },
+        "trace_id": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 179,
+        "go": { "name": "sessionTurnDraftTool" },
+        "ts": { "name": "SessionTurnDraftTool" },
+        "rust": { "name": "SessionTurnDraftTool" },
+        "kotlin": { "name": "SessionTurnDraftTool" }
+      }
+    },
+    "sessionTurnDraftPendingQuestion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "question_id",
+        "prompt"
+      ],
+      "properties": {
+        "question_id": { "type": "string", "minLength": 1 },
+        "prompt": { "type": "string", "minLength": 1 },
+        "selection_mode": {
+          "type": "string",
+          "enum": [
+            "single",
+            "multiple"
+          ]
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "./agent_human.json#/$defs/askHumanOption"
+          }
+        }
+      },
+      "x-codegen": {
+        "order": 180,
+        "go": { "name": "sessionTurnDraftPendingQuestion" },
+        "ts": { "name": "SessionTurnDraftPendingQuestion" },
+        "rust": { "name": "SessionTurnDraftPendingQuestion" },
+        "kotlin": { "name": "SessionTurnDraftPendingQuestion" }
+      }
+    },
+    "sessionTurnDraft": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "trace_id",
+        "turn",
+        "status",
+        "pending_questions",
+        "assistant_segments",
+        "thinking_segments",
+        "tools",
+        "item_order"
+      ],
+      "properties": {
+        "trace_id": { "type": "string", "minLength": 1 },
+        "turn": { "type": "integer", "minimum": 0 },
+        "status": {
+          "type": "string",
+          "enum": [
+            "streaming",
+            "awaiting_human",
+            "error"
+          ]
+        },
+        "error": { "type": "string" },
+        "pending_questions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sessionTurnDraftPendingQuestion"
+          }
+        },
+        "assistant_segments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sessionTurnDraftSegment"
+          }
+        },
+        "thinking_segments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sessionTurnDraftSegment"
+          }
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sessionTurnDraftTool"
+          }
+        },
+        "item_order": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "x-codegen": {
+        "order": 181,
+        "go": { "name": "sessionTurnDraft" },
+        "ts": { "name": "SessionTurnDraft" },
+        "rust": { "name": "SessionTurnDraft" },
+        "kotlin": { "name": "SessionTurnDraft" }
+      }
+    },
+    "sessionDetail": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "messages",
+        "created_at",
+        "updated_at",
+        "message_count",
+        "page",
+        "token_count"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string" },
+        "messages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sessionMessage"
+          }
+        },
+        "created_at": { "type": "string", "minLength": 1 },
+        "updated_at": { "type": "string", "minLength": 1 },
+        "message_count": { "type": "integer", "minimum": 0 },
+        "page": {
+          "$ref": "#/$defs/sessionMessagePage"
+        },
+        "token_count": { "type": "integer", "minimum": 0 },
+        "turn_draft": {
+          "oneOf": [
+            { "$ref": "#/$defs/sessionTurnDraft" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "x-codegen": {
+        "order": 181,
+        "go": { "name": "sessionDetail" },
+        "ts": { "name": "SessionDetail" },
+        "rust": { "name": "SessionDetail" },
+        "kotlin": { "name": "SessionDetail" }
+      }
+    },
+    "sessionAppendMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "text"
+      ],
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": [
+            "user",
+            "assistant"
+          ]
+        },
+        "text": { "type": "string", "minLength": 1 }
+      },
+      "x-codegen": {
+        "order": 182,
+        "go": { "name": "sessionAppendMessage" },
+        "ts": { "name": "SessionAppendMessage" },
+        "rust": { "name": "SessionAppendMessage" },
+        "kotlin": { "name": "SessionAppendMessage" }
+      }
+    },
+    "sessionAppendRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "session_id",
+        "messages"
+      ],
+      "properties": {
+        "session_id": { "type": "string", "minLength": 1 },
+        "expected_head": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "null" }
+          ]
+        },
+        "title": { "type": "string" },
+        "messages": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/sessionAppendMessage"
+          }
+        },
+        "trace_id": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 183,
+        "go": { "name": "sessionAppendRequest" },
+        "ts": { "name": "SessionAppendRequest" },
+        "rust": { "name": "SessionAppendRequest" },
+        "kotlin": { "name": "SessionAppendRequest" }
+      }
+    },
+    "sessionAppendResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "session_id",
+        "status",
+        "message_count",
+        "updated_at"
+      ],
+      "properties": {
+        "session_id": { "type": "string", "minLength": 1 },
+        "status": {
+          "type": "string",
+          "enum": [
+            "appended",
+            "conflict"
+          ]
+        },
+        "message_count": { "type": "integer", "minimum": 0 },
+        "updated_at": { "type": "string", "minLength": 1 }
+      },
+      "x-codegen": {
+        "order": 184,
+        "go": { "name": "sessionAppendResponse" },
+        "ts": { "name": "SessionAppendResponse" },
+        "rust": { "name": "SessionAppendResponse" },
+        "kotlin": { "name": "SessionAppendResponse" }
+      }
+    }
+  }
+}

@@ -1,0 +1,130 @@
+{
+  "$defs": {
+    "bridgeConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "provider_type",
+        "base_url",
+        "model",
+        "chat_path",
+        "project_root",
+        "max_turns",
+        "task_execution_timeout_ms",
+        "relay_default_stop_policy",
+        "relay_default_max_rounds",
+        "relay_default_execution_timeout_ms",
+        "external_codex_permission_mode",
+        "llm_completion_retry_count",
+        "llm_completion_retry_interval_ms",
+        "api_key_set",
+        "model_selection_enabled",
+        "session_human_log_full_enabled",
+        "session_system_prompt_visible_enabled",
+        "assistant_markdown_enabled",
+        "tool_call_compact_output_enabled",
+        "memory_mode_enabled",
+        "microcompact_enabled",
+        "session_title_mode",
+        "web_search_tavily_url",
+        "web_search_exa_url",
+        "web_search_tavily_api_key_set",
+        "web_search_exa_api_key_set"
+      ],
+      "properties": {
+        "provider": { "type": "string" },
+        "provider_type": { "$ref": "./base.json#/$defs/providerType" },
+        "base_url": { "type": "string" },
+        "model": { "type": "string" },
+        "chat_path": { "type": "string" },
+        "project_root": { "type": "string" },
+        "max_turns": { "type": "integer", "minimum": 1 },
+        "task_execution_timeout_ms": { "type": "integer", "minimum": 1 },
+        "relay_default_stop_policy": { "type": "string", "enum": ["ai_decides", "max_rounds"] },
+        "relay_default_max_rounds": { "type": "integer", "minimum": 1 },
+        "relay_default_execution_timeout_ms": { "type": "integer", "minimum": 0 },
+        "external_codex_permission_mode": { "type": "string", "enum": ["read-only", "default", "safe-yolo", "yolo"] },
+        "llm_completion_retry_count": { "type": "integer", "minimum": 0 },
+        "llm_completion_retry_interval_ms": { "type": "integer", "minimum": 0 },
+        "api_key_set": { "type": "boolean" },
+        "model_selection_enabled": { "type": "boolean" },
+        "session_human_log_full_enabled": { "type": "boolean" },
+        "session_system_prompt_visible_enabled": { "type": "boolean" },
+        "assistant_markdown_enabled": { "type": "boolean" },
+        "tool_call_compact_output_enabled": { "type": "boolean" },
+        "memory_mode_enabled": { "type": "boolean" },
+        "microcompact_enabled": { "type": "boolean" },
+        "session_title_mode": { "type": "string", "enum": ["session_id", "first_message", "ai_generated"] },
+        "web_search_tavily_url": { "type": "string" },
+        "web_search_exa_url": { "type": "string" },
+        "web_search_tavily_api_key_set": { "type": "boolean" },
+        "web_search_exa_api_key_set": { "type": "boolean" }
+      },
+      "x-codegen": {
+        "order": 190,
+        "go": { "name": "configResponse" },
+        "ts": { "name": "BridgeConfig" },
+        "rust": { "name": "BridgeConfig" },
+        "kotlin": { "name": "BridgeConfig" }
+      }
+    },
+    "configUpdate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": { "type": "string", "x-go-pointer": true },
+        "api_key": { "type": "string", "x-go-pointer": true },
+        "base_url": { "type": "string", "x-go-pointer": true },
+        "model": { "type": "string", "x-go-pointer": true },
+        "chat_path": { "type": "string", "x-go-pointer": true },
+        "project_root": { "type": "string", "x-go-pointer": true },
+        "max_turns": { "type": "integer", "minimum": 1, "x-go-pointer": true },
+        "task_execution_timeout_ms": { "type": "integer", "minimum": 1, "x-go-pointer": true },
+        "relay_default_stop_policy": { "type": "string", "enum": ["ai_decides", "max_rounds"], "x-go-pointer": true },
+        "relay_default_max_rounds": { "type": "integer", "minimum": 1, "x-go-pointer": true },
+        "relay_default_execution_timeout_ms": { "type": "integer", "minimum": 0, "x-go-pointer": true },
+        "external_codex_permission_mode": { "type": "string", "enum": ["read-only", "default", "safe-yolo", "yolo"], "x-go-pointer": true },
+        "llm_completion_retry_count": { "type": "integer", "minimum": 0, "x-go-pointer": true },
+        "llm_completion_retry_interval_ms": { "type": "integer", "minimum": 0, "x-go-pointer": true },
+        "session_human_log_full_enabled": { "type": "boolean", "x-go-pointer": true },
+        "session_system_prompt_visible_enabled": { "type": "boolean", "x-go-pointer": true },
+        "assistant_markdown_enabled": { "type": "boolean", "x-go-pointer": true },
+        "tool_call_compact_output_enabled": { "type": "boolean", "x-go-pointer": true },
+        "memory_mode_enabled": { "type": "boolean", "x-go-pointer": true },
+        "microcompact_enabled": { "type": "boolean", "x-go-pointer": true },
+        "session_title_mode": { "type": "string", "enum": ["session_id", "first_message", "ai_generated"], "x-go-pointer": true },
+        "web_search_tavily_url": { "type": "string", "x-go-pointer": true },
+        "web_search_exa_url": { "type": "string", "x-go-pointer": true },
+        "web_search_tavily_api_key": { "type": "string", "x-go-pointer": true },
+        "web_search_exa_api_key": { "type": "string", "x-go-pointer": true },
+        "trace_id": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 200,
+        "go": { "name": "configUpdateRequest" },
+        "ts": { "name": "ConfigUpdate" },
+        "rust": { "name": "ConfigUpdate" },
+        "kotlin": { "name": "ConfigUpdate" }
+      }
+    },
+    "setActiveProviderRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "trace_id": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 240,
+        "go": { "name": "setActiveProviderRequest" },
+        "ts": { "name": "SetActiveProviderRequest" },
+        "rust": { "name": "SetActiveProviderRequest" },
+        "kotlin": { "name": "SetActiveProviderRequest" }
+      }
+    }
+  }
+}

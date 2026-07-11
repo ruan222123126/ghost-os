@@ -1,44 +1,81 @@
 package session
 
 import (
-	"encoding/json"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
-	"sort"
-	"strings"
 	"sync"
 	"time"
+
+	"ghost-os/bridge/llm"
+
+	_ "modernc.org/sqlite"
+)
+
+const (
+	DefaultDetailPageLimit = 100
+	MaxDetailPageLimit     = 200
+	hotWindowMaxMessages   = 200
+	hotWindowMaxTokens     = 24_000
 )
 
 var (
-	ErrSessionNotFound  = errors.New("session not found")
-	ErrSessionCorrupted = errors.New("session corrupted")
-	ErrInvalidSessionID = errors.New("invalid session id")
+	ErrSessionNotFound      = errors.New("session not found")
+	ErrSessionCorrupted     = errors.New("session corrupted")
+	ErrInvalidSessionID     = errors.New("invalid session id")
+	ErrSessionNotAppendOnly = errors.New("session history mutation must be append-only")
 )
 
-var sessionIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$`)
-
-// Store 提供会话文件持久化能力。
+// Store 提供会话状态与消息历史的持久化能力。
 type Store struct {
-	baseDir string
-	mu      sync.Mutex
+	baseDir  string
+	db       *sql.DB
+	humanLog *sessionHumanLogWriter
+	mu       sync.Mutex
 }
 
 // SessionMetadata 表示列表场景需要的轻量会话信息。
 type SessionMetadata struct {
 	ID           string
+	Title        string
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	MessageCount int
 	TokenCount   int
 }
 
-// NewStore 初始化存储目录，并返回文件会话存储实例。
-func NewStore(baseDir string) (*Store, error) {
+// PageParams 描述一次会话历史分页读取请求。
+type PageParams struct {
+	Limit  int
+	Before *int
+}
+
+// IndexedMessage 表示带稳定绝对序号的一条会话消息。
+type IndexedMessage struct {
+	Index   int
+	Message llm.Message
+}
+
+// MessagePage 描述一次分页读取结果。
+type MessagePage struct {
+	Messages      []IndexedMessage
+	Limit         int
+	Before        *int
+	StartIndex    *int
+	EndIndex      *int
+	HasMoreBefore bool
+	NextBefore    *int
+}
+
+// NewStore 初始化 SQLite 会话存储。
+func NewStore(baseDir string, options ...StoreOptions) (*Store, error) {
 	resolved, err := resolveBaseDir(baseDir)
+	if err != nil {
+		return nil, err
+	}
+	resolvedOptions, err := resolveStoreOptions(options)
 	if err != nil {
 		return nil, err
 	}
@@ -46,255 +83,171 @@ func NewStore(baseDir string) (*Store, error) {
 		return nil, fmt.Errorf("create session directory %q: %w", resolved, err)
 	}
 
-	return &Store{baseDir: resolved}, nil
+	db, err := sql.Open("sqlite", filepath.Join(resolved, sessionsDatabaseFilename))
+	if err != nil {
+		return nil, fmt.Errorf("open session database: %w", err)
+	}
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	if err := initSessionSchema(db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	humanLog, err := newSessionHumanLogWriter(resolved, resolvedOptions)
+	if err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+
+	return &Store{
+		baseDir:  resolved,
+		db:       db,
+		humanLog: humanLog,
+	}, nil
 }
 
-// Load 从磁盘读取会话。
+func (s *Store) Close() error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	return s.db.Close()
+}
+
+// Load 从磁盘读取会话轻量状态与热窗口消息。
 func (s *Store) Load(sessionID string) (*Session, error) {
-	path, err := s.pathForSession(sessionID)
+	id, err := normalizeSessionID(sessionID)
 	if err != nil {
 		return nil, err
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("%w: %s", ErrSessionNotFound, strings.TrimSpace(sessionID))
-		}
-		return nil, fmt.Errorf("read session %q: %w", strings.TrimSpace(sessionID), err)
+	var sess *Session
+	if err := s.withSessionLock(id, false, func() error {
+		return s.withTx("load session", func(tx *sql.Tx) error {
+			loaded, loadErr := loadSessionTx(tx, id)
+			if loadErr != nil {
+				return loadErr
+			}
+			sess = loaded
+			return nil
+		})
+	}); err != nil {
+		return nil, err
 	}
-
-	var loaded Session
-	if err := json.Unmarshal(data, &loaded); err != nil {
-		return nil, fmt.Errorf("%w: id=%s: %v", ErrSessionCorrupted, strings.TrimSpace(sessionID), err)
-	}
-
-	if loaded.ID == "" {
-		loaded.ID = strings.TrimSpace(sessionID)
-	}
-	if strings.TrimSpace(loaded.ID) != strings.TrimSpace(sessionID) {
-		return nil, fmt.Errorf("%w: id mismatch file=%q payload=%q", ErrSessionCorrupted, strings.TrimSpace(sessionID), loaded.ID)
-	}
-	if loaded.CreatedAt.IsZero() {
-		loaded.CreatedAt = time.Now().UTC()
-	}
-	if loaded.UpdatedAt.IsZero() {
-		loaded.UpdatedAt = loaded.CreatedAt
-	}
-	loaded.RecalculateTokenCount()
-
-	return &loaded, nil
+	return sess, nil
 }
 
-// Save 将会话原子写入磁盘，防止部分写入导致文件损坏。
-func (s *Store) Save(session *Session) error {
-	if session == nil {
+// LoadPage 读取单会话详情和指定窗口的消息分页。
+func (s *Store) LoadPage(sessionID string, params PageParams) (*Session, MessagePage, error) {
+	id, err := normalizeSessionID(sessionID)
+	if err != nil {
+		return nil, MessagePage{}, err
+	}
+
+	var (
+		sess *Session
+		page MessagePage
+	)
+	if err := s.withSessionLock(id, false, func() error {
+		return s.withTx("load session page", func(tx *sql.Tx) error {
+			loaded, loadErr := loadSessionTx(tx, id)
+			if loadErr != nil {
+				return loadErr
+			}
+			loadedPage, pageErr := loadMessagePageTx(tx, id, loaded.MessageCount, params)
+			if pageErr != nil {
+				return pageErr
+			}
+			sess = loaded
+			page = loadedPage
+			return nil
+		})
+	}); err != nil {
+		return nil, MessagePage{}, err
+	}
+	return sess, page, nil
+}
+
+// Save 将会话状态更新写入磁盘，消息历史只允许尾部追加。
+func (s *Store) Save(sess *Session) error {
+	if sess == nil {
 		return errors.New("session is nil")
 	}
-
-	path, err := s.pathForSession(session.ID)
+	id, err := normalizeSessionID(sess.ID)
 	if err != nil {
 		return err
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	now := time.Now().UTC()
-	if session.CreatedAt.IsZero() {
-		session.CreatedAt = now
-	}
-	session.UpdatedAt = now
-	session.RecalculateTokenCount()
-
-	data, err := json.MarshalIndent(session, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal session %q: %w", session.ID, err)
-	}
-	data = append(data, '\n')
-
-	tempPath := fmt.Sprintf("%s.tmp-%d", path, time.Now().UnixNano())
-	if err := os.WriteFile(tempPath, data, 0o600); err != nil {
-		return fmt.Errorf("write temp session file %q: %w", tempPath, err)
-	}
-
-	if err := os.Rename(tempPath, path); err != nil {
-		_ = os.Remove(tempPath)
-		return fmt.Errorf("replace session file %q: %w", path, err)
-	}
-	return nil
-}
-
-// Delete 删除指定会话文件。
-func (s *Store) Delete(sessionID string) error {
-	path, err := s.pathForSession(sessionID)
-	if err != nil {
-		return err
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if err := os.Remove(path); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("%w: %s", ErrSessionNotFound, strings.TrimSpace(sessionID))
+	return s.withSessionLock(id, true, func() error {
+		if err := s.withTx("save session", func(tx *sql.Tx) error {
+			return saveSessionTx(tx, id, sess)
+		}); err != nil {
+			return err
 		}
-		return fmt.Errorf("delete session %q: %w", strings.TrimSpace(sessionID), err)
-	}
-	return nil
-}
-
-// List 返回当前存储目录下的全部会话 ID。
-func (s *Store) List() ([]string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	entries, err := os.ReadDir(s.baseDir)
-	if err != nil {
-		return nil, fmt.Errorf("read sessions directory %q: %w", s.baseDir, err)
-	}
-
-	ids := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		if !strings.HasSuffix(name, ".json") {
-			continue
-		}
-		id := strings.TrimSuffix(name, ".json")
-		if !isValidSessionID(id) {
-			continue
-		}
-		ids = append(ids, id)
-	}
-
-	sort.Strings(ids)
-	return ids, nil
-}
-
-// ListMetadata 返回全部会话的轻量元数据，避免上层逐个 Load 组装。
-func (s *Store) ListMetadata() ([]SessionMetadata, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	entries, err := os.ReadDir(s.baseDir)
-	if err != nil {
-		return nil, fmt.Errorf("read sessions directory %q: %w", s.baseDir, err)
-	}
-
-	now := time.Now().UTC()
-	metadata := make([]SessionMetadata, 0, len(entries))
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		name := entry.Name()
-		if !strings.HasSuffix(name, ".json") {
-			continue
-		}
-
-		id := strings.TrimSuffix(name, ".json")
-		if !isValidSessionID(id) {
-			continue
-		}
-
-		path := filepath.Join(s.baseDir, name)
-		data, readErr := os.ReadFile(path)
-		if readErr != nil {
-			if errors.Is(readErr, os.ErrNotExist) {
-				continue
-			}
-			return nil, fmt.Errorf("read session %q: %w", id, readErr)
-		}
-
-		summary, decodeErr := decodeSessionMetadata(id, data, now)
-		if decodeErr != nil {
-			return nil, decodeErr
-		}
-		metadata = append(metadata, summary)
-	}
-
-	sort.Slice(metadata, func(i, j int) bool {
-		return metadata[i].ID < metadata[j].ID
+		return s.syncSessionHumanLogLocked(id)
 	})
-	return metadata, nil
 }
 
-type sessionMetadataEnvelope struct {
-	ID         string     `json:"id"`
-	Messages   []struct{} `json:"messages"`
-	CreatedAt  time.Time  `json:"created_at"`
-	UpdatedAt  time.Time  `json:"updated_at"`
-	TokenCount int        `json:"token_count"`
+func saveSessionTx(tx *sql.Tx, sessionID string, sess *Session) error {
+	record, err := loadSessionRecordTx(tx, sessionID)
+	if err != nil && !errors.Is(err, ErrSessionNotFound) {
+		return err
+	}
+	appended, appendTokens, err := appendedMessages(sess, record)
+	if err != nil {
+		return err
+	}
+	mergeExistingTitle(sess, record)
+
+	now := time.Now().UTC()
+	if sess.CreatedAt.IsZero() {
+		sess.CreatedAt = now
+	}
+	sess.UpdatedAt = now
+	if err := upsertSessionTx(tx, sess, record, appended, appendTokens); err != nil {
+		return err
+	}
+
+	reloaded, err := loadSessionTx(tx, sessionID)
+	if err != nil {
+		return err
+	}
+	replaceLoadedSession(sess, reloaded)
+	return nil
 }
 
-func decodeSessionMetadata(expectedID string, data []byte, now time.Time) (SessionMetadata, error) {
-	var envelope sessionMetadataEnvelope
-	if err := json.Unmarshal(data, &envelope); err != nil {
-		return SessionMetadata{}, fmt.Errorf("%w: id=%s: %v", ErrSessionCorrupted, expectedID, err)
+// Delete 删除指定会话。
+func (s *Store) Delete(sessionID string) error {
+	id, err := normalizeSessionID(sessionID)
+	if err != nil {
+		return err
 	}
 
-	loadedID := strings.TrimSpace(envelope.ID)
-	if loadedID == "" {
-		loadedID = expectedID
-	}
-	if loadedID != expectedID {
-		return SessionMetadata{}, fmt.Errorf("%w: id mismatch file=%q payload=%q", ErrSessionCorrupted, expectedID, envelope.ID)
-	}
-
-	createdAt := envelope.CreatedAt.UTC()
-	if createdAt.IsZero() {
-		createdAt = now
-	}
-	updatedAt := envelope.UpdatedAt.UTC()
-	if updatedAt.IsZero() {
-		updatedAt = createdAt
-	}
-
-	return SessionMetadata{
-		ID:           expectedID,
-		CreatedAt:    createdAt,
-		UpdatedAt:    updatedAt,
-		MessageCount: len(envelope.Messages),
-		TokenCount:   envelope.TokenCount,
-	}, nil
-}
-
-func (s *Store) pathForSession(sessionID string) (string, error) {
-	id := strings.TrimSpace(sessionID)
-	if !isValidSessionID(id) {
-		return "", fmt.Errorf("%w: %q", ErrInvalidSessionID, sessionID)
-	}
-	return filepath.Join(s.baseDir, id+".json"), nil
-}
-
-func resolveBaseDir(pathValue string) (string, error) {
-	trimmed := strings.TrimSpace(pathValue)
-	if trimmed == "" {
-		return "", errors.New("sessions path is empty")
-	}
-
-	if strings.HasPrefix(trimmed, "~/") || trimmed == "~" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("resolve user home directory: %w", err)
+	return s.withStoreLock(func() error {
+		deleted := false
+		if err := s.withTx("delete session", func(tx *sql.Tx) error {
+			removed, deleteErr := deleteSessionTx(tx, id)
+			if deleteErr != nil {
+				return deleteErr
+			}
+			deleted = removed
+			return nil
+		}); err != nil {
+			return err
+		}
+		if deleted {
+			if err := removeSessionHumanLogFile(s, id); err != nil {
+				return err
+			}
+			return s.cleanupSidebarPartitionStateLocked(id)
 		}
 
-		if trimmed == "~" {
-			return homeDir, nil
+		humanLogRemoved, deleteHumanLogErr := deleteSessionHumanLogFile(s, id)
+		if deleteHumanLogErr != nil {
+			return deleteHumanLogErr
 		}
-		return filepath.Join(homeDir, strings.TrimPrefix(trimmed, "~/")), nil
-	}
-
-	return filepath.Clean(trimmed), nil
-}
-
-func isValidSessionID(sessionID string) bool {
-	return sessionIDPattern.MatchString(strings.TrimSpace(sessionID))
+		if humanLogRemoved {
+			return s.cleanupSidebarPartitionStateLocked(id)
+		}
+		return fmt.Errorf("%w: %s", ErrSessionNotFound, id)
+	})
 }

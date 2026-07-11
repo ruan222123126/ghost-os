@@ -1,0 +1,42 @@
+package workflows
+
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+)
+
+func EncodeToolArguments(arguments map[string]any) (json.RawMessage, error) {
+	if len(arguments) == 0 {
+		return json.RawMessage(`{}`), nil
+	}
+	encoded, err := json.Marshal(arguments)
+	if err != nil {
+		return nil, fmt.Errorf("encode workflow tool arguments: %w", err)
+	}
+	return encoded, nil
+}
+
+func EncodeNodeOutputText(value any) string {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return strings.TrimSpace(fmt.Sprintf("%v", value))
+	}
+	return strings.TrimSpace(string(encoded))
+}
+
+func DecodeNodeOutput(output string) any {
+	trimmed := strings.TrimSpace(output)
+	if trimmed == "" {
+		return ""
+	}
+	var decoded any
+	if err := json.Unmarshal([]byte(trimmed), &decoded); err != nil {
+		return trimmed
+	}
+	return decoded
+}
+
+func nodeToolCallID(nodeID string) string {
+	return "workflow-" + strings.TrimSpace(nodeID)
+}

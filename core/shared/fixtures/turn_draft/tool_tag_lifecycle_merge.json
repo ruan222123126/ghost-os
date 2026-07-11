@@ -1,0 +1,87 @@
+{
+  "events": [
+    {
+      "id": "trace-tool-tag:000001",
+      "step_id": "turn-0004-assistant",
+      "trace_id": "trace-tool-tag",
+      "session_id": "session-fixture-3",
+      "turn": 4,
+      "type": "run_started",
+      "payload": {
+        "session_id": "session-fixture-3"
+      }
+    },
+    {
+      "id": "trace-tool-tag:000002",
+      "step_id": "turn-0004-assistant",
+      "trace_id": "trace-tool-tag",
+      "session_id": "session-fixture-3",
+      "turn": 4,
+      "type": "completion_delta",
+      "payload": {
+        "kind": "text",
+        "text": "before <t:7>{\"path\":\"README.md\"}</t> after"
+      }
+    },
+    {
+      "id": "trace-tool-tag:000003",
+      "step_id": "turn-0004-tool-0001",
+      "trace_id": "trace-tool-tag",
+      "session_id": "session-fixture-3",
+      "turn": 4,
+      "type": "tool_call_started",
+      "payload": {
+        "tool": "read_file",
+        "tool_call_id": "call-7",
+        "arguments_json": "{\"path\":\"README.md\"}"
+      }
+    },
+    {
+      "id": "trace-tool-tag:000004",
+      "step_id": "turn-0004-tool-0001",
+      "trace_id": "trace-tool-tag",
+      "session_id": "session-fixture-3",
+      "turn": 4,
+      "type": "tool_call_finished",
+      "payload": {
+        "tool": "read_file",
+        "tool_call_id": "call-7",
+        "status": "success",
+        "output": "README contents"
+      }
+    }
+  ],
+  "expected_turn_draft": {
+    "trace_id": "trace-tool-tag",
+    "turn": 4,
+    "status": "streaming",
+    "pending_questions": [],
+    "assistant_segments": [
+      {
+        "id": "stream-segment:assistant:1",
+        "content": "before "
+      },
+      {
+        "id": "stream-segment:assistant:2",
+        "content": " after"
+      }
+    ],
+    "thinking_segments": [],
+    "tools": [
+      {
+        "id": "stream-tag-tool:trace-tool-tag:1",
+        "content": "README contents",
+        "tool_input": "{\"path\":\"README.md\"}",
+        "tool_name": "read_file",
+        "tool_status": "success",
+        "tool_call_id": "call-7",
+        "trace_id": "trace-tool-tag"
+      }
+    ],
+    "item_order": [
+      "assistant:stream-segment:assistant:1",
+      "tool:stream-tag-tool:trace-tool-tag:1",
+      "assistant:stream-segment:assistant:2"
+    ]
+  }
+}

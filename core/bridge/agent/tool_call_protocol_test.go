@@ -30,11 +30,7 @@ func (c *protocolToolCatalog) ToolDefs() []llm.ToolDef {
 	if c.tool == nil {
 		return nil
 	}
-	return []llm.ToolDef{{
-		Name:        c.tool.Name(),
-		Description: c.tool.Description(),
-		Parameters:  c.tool.Parameters(),
-	}}
+	return []llm.ToolDef{tools.ToolDefFromTool(c.tool)}
 }
 
 func (c *protocolToolCatalog) Get(name string) tools.Tool {
@@ -69,11 +65,13 @@ func protocolCloneRequest(request llm.CompletionRequest) llm.CompletionRequest {
 			Name:        tool.Name,
 			Description: tool.Description,
 			Parameters:  append(json.RawMessage(nil), tool.Parameters...),
+			Semantics:   tool.Semantics,
 		}
 	}
 	return llm.CompletionRequest{
 		Messages:          llm.CloneMessages(request.Messages),
 		Tools:             clonedTools,
+		ToolChoice:        request.ToolChoice,
 		ConversationState: request.ConversationState,
 	}
 }

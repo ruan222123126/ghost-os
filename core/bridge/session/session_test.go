@@ -75,7 +75,7 @@ func TestPendingQuestionsLifecycle(t *testing.T) {
 		TraceID:    "trace-1",
 	})
 
-	if !s.HasPendingQuestion("q-1") {
+	if _, ok := s.PendingQuestions["q-1"]; !ok {
 		t.Fatal("expected q-1 to be pending")
 	}
 	if ok := s.SetHumanAnswer("q-1", "postgres"); !ok {
@@ -89,30 +89,8 @@ func TestPendingQuestionsLifecycle(t *testing.T) {
 	if resolved[0].QuestionID != "q-1" || resolved[0].Answer != "postgres" {
 		t.Fatalf("unexpected resolved payload: %+v", resolved[0])
 	}
-	if s.HasPendingQuestion("q-1") {
+	if _, ok := s.PendingQuestions["q-1"]; ok {
 		t.Fatal("pending question should be cleared after pop")
-	}
-}
-
-func TestMemoryMetadataLifecycle(t *testing.T) {
-	s := NewSession("")
-	if !s.MemoryMetadata.IsZero() {
-		t.Fatalf("memory metadata should be zero value at init: %+v", s.MemoryMetadata)
-	}
-
-	archiveTime := time.Now().UTC().Add(-time.Minute)
-	s.MarkMemoryArchived(archiveTime)
-	if s.MemoryMetadata.ArchivedAt.IsZero() {
-		t.Fatal("archived_at should be set")
-	}
-
-	accessTime := time.Now().UTC()
-	s.MarkMemoryAccess(accessTime)
-	if s.MemoryMetadata.AccessCount != 1 {
-		t.Fatalf("unexpected access count: got %d want %d", s.MemoryMetadata.AccessCount, 1)
-	}
-	if s.MemoryMetadata.LastAccessAt.IsZero() {
-		t.Fatal("last_access_at should be set")
 	}
 }
 
@@ -129,5 +107,98 @@ func TestSessionMarkEnded(t *testing.T) {
 	}
 	if s.EndedAt.IsZero() {
 		t.Fatal("ended_at should be set")
+	}
+}
+
+func TestDynamicToolLoadLifecycle(t *testing.T) {
+	s := NewSession("")
+	s.AdvanceToolTurn(3)
+
+	loaded := s.EnsureDynamicToolLoaded("web_search", "sfind")
+	if loaded.AlreadyLoaded {
+		t.Fatal("newly loaded tool should not report already_loaded")
+	}
+	if got := s.VisibleDynamicToolNames(3); len(got) != 1 || got[0] != "web_search" {
+		t.Fatalf("loaded tool should be visible immediately in the current turn, got %v", got)
+	}
+
+	visible := s.VisibleDynamicToolNames(3)
+	if len(visible) != 1 || visible[0] != "web_search" {
+		t.Fatalf("unexpected visible tools: %v", visible)
+	}
+	loads := s.DynamicToolLoadsSnapshot()
+	if len(loads) != 1 {
+		t.Fatal("expected dynamic tool snapshot")
+	}
+	snapshot := loads[0]
+	if !snapshot.VisibleForTurn(s.TurnIndex) {
+		t.Fatal("expected tool to be visible in the current turn")
+	}
+	if snapshot.RemainingIdleTurns(s.TurnIndex, 3) != 3 {
+		t.Fatalf("unexpected remaining idle turns: %d", snapshot.RemainingIdleTurns(s.TurnIndex, 3))
+	}
+
+	if !s.NoteDynamicToolCall("web_search") {
+		t.Fatal("expected NoteDynamicToolCall to succeed")
+	}
+	s.AdvanceToolTurn(3)
+	s.AdvanceToolTurn(3)
+	s.AdvanceToolTurn(3)
+	expired := s.AdvanceToolTurn(3)
+	if len(expired) != 1 || expired[0] != "web_search" {
+		t.Fatalf("expected web_search to expire after idle turns, got %v", expired)
+	}
+}
+
+func TestAppendAssistantDraftSameTurn(t *testing.T) {
+	s := NewSession("")
+	when := time.Date(2026, 4, 4, 10, 0, 0, 0, time.UTC)
+
+	if ok := s.AppendAssistantDraft("hello", "trace-1", 2, when); !ok {
+		t.Fatal("expected first draft append to succeed")
+	}
+	if ok := s.AppendAssistantDraft(" world", "trace-1", 2, when.Add(time.Second)); !ok {
+		t.Fatal("expected second draft append to succeed")
+	}
+	if s.AssistantDraft == nil {
+		t.Fatal("expected assistant draft")
+	}
+	if s.AssistantDraft.Text != "hello world" {
+		t.Fatalf("unexpected assistant draft text: %q", s.AssistantDraft.Text)
+	}
+	if s.AssistantDraft.TraceID != "trace-1" || s.AssistantDraft.Turn != 2 {
+		t.Fatalf("unexpected assistant draft metadata: %+v", s.AssistantDraft)
+	}
+}
+
+func TestAppendAssistantDraftReplacesDifferentTurn(t *testing.T) {
+	s := NewSession("")
+	if ok := s.AppendAssistantDraft("old", "trace-old", 1, time.Now().UTC()); !ok {
+		t.Fatal("expected initial draft append")
+	}
+	if ok := s.AppendAssistantDraft("new", "trace-new", 2, time.Now().UTC()); !ok {
+		t.Fatal("expected replacement draft append")
+	}
+	if s.AssistantDraft == nil {
+		t.Fatal("expected replacement assistant draft")
+	}
+	if s.AssistantDraft.Text != "new" {
+		t.Fatalf("expected replaced draft text, got %q", s.AssistantDraft.Text)
+	}
+	if s.AssistantDraft.TraceID != "trace-new" || s.AssistantDraft.Turn != 2 {
+		t.Fatalf("unexpected replacement metadata: %+v", s.AssistantDraft)
+	}
+}
+
+func TestClearAssistantDraft(t *testing.T) {
+	s := NewSession("")
+	if ok := s.AppendAssistantDraft("partial", "trace-1", 1, time.Now().UTC()); !ok {
+		t.Fatal("expected draft append")
+	}
+	if ok := s.ClearAssistantDraft(time.Now().UTC()); !ok {
+		t.Fatal("expected clear assistant draft to return true")
+	}
+	if s.AssistantDraft != nil {
+		t.Fatalf("expected assistant draft to be cleared, got %+v", s.AssistantDraft)
 	}
 }

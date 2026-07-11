@@ -109,6 +109,35 @@ func TestOpenAIToCompletionResponseEmptyFinishReasonFallsBackToToolCalls(t *test
 	}
 }
 
+func TestOpenAIToCompletionResponseStopFinishReasonWithToolCallsNormalizesToToolCalls(t *testing.T) {
+	resp, err := openAIToCompletionResponse(openAIResponse{
+		Choices: []openAIChoice{
+			{
+				Message: openAIMessage{
+					Role: "assistant",
+					ToolCalls: []openAIToolCall{
+						{
+							ID:   "call-1",
+							Type: "function",
+							Function: openAIFunctionCall{
+								Name:      "script_exec",
+								Arguments: `{"script":"print(1)"}`,
+							},
+						},
+					},
+				},
+				FinishReason: "stop",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("openAIToCompletionResponse returned error: %v", err)
+	}
+	if resp.FinishReason != FinishToolCalls {
+		t.Fatalf("unexpected finish reason: got %q want %q", resp.FinishReason, FinishToolCalls)
+	}
+}
+
 // 验证空 tool_call.arguments 不被静默改写为 {}，交由上层做无效调用处理。
 func TestOpenAIToCompletionResponsePreservesEmptyToolCallArguments(t *testing.T) {
 	resp, err := openAIToCompletionResponse(openAIResponse{
@@ -177,7 +206,7 @@ func TestToOpenAIRequestBuildsToolImageContentParts(t *testing.T) {
 				ToolCalls: []ToolCall{
 					{
 						ID:        "call-1",
-						Name:      "browser_action",
+						Name:      "screen_action",
 						Arguments: json.RawMessage(`{"action":"screenshot"}`),
 					},
 				},
@@ -185,7 +214,7 @@ func TestToOpenAIRequestBuildsToolImageContentParts(t *testing.T) {
 			{
 				Role:       RoleTool,
 				ToolCallID: "call-1",
-				Text:       `{"status":"success","tool":"browser_action"}`,
+				Text:       `{"status":"success","tool":"screen_action"}`,
 				Content: []ContentPart{
 					{
 						Type: ContentTypeImage,
@@ -214,5 +243,107 @@ func TestToOpenAIRequestBuildsToolImageContentParts(t *testing.T) {
 	}
 	if !strings.Contains(string(encoded), `\"status\":\"success\"`) {
 		t.Fatalf("expected tool envelope text in content, got: %s", string(encoded))
+	}
+}
+
+func TestToOpenAIRequestBuildsUserImageContentParts(t *testing.T) {
+	request, err := toOpenAIRequest("gpt-4o", CompletionRequest{
+		Messages: []Message{{
+			Role: RoleUser,
+			Text: "describe this image",
+			Content: []ContentPart{{
+				Type: ContentTypeImage,
+				Image: &ImageContent{
+					URL:      "data:image/png;base64,ZmFrZS1pbWFnZQ==",
+					MimeType: "image/png",
+				},
+			}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("toOpenAIRequest returned error: %v", err)
+	}
+	if len(request.Messages) != 1 {
+		t.Fatalf("unexpected message count: got %d want %d", len(request.Messages), 1)
+	}
+	encoded, err := json.Marshal(request.Messages[0].Content)
+	if err != nil {
+		t.Fatalf("marshal user content: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"type":"image_url"`) {
+		t.Fatalf("expected user image_url block, got: %s", string(encoded))
+	}
+	if !strings.Contains(string(encoded), `"describe this image"`) {
+		t.Fatalf("expected user text in content, got: %s", string(encoded))
+	}
+}
+
+func TestToOpenAIRequestIncludesAssistantReasoningContent(t *testing.T) {
+	request, err := toOpenAIRequest("gpt-4o", CompletionRequest{
+		Messages: []Message{
+			{
+				Role:             RoleAssistant,
+				ReasoningContent: json.RawMessage(`"thinking step"`),
+				ToolCalls: []ToolCall{
+					{
+						ID:        "call-1",
+						Name:      "script_exec",
+						Arguments: json.RawMessage(`{"script":"print(1)"}`),
+					},
+				},
+			},
+			{
+				Role:       RoleTool,
+				ToolCallID: "call-1",
+				Text:       `{"status":"success","tool":"script_exec","output":"ok"}`,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("toOpenAIRequest returned error: %v", err)
+	}
+	if len(request.Messages) != 2 {
+		t.Fatalf("unexpected message count: got %d want %d", len(request.Messages), 2)
+	}
+	if got := string(request.Messages[0].ReasoningContent); got != `"thinking step"` {
+		t.Fatalf("unexpected reasoning_content: got %q want %q", got, `"thinking step"`)
+	}
+}
+
+func TestToOpenAIRequestRejectsInvalidAssistantReasoningContent(t *testing.T) {
+	_, err := toOpenAIRequest("gpt-4o", CompletionRequest{
+		Messages: []Message{
+			{
+				Role:             RoleAssistant,
+				ReasoningContent: json.RawMessage(`not-json`),
+			},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected error but got nil")
+	}
+	if !strings.Contains(err.Error(), "assistant reasoning_content must be valid JSON") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestOpenAIToCompletionResponsePreservesReasoningContent(t *testing.T) {
+	resp, err := openAIToCompletionResponse(openAIResponse{
+		Choices: []openAIChoice{
+			{
+				Message: openAIMessage{
+					Role:             "assistant",
+					Content:          "ok",
+					ReasoningContent: json.RawMessage(`"analysis"`),
+				},
+				FinishReason: "stop",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("openAIToCompletionResponse returned error: %v", err)
+	}
+	if got := string(resp.Message.ReasoningContent); got != `"analysis"` {
+		t.Fatalf("unexpected reasoning_content: got %q want %q", got, `"analysis"`)
 	}
 }

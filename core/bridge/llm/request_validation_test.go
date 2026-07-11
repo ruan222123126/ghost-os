@@ -66,3 +66,60 @@ func TestCodexClientRejectsDanglingAssistantToolCallHistory(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestToOpenAIRequestSanitizesTopLevelToolSchemaCombinators(t *testing.T) {
+	request, err := toOpenAIRequest("gpt-4o", CompletionRequest{
+		Messages: []Message{{Role: RoleUser, Text: "hello"}},
+		Tools: []ToolDef{{
+			Name: "bash_exec",
+			Parameters: json.RawMessage(`{
+				"type":"object",
+				"properties":{"command":{"type":"string"}},
+				"required":["command"],
+				"additionalProperties":false,
+				"allOf":[{"if":{"properties":{"interactive":{"const":true}}},"then":{"not":{"required":["login"]}}}]
+			}`),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("toOpenAIRequest returned error: %v", err)
+	}
+
+	if len(request.Tools) != 1 {
+		t.Fatalf("unexpected tool count: got %d want %d", len(request.Tools), 1)
+	}
+
+	var schema map[string]any
+	if err := json.Unmarshal(request.Tools[0].Function.Parameters, &schema); err != nil {
+		t.Fatalf("decode sanitized schema: %v", err)
+	}
+	if schema["type"] != "object" {
+		t.Fatalf("unexpected top-level type: %#v", schema["type"])
+	}
+	if _, exists := schema["allOf"]; exists {
+		t.Fatalf("unexpected top-level allOf: %+v", schema)
+	}
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected properties payload: %+v", schema["properties"])
+	}
+	if _, ok := properties["command"]; !ok {
+		t.Fatalf("sanitized schema lost command property: %+v", properties)
+	}
+}
+
+func TestToOpenAIRequestRejectsNonObjectToolSchema(t *testing.T) {
+	_, err := toOpenAIRequest("gpt-4o", CompletionRequest{
+		Messages: []Message{{Role: RoleUser, Text: "hello"}},
+		Tools: []ToolDef{{
+			Name:       "broken_tool",
+			Parameters: json.RawMessage(`{"type":"string"}`),
+		}},
+	})
+	if err == nil {
+		t.Fatal("expected error but got nil")
+	}
+	if !strings.Contains(err.Error(), `top-level tool schema type "string" is not supported`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

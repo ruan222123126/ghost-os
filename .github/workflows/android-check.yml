@@ -1,0 +1,39 @@
+name: android-check
+
+on:
+  pull_request:
+    paths:
+      - "apps/android/**"
+      - ".github/workflows/android-check.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/android/**"
+      - ".github/workflows/android-check.yml"
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: apps/android/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm --dir apps/android install --frozen-lockfile
+
+      - name: Build mobile shell
+        run: pnpm --dir apps/android build

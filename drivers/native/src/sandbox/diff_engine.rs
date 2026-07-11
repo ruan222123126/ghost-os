@@ -6,20 +6,55 @@ use std::sync::OnceLock;
 pub(crate) struct PatchResult {
     pub(crate) updated: String,
     pub(crate) hunk_count: usize,
+    pub(crate) added_lines: usize,
+    pub(crate) removed_lines: usize,
+    pub(crate) hunk_ranges: Vec<PatchHunkRange>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct PatchHunkRange {
+    pub(crate) old_start: usize,
+    pub(crate) old_count: usize,
+    pub(crate) new_start: usize,
+    pub(crate) new_count: usize,
 }
 
 pub(crate) fn apply_unified_patch(original: &str, diff_text: &str) -> Result<PatchResult, String> {
     let hunks = parse_unified_diff(diff_text)?;
     let updated = apply_unified_diff(original, &hunks)?;
+    let mut hunk_ranges = Vec::with_capacity(hunks.len());
+    let mut added_lines = 0usize;
+    let mut removed_lines = 0usize;
+    for hunk in &hunks {
+        hunk_ranges.push(PatchHunkRange {
+            old_start: hunk.old_start,
+            old_count: hunk.old_count,
+            new_start: hunk.new_start,
+            new_count: hunk.new_count,
+        });
+        for line in &hunk.lines {
+            match line {
+                DiffLine::Add(_) => added_lines += 1,
+                DiffLine::Remove(_) => removed_lines += 1,
+                DiffLine::Context(_) => {}
+            }
+        }
+    }
     Ok(PatchResult {
         updated,
         hunk_count: hunks.len(),
+        added_lines,
+        removed_lines,
+        hunk_ranges,
     })
 }
 
 #[derive(Debug, Clone)]
 struct DiffHunk {
     old_start: usize,
+    old_count: usize,
+    new_start: usize,
+    new_count: usize,
     lines: Vec<DiffLine>,
 }
 
@@ -49,10 +84,10 @@ fn parse_unified_diff(diff_text: &str) -> Result<Vec<DiffHunk>, String> {
             None => continue,
         };
 
-        let old_start = captures
-            .get(1)
-            .and_then(|value| value.as_str().parse::<usize>().ok())
-            .ok_or_else(|| format!("invalid hunk header: {line}"))?;
+        let old_start = parse_hunk_header_usize(captures.get(1).map(|value| value.as_str()), line)?;
+        let old_count = parse_hunk_count(captures.get(2).map(|value| value.as_str()), line)?;
+        let new_start = parse_hunk_header_usize(captures.get(3).map(|value| value.as_str()), line)?;
+        let new_count = parse_hunk_count(captures.get(4).map(|value| value.as_str()), line)?;
 
         let mut hunk_lines = Vec::new();
         while let Some(next) = lines.peek() {
@@ -87,6 +122,9 @@ fn parse_unified_diff(diff_text: &str) -> Result<Vec<DiffHunk>, String> {
 
         hunks.push(DiffHunk {
             old_start,
+            old_count,
+            new_start,
+            new_count,
             lines: hunk_lines,
         });
     }
@@ -96,6 +134,20 @@ fn parse_unified_diff(diff_text: &str) -> Result<Vec<DiffHunk>, String> {
     }
 
     Ok(hunks)
+}
+
+fn parse_hunk_header_usize(raw: Option<&str>, line: &str) -> Result<usize, String> {
+    raw.and_then(|value| value.parse::<usize>().ok())
+        .ok_or_else(|| format!("invalid hunk header: {line}"))
+}
+
+fn parse_hunk_count(raw: Option<&str>, line: &str) -> Result<usize, String> {
+    match raw {
+        Some(value) => value
+            .parse::<usize>()
+            .map_err(|_| format!("invalid hunk header: {line}")),
+        None => Ok(1),
+    }
 }
 
 fn apply_unified_diff(original: &str, hunks: &[DiffHunk]) -> Result<String, String> {

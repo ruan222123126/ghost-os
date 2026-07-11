@@ -1,0 +1,183 @@
+.runtime-menu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.runtime-menu-scrim.is-closing {
+  pointer-events: none;
+}
+
+.runtime-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 50;
+  width: min(280px, calc(100vw - 28px));
+  border: 1px solid #edf0f4;
+  border-radius: 28px;
+  padding: 12px 0;
+  color: #202124;
+  background: #ffffff;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+  transform-origin: top left;
+  will-change: opacity, transform, clip-path;
+}
+
+.runtime-menu.is-open {
+  animation: runtime-menu-enter 180ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+.runtime-menu.is-closing {
+  pointer-events: none;
+  animation: runtime-menu-exit 150ms ease both;
+}
+
+@keyframes runtime-menu-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+    clip-path: inset(0 0 18px 0 round 28px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    clip-path: inset(0 0 0 0 round 28px);
+  }
+}
+
+@keyframes runtime-menu-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    clip-path: inset(0 0 0 0 round 28px);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+    clip-path: inset(0 0 18px 0 round 28px);
+  }
+}
+
+.runtime-agent-options,
+.runtime-menu-options {
+  display: flex;
+  flex-direction: column;
+}
+
+.runtime-agent-options {
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.runtime-agent-options button,
+.runtime-menu-option {
+  width: 100%;
+  min-height: 64px;
+  padding: 12px 20px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  color: #202124;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.runtime-agent-options button:hover,
+.runtime-agent-options button:focus-visible,
+.runtime-agent-options button.is-selected,
+.runtime-menu-option:hover,
+.runtime-menu-option:focus-visible,
+.runtime-menu-option.is-selected {
+  background: #f8fafc;
+}
+
+.runtime-menu-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.runtime-check {
+  width: 20px;
+  min-width: 20px;
+  padding-top: 2px;
+  display: inline-flex;
+  justify-content: center;
+  color: #202124;
+}
+
+.runtime-option-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.runtime-option-copy strong,
+.runtime-option-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtime-option-copy strong {
+  color: #202124;
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.runtime-option-copy span {
+  margin-top: 4px;
+  color: #6b7280;
+  font-size: 0.82rem;
+  line-height: 1.2;
+}
+
+@media (prefers-color-scheme: dark) {
+  .runtime-menu {
+    border-color: rgba(63, 63, 70, 0.5);
+    color: #e8eaed;
+    background: #1e1f20;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  }
+
+  .runtime-menu-option,
+  .runtime-agent-options button,
+  .runtime-option-copy strong,
+  .runtime-check {
+    color: #e8eaed;
+  }
+
+  .runtime-agent-options {
+    border-bottom-color: rgba(63, 63, 70, 0.5);
+  }
+
+  .runtime-agent-options button:hover,
+  .runtime-agent-options button:focus-visible,
+  .runtime-agent-options button.is-selected,
+  .runtime-menu-option:hover,
+  .runtime-menu-option:focus-visible,
+  .runtime-menu-option.is-selected {
+    background: rgba(39, 39, 42, 0.5);
+  }
+
+  .runtime-option-copy span {
+    color: #a3a7ad;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .runtime-menu.is-open,
+  .runtime-menu.is-closing {
+    animation: none;
+  }
+}

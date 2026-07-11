@@ -1,0 +1,121 @@
+.sheet-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  border: 0;
+  padding: 0;
+  background: rgba(0, 0, 0, 0.4);
+  cursor: default;
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transition: opacity 260ms ease;
+}
+
+.sheet-scrim.is-open {
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+}
+
+.action-sheet {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 70;
+  border-radius: 32px 32px 0 0;
+  padding: 16px 8px max(32px, env(safe-area-inset-bottom));
+  color: #202124;
+  background: #ffffff;
+  box-shadow: 0 -18px 44px rgba(31, 41, 55, 0.22);
+  transform: translateY(104%);
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    transform 300ms ease-out,
+    visibility 0s linear 300ms;
+  will-change: transform;
+}
+
+.action-sheet.is-open {
+  transform: translateY(0);
+  visibility: visible;
+  pointer-events: auto;
+  transition: transform 300ms ease-out;
+}
+
+.sheet-handle {
+  width: 32px;
+  height: 4px;
+  border-radius: 999px;
+  margin: 0 auto 14px;
+  background: #d1d5db;
+}
+
+.action-sheet-list {
+  display: grid;
+  gap: 2px;
+}
+
+.action-sheet-button {
+  width: 100%;
+  min-height: 56px;
+  border-radius: 16px;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  color: #202124;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    opacity 140ms ease;
+}
+
+.action-sheet-button:hover,
+.action-sheet-button:focus-visible {
+  background: #f3f4f6;
+}
+
+.action-sheet-button:disabled {
+  opacity: 0.45;
+}
+
+.action-sheet-button .ui-icon {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+}
+
+.action-sheet-button span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 1rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  .action-sheet {
+    border-color: rgba(63, 63, 70, 0.5);
+    color: #e8eaed;
+    background: #1e1f20;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  }
+
+  .action-sheet-button {
+    color: #e8eaed;
+  }
+
+  .action-sheet-button:hover,
+  .action-sheet-button:focus-visible {
+    background: rgba(39, 39, 42, 0.5);
+  }
+
+  .sheet-handle {
+    background: #52525b;
+  }
+}

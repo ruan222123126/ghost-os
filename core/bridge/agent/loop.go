@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"ghost-os/bridge/llm"
+	"ghost-os/bridge/streaming"
 	"ghost-os/bridge/tools"
 )
 
@@ -18,11 +18,18 @@ type Completer interface {
 type ToolCatalog = tools.ToolCatalog
 
 // Agent 只编排对话循环，不绑定具体 Provider/Tool 实现。
+// Agent 非并发安全，调用方需自行串行化或加锁保护。
 type Agent struct {
-	completer Completer
-	tools     ToolCatalog
-	history   *History
-	maxTurns  int
+	completer              Completer
+	tools                  ToolCatalog
+	responseOptions        llm.ResponseOptions
+	assistantTextHandlers  []AssistantTextHandler
+	beforeCompletion       BeforeCompletionHook
+	strictToolCallProtocol bool
+	history                *History
+	maxTurns               int
+	completionRetryPolicy  *CompletionRetryPolicy
+	toolChoice             string
 
 	initialHistoryLen int
 	lastTurn          int
@@ -30,6 +37,8 @@ type Agent struct {
 }
 
 const maxConsecutiveNonExecutableToolCallTurns = 3
+
+type BeforeCompletionHook func(context.Context, int, *History) error
 
 // ErrAwaitingHuman 表示 ask_human 已发起问题，当前回合需要等待用户输入。
 type ErrAwaitingHuman struct {
@@ -41,6 +50,28 @@ type ErrAwaitingHuman struct {
 
 func (e *ErrAwaitingHuman) Error() string {
 	return fmt.Sprintf("awaiting human input: question_id=%s", strings.TrimSpace(e.QuestionID))
+}
+
+// ErrIterationHandoff tells the outer orchestrator to end this worker turn
+// and continue or finish the structured handoff loop.
+type ErrIterationHandoff struct {
+	Did            string
+	Remaining      string
+	FailedAttempts []string
+	NextStep       string
+	Completed      bool
+	FinalMessage   string
+	FinalChangeLog string
+}
+
+func (e *ErrIterationHandoff) Error() string {
+	if e == nil {
+		return "iteration handoff"
+	}
+	if e.Completed {
+		return "iteration completed"
+	}
+	return "iteration handoff"
 }
 
 func NewAgent(completer Completer, toolCatalog ToolCatalog, systemPrompt string, maxTurns int) *Agent {
@@ -72,178 +103,119 @@ func (a *Agent) SetStreamLifecyclePayloadBuilder(builder StreamLifecyclePayloadB
 	a.streamLifecycle = builder
 }
 
+func (a *Agent) AddAssistantTextHandler(handler AssistantTextHandler) {
+	if a == nil {
+		return
+	}
+	if handler == nil {
+		return
+	}
+	a.assistantTextHandlers = append(a.assistantTextHandlers, handler)
+}
+
+func (a *Agent) SetBeforeCompletionHook(hook BeforeCompletionHook) {
+	if a == nil {
+		return
+	}
+	a.beforeCompletion = hook
+}
+
+func (a *Agent) SetStrictToolCallProtocol(strict bool) {
+	if a == nil {
+		return
+	}
+	a.strictToolCallProtocol = strict
+}
+
+func (a *Agent) SetResponseOptions(options llm.ResponseOptions) {
+	if a == nil {
+		return
+	}
+	a.responseOptions = llm.CloneResponseOptions(options)
+}
+
+func (a *Agent) SetToolChoice(choice string) {
+	if a == nil {
+		return
+	}
+	a.toolChoice = strings.TrimSpace(choice)
+}
+
+func (a *Agent) SetCompletionRetryPolicy(policy CompletionRetryPolicy) {
+	if a == nil {
+		return
+	}
+	cloned := policy
+	a.completionRetryPolicy = &cloned
+}
+
 // Run 负责循环与退出条件；单步执行下沉给独立协作者处理。
 func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
-	return a.runWithSink(ctx, userMessage, "", nil)
+	return a.RunMessage(ctx, llm.Message{
+		Role: llm.RoleUser,
+		Text: userMessage,
+	})
 }
 
 // RunWithTraceID 允许调用方注入请求级 trace_id，保障跨层链路追踪一致。
 func (a *Agent) RunWithTraceID(ctx context.Context, userMessage string, traceID string) (string, error) {
-	return a.runWithSink(ctx, userMessage, traceID, nil)
+	return a.RunMessageWithTraceID(ctx, llm.Message{
+		Role: llm.RoleUser,
+		Text: userMessage,
+	}, traceID)
 }
 
-func (a *Agent) RunStream(ctx context.Context, userMessage string, sink EventSink) (string, error) {
-	return a.runWithSink(ctx, userMessage, "", sink)
+func (a *Agent) RunMessage(ctx context.Context, userInput llm.Message) (string, error) {
+	return a.runWithSink(ctx, userInput, "", nil)
 }
 
-func (a *Agent) RunStreamWithTraceID(ctx context.Context, userMessage string, traceID string, sink EventSink) (string, error) {
-	return a.runWithSink(ctx, userMessage, traceID, sink)
+func (a *Agent) RunMessageWithTraceID(ctx context.Context, userInput llm.Message, traceID string) (string, error) {
+	return a.runWithSink(ctx, userInput, traceID, nil)
 }
 
-func (a *Agent) runWithSink(ctx context.Context, userMessage string, traceID string, sink EventSink) (string, error) {
-	traceID = strings.TrimSpace(traceID)
-	if traceID == "" {
-		traceID = fmt.Sprintf("agent-%d", time.Now().UnixNano())
+func (a *Agent) RunMessageStreamWithTraceID(ctx context.Context, userInput llm.Message, traceID string, sink streaming.Sink) (string, error) {
+	return a.runWithSink(ctx, userInput, traceID, sink)
+}
+
+func (a *Agent) runWithSink(ctx context.Context, userInput llm.Message, traceID string, sink streaming.Sink) (string, error) {
+	state, err := newAgentRunState(a, sink, traceID)
+	if err != nil {
+		runErr := fmt.Errorf("initialize agent runtime: %w", err)
+		if sink != nil {
+			if emitErr := state.terminalRunError(ctx, 0, runErr); emitErr != nil {
+				if errors.Is(emitErr, runErr) {
+					return "", runErr
+				}
+				return "", errors.Join(runErr, fmt.Errorf("emit runtime initialization error event: %w", emitErr))
+			}
+		}
+		return "", runErr
 	}
-
-	events := newAgentEventEmitter(sink)
-	turnHistory := a.history.Clone()
-	completion := newCompletionRunner(a.completer, a.tools, turnHistory)
-	toolCalls := newToolCallExecutor(a.tools, turnHistory, nil, events)
-
-	if err := events.runStarted(ctx, traceID, a.streamLifecycle); err != nil {
+	if err := state.events.runStarted(ctx, state.traceID, state.lifecycle); err != nil {
 		return "", err
 	}
 
-	appendUserMessage(turnHistory, userMessage)
-	consecutiveNonExecutableToolCallTurns := 0
+	appendUserMessage(state.history, userInput)
 	a.lastTurn = 0
 
 	for turn := 0; turn < a.maxTurns; turn++ {
-		a.lastTurn = turn
-		resp, err := completion.complete(ctx, sink, traceID, turn)
+		outcome, err := a.runTurn(ctx, turn, &state)
 		if err != nil {
-			runErr := fmt.Errorf("trace_id=%s turn=%d complete_once: %w", traceID, turn, err)
-			return "", events.terminalError(ctx, traceID, turn, AssistantStepID(turn), runErr)
+			return "", err
 		}
-
-		msg := resp.Message
-		finishReason := resp.FinishReason
-		switch finishReason {
-		case llm.FinishStop:
-			acceptAssistantTurn(turnHistory, resp)
-			a.commitTurn(turnHistory)
-			output := a.handleAssistantStop(msg)
-			if err := events.terminalSuccess(ctx, traceID, turn, output, a.streamLifecycle); err != nil {
-				return "", err
-			}
-			return output, nil
-		case llm.FinishToolCalls:
-			sanitizedMsg, issues := sanitizeAssistantToolCalls(msg)
-			if len(issues) > 0 {
-				if err := toolCalls.reportInvalidCalls(ctx, traceID, turn, issues); err != nil {
-					return "", err
-				}
-			}
-
-			stats := toolCallTurnStats{totalCalls: len(msg.ToolCalls)}
-			if len(issues) > 0 {
-				turnHistory.SetConversationState(llm.ConversationState{})
-			}
-			if len(sanitizedMsg.ToolCalls) == 0 {
-				turnHistory.Append(invalidToolCallAssistantMessage(msg, issues))
-				consecutiveNonExecutableToolCallTurns++
-				if consecutiveNonExecutableToolCallTurns >= maxConsecutiveNonExecutableToolCallTurns {
-					runErr := fmt.Errorf("trace_id=%s turn=%d repeated non-executable tool_calls; aborting tool-call loop", traceID, turn)
-					return "", events.terminalError(ctx, traceID, turn, AssistantStepID(turn), runErr)
-				}
-				continue
-			}
-
-			respToAccept := *resp
-			respToAccept.Message = sanitizedMsg
-			if len(issues) > 0 {
-				respToAccept.ConversationState = llm.ConversationState{}
-			}
-			acceptAssistantTurn(turnHistory, &respToAccept)
-
-			var err error
-			stats, err = toolCalls.execute(ctx, traceID, turn, sanitizedMsg.ToolCalls)
-			if err != nil {
-				if isEventEmitError(err) {
-					return "", err
-				}
-				var awaitingErr *ErrAwaitingHuman
-				if errors.As(err, &awaitingErr) {
-					a.commitTurn(turnHistory)
-					return "", err
-				}
-				runErr := fmt.Errorf("trace_id=%s turn=%d handle_tool_calls: %w", traceID, turn, err)
-				return "", events.terminalError(ctx, traceID, turn, AssistantStepID(turn), runErr)
-			}
-			if stats.nonExecutable() {
-				consecutiveNonExecutableToolCallTurns++
-			} else {
-				consecutiveNonExecutableToolCallTurns = 0
-			}
-			// 防止模型反复生成不可执行的 tool_call（空参数/缺失工具）导致无效循环。
-			if consecutiveNonExecutableToolCallTurns >= maxConsecutiveNonExecutableToolCallTurns {
-				runErr := fmt.Errorf("trace_id=%s turn=%d repeated non-executable tool_calls; aborting tool-call loop", traceID, turn)
-				return "", events.terminalError(ctx, traceID, turn, AssistantStepID(turn), runErr)
-			}
-		case llm.FinishLength:
-			content := strings.TrimSpace(msg.Text)
-			if content != "" {
-				acceptAssistantTurn(turnHistory, resp)
-				a.commitTurn(turnHistory)
-				if err := events.terminalSuccess(ctx, traceID, turn, content, a.streamLifecycle); err != nil {
-					return "", err
-				}
-				return content, nil
-			}
-			runErr := fmt.Errorf("trace_id=%s turn=%d finish_reason=%q with empty content", traceID, turn, finishReason)
-			return "", events.terminalError(ctx, traceID, turn, AssistantStepID(turn), runErr)
-		default:
-			runErr := fmt.Errorf("trace_id=%s turn=%d unsupported finish_reason: %q", traceID, turn, finishReason)
-			return "", events.terminalError(ctx, traceID, turn, AssistantStepID(turn), runErr)
+		if outcome.done {
+			return outcome.output, nil
 		}
 	}
 
 	if a.maxTurns > 0 {
 		a.lastTurn = a.maxTurns - 1
 	}
-	runErr := fmt.Errorf("trace_id=%s max turns exceeded: %d", traceID, a.maxTurns)
-	return "", events.terminalError(ctx, traceID, a.lastTurn, AssistantStepID(a.lastTurn), runErr)
+	return "", state.maxTurnsExceeded(ctx, a.lastTurn, a.maxTurns)
 }
 
-func (a *Agent) commitTurn(history *History) {
-	if a == nil || history == nil {
-		return
-	}
-	a.history = history
-}
-
-// appendUserMessage 只负责把用户输入追加到会话历史。
-func appendUserMessage(history *History, userMessage string) {
-	if history == nil {
-		return
-	}
-
-	trimmed := strings.TrimSpace(userMessage)
-	if trimmed == "" {
-		return
-	}
-
-	history.Append(llm.Message{
-		Role: llm.RoleUser,
-		Text: trimmed,
-	})
-}
-
-func acceptAssistantTurn(history *History, resp *llm.CompletionResponse) {
-	if history == nil || resp == nil {
-		return
-	}
-
-	history.Append(resp.Message)
-	history.SetConversationState(resp.ConversationState)
-}
-
-func (a *Agent) handleAssistantStop(msg llm.Message) string {
-	return msg.Text
-}
-
-// GetNewMessages 返回 Agent 初始化后已提交的新增会话消息。
+// GetNewMessages 返回 Agent 初始化以来（或上次 ResetNewMessages 以来）已提交的新增会话消息。
+// 注意：该方法不会“消费”消息；如需按增量消费，请在处理后调用 ResetNewMessages。
 func (a *Agent) GetNewMessages() []llm.Message {
 	if a == nil || a.history == nil {
 		return nil
@@ -258,6 +230,14 @@ func (a *Agent) GetNewMessages() []llm.Message {
 	}
 
 	return llm.CloneMessages(messages[a.initialHistoryLen:])
+}
+
+// ResetNewMessages 将“新增消息”的基准推进到当前历史末尾，用于按增量消费 GetNewMessages。
+func (a *Agent) ResetNewMessages() {
+	if a == nil || a.history == nil {
+		return
+	}
+	a.initialHistoryLen = a.history.Len()
 }
 
 func (a *Agent) LastTurn() int {

@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Ghost-OS Session Env Import
+Comment=Import graphical session variables for Ghost-OS systemd user services
+Exec=__ROOT__/scripts/autostart/import-session-env.sh
+X-GNOME-Autostart-enabled=true
+NoDisplay=true

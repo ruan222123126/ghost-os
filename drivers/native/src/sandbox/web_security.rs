@@ -66,10 +66,10 @@ pub(crate) fn fetch_and_convert_webpage(url: &Url, max_bytes: usize) -> Result<S
         return Err(format!("request failed with status {}", response.status()));
     }
 
-    if let Some(content_length) = response.content_length() {
-        if content_length > max_bytes as u64 {
-            return Err(format!("response too large (max {} bytes)", max_bytes));
-        }
+    if let Some(content_length) = response.content_length()
+        && content_length > max_bytes as u64
+    {
+        return Err(format!("response too large (max {} bytes)", max_bytes));
     }
 
     let mut body = Vec::new();

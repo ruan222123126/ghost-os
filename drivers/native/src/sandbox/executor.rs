@@ -2,9 +2,12 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use std::sync::{Arc, Mutex, OnceLock};
 
+use super::executor_bootstrap::{
+    STDOUT_SETUP_CODE, build_helper_bootstrap as render_helper_bootstrap,
+};
 use super::restrictions::{setup_restricted_imports, validate_script_safety};
 use super::tools::ToolsProxy;
-use super::{ExecutionResult, SandboxConfig, ToolCallLog};
+use super::{ExecutionResult, SCRIPT_EXEC_PRIVATE_TOOLS_NAME, SandboxConfig, ToolCallLog};
 
 pub struct PythonSandbox {
     config: SandboxConfig,
@@ -50,76 +53,42 @@ fn execute_script_blocking(
 
     Python::with_gil(|py| {
         let locals = PyDict::new_bound(py);
-        let tools_proxy = match Py::new(py, ToolsProxy::new(tool_calls_log.clone(), config.clone()))
-        {
-            Ok(proxy) => proxy,
-            Err(err) => {
-                return ExecutionResult {
-                    output: String::new(),
-                    tool_calls_log: Vec::new(),
-                    error: Some(format!("failed to create tools proxy: {err}")),
-                };
-            }
-        };
-        if let Err(err) = locals.set_item("tools", tools_proxy) {
-            return ExecutionResult {
-                output: String::new(),
-                tool_calls_log: Vec::new(),
-                error: Some(format!("failed to bind tools proxy: {err}")),
-            };
+        if let Err(err) = bind_private_tools(py, &locals, &tool_calls_log, config) {
+            return execution_error(String::new(), &tool_calls_log, err);
+        }
+        if let Err(err) = setup_stdout_capture(py, &locals) {
+            return execution_error(String::new(), &tool_calls_log, err);
         }
 
-        let stdout_setup = r#"
-import io
-import sys
-__ghost_old_stdout = sys.stdout
-__ghost_stdout_capture = io.StringIO()
-sys.stdout = __ghost_stdout_capture
-"#;
-        if let Err(err) = py.run_bound(stdout_setup, None, Some(&locals)) {
-            return ExecutionResult {
-                output: String::new(),
-                tool_calls_log: Vec::new(),
-                error: Some(format!("failed to setup stdout capture: {err}")),
-            };
-        }
-
-        let restrictions = match setup_restricted_imports(py, &config.allowed_modules) {
+        let restrictions = match setup_restricted_imports(py, &config.allowed_modules, &locals) {
             Ok(guard) => guard,
             Err(err) => {
-                let _ = py.run_bound(
-                    "import sys; sys.stdout = __ghost_old_stdout",
-                    None,
-                    Some(&locals),
+                restore_stdout_capture(py, &locals);
+                return execution_error(
+                    String::new(),
+                    &tool_calls_log,
+                    format!("failed to setup sandbox restrictions: {err}"),
                 );
-                return ExecutionResult {
-                    output: String::new(),
-                    tool_calls_log: Vec::new(),
-                    error: Some(format!("failed to setup sandbox restrictions: {err}")),
-                };
             }
         };
+        if let Err(err) = install_helper_bootstrap(py, &locals) {
+            let _ = restrictions.restore(py);
+            restore_stdout_capture(py, &locals);
+            return execution_error(String::new(), &tool_calls_log, err);
+        }
 
-        let run_result = py.run_bound(script, None, Some(&locals));
-
-        let output = py
-            .eval_bound("__ghost_stdout_capture.getvalue()", None, Some(&locals))
-            .and_then(|value| value.extract::<String>())
-            .unwrap_or_default();
+        let run_result = py.run_bound(script, Some(&locals), Some(&locals));
+        let output = captured_stdout(py, &locals);
 
         let _ = restrictions.restore(py);
-        let _ = py.run_bound(
-            "import sys; sys.stdout = __ghost_old_stdout",
-            None,
-            Some(&locals),
-        );
+        restore_stdout_capture(py, &locals);
 
         if let Err(err) = run_result {
-            return ExecutionResult {
+            return execution_error(
                 output,
-                tool_calls_log: snapshot_tool_calls_log(&tool_calls_log),
-                error: Some(format!("script execution error: {err}")),
-            };
+                &tool_calls_log,
+                format!("script execution error: {err}"),
+            );
         }
 
         ExecutionResult {
@@ -128,6 +97,63 @@ sys.stdout = __ghost_stdout_capture
             error: None,
         }
     })
+}
+
+fn bind_private_tools(
+    py: Python<'_>,
+    locals: &Bound<'_, PyDict>,
+    tool_calls_log: &Arc<Mutex<Vec<ToolCallLog>>>,
+    config: &SandboxConfig,
+) -> Result<(), String> {
+    let tools_proxy = Py::new(py, ToolsProxy::new(tool_calls_log.clone(), config.clone()))
+        .map_err(|err| format!("failed to create internal tools proxy: {err}"))?;
+    locals
+        .set_item(SCRIPT_EXEC_PRIVATE_TOOLS_NAME, tools_proxy)
+        .map_err(|err| format!("failed to bind internal tools proxy: {err}"))
+}
+
+fn setup_stdout_capture(py: Python<'_>, locals: &Bound<'_, PyDict>) -> Result<(), String> {
+    py.run_bound(STDOUT_SETUP_CODE, Some(locals), Some(locals))
+        .map_err(|err| format!("failed to setup stdout capture: {err}"))
+}
+
+fn install_helper_bootstrap(py: Python<'_>, locals: &Bound<'_, PyDict>) -> Result<(), String> {
+    py.run_bound(&build_helper_bootstrap(), Some(locals), Some(locals))
+        .map_err(|err| format!("failed to install sandbox helpers: {err}"))
+}
+
+fn build_helper_bootstrap() -> String {
+    render_helper_bootstrap(SCRIPT_EXEC_PRIVATE_TOOLS_NAME)
+}
+
+fn captured_stdout(py: Python<'_>, locals: &Bound<'_, PyDict>) -> String {
+    py.eval_bound(
+        "__ghost_stdout_capture.getvalue()",
+        Some(locals),
+        Some(locals),
+    )
+    .and_then(|value| value.extract::<String>())
+    .unwrap_or_default()
+}
+
+fn restore_stdout_capture(py: Python<'_>, locals: &Bound<'_, PyDict>) {
+    let _ = py.run_bound(
+        "import sys; sys.stdout = __ghost_old_stdout",
+        Some(locals),
+        Some(locals),
+    );
+}
+
+fn execution_error(
+    output: String,
+    tool_calls_log: &Arc<Mutex<Vec<ToolCallLog>>>,
+    error: String,
+) -> ExecutionResult {
+    ExecutionResult {
+        output,
+        tool_calls_log: snapshot_tool_calls_log(tool_calls_log),
+        error: Some(error),
+    }
 }
 
 fn snapshot_tool_calls_log(tool_calls_log: &Arc<Mutex<Vec<ToolCallLog>>>) -> Vec<ToolCallLog> {

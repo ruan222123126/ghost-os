@@ -1,0 +1,152 @@
+from __future__ import annotations
+
+from contract_codegen.catalog import collect_definitions, dereference_schema, target_name_map
+from contract_codegen.common import (
+    non_null_one_of_candidates,
+    object_additional_properties_schema,
+    object_has_declared_properties,
+    object_is_open,
+    schema_ref_name,
+)
+
+RUST_RESERVED_FIELDS = {"type", "if", "loop"}
+
+
+def _field_name(name: str) -> str:
+    return f"r#{name}" if name in RUST_RESERVED_FIELDS else name
+
+
+def _object_type(schema: dict, target_names: dict[str, str], prop_schema: dict) -> str:
+    if object_has_declared_properties(prop_schema):
+        raise ValueError(f"inline structured Rust object must be promoted to $defs: {prop_schema}")
+
+    additional = object_additional_properties_schema(prop_schema)
+    if additional is not None:
+        inner = _type_for_schema(schema, target_names, additional, required=True)
+        return f"BTreeMap<String, {inner}>"
+    if object_is_open(prop_schema):
+        return "BTreeMap<String, Value>"
+    raise ValueError(f"unsupported closed Rust object schema: {prop_schema}")
+
+
+def _inner_type(schema: dict, target_names: dict[str, str], prop_schema: dict) -> str:
+    if not prop_schema:
+        return "Value"
+
+    ref_value = prop_schema.get("$ref")
+    if ref_value:
+        ref_name = schema_ref_name(ref_value)
+        if ref_name in target_names:
+            return target_names[ref_name]
+        return _inner_type(schema, target_names, dereference_schema(schema, prop_schema))
+
+    schema_type = prop_schema.get("type")
+    if schema_type == "string":
+        return "String"
+    if schema_type == "boolean":
+        return "bool"
+    if schema_type == "integer":
+        return "i64"
+    if schema_type == "number":
+        return "f64"
+    if schema_type == "array":
+        inner = _type_for_schema(schema, target_names, prop_schema.get("items", {}), required=True)
+        return f"Vec<{inner}>"
+    if schema_type == "object":
+        return _object_type(schema, target_names, prop_schema)
+    raise ValueError(f"unsupported Rust schema: {prop_schema}")
+
+
+def _type_for_schema(schema: dict, target_names: dict[str, str], prop_schema: dict, *, required: bool) -> str:
+    if prop_schema.get("oneOf"):
+        non_null = non_null_one_of_candidates(prop_schema)
+        if len(non_null) != 1:
+            raise ValueError(f"unsupported Rust oneOf schema: {prop_schema}")
+        return f'Option<{_inner_type(schema, target_names, non_null[0])}>'
+
+    inner = _inner_type(schema, target_names, prop_schema)
+    return inner if required else f"Option<{inner}>"
+
+
+def _render_object(schema: dict, spec, target_names: dict[str, str]) -> str:
+    required = set(spec.definition.get("required", []))
+    lines = ["#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]", f"pub struct {spec.target_name} {{"]
+    for prop_name, prop_schema in spec.definition.get("properties", {}).items():
+        field_name = _field_name(prop_name)
+        if prop_name not in required:
+            lines.append("    #[serde(default)]")
+        if field_name != prop_name:
+            lines.append(f'    #[serde(rename = "{prop_name}")]')
+        field_type = _type_for_schema(schema, target_names, prop_schema, required=prop_name in required)
+        lines.append(f"    pub {field_name}: {field_type},")
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def _render_union(spec, target_names: dict[str, str]) -> str:
+    variants = spec.target_config.get("variants", {})
+    if not isinstance(variants, dict):
+        raise ValueError(f"missing Rust union variants for {spec.name}")
+    lines = [
+        "#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]",
+        "#[serde(untagged)]",
+        f"pub enum {spec.target_name} {{",
+    ]
+    for candidate in spec.definition.get("oneOf", []):
+        ref_name = schema_ref_name(candidate["$ref"])
+        lines.append(f"    {variants[ref_name]}({target_names[ref_name]}),")
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def render(schema: dict) -> str:
+    target_names = target_name_map(schema, "rust")
+    objects = "\n\n".join(
+        _render_object(schema, spec, target_names) for spec in collect_definitions(schema, "rust", kind="object")
+    )
+    unions = "\n\n".join(_render_union(spec, target_names) for spec in collect_definitions(schema, "rust", kind="union"))
+
+    return f'''// CODE GENERATED. DO NOT EDIT. Source: core/shared/schema.json
+// Source: core/shared/schema.json ({schema.get("$id", "")})
+
+use anyhow::{{Result, anyhow}};
+use serde::{{Deserialize, Serialize}};
+use std::collections::BTreeMap;
+use serde_json::Value;
+
+#[derive(Debug, Serialize)]
+pub struct ApiRequest<TParams> {{
+    pub action: &'static str,
+    pub params: TParams,
+    pub trace_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+}}
+
+#[derive(Debug, Deserialize)]
+pub struct ApiResponse<TPayload> {{
+    pub status: String,
+    pub payload: Option<TPayload>,
+    #[serde(default)]
+    pub error: String,
+}}
+
+impl<TPayload> ApiResponse<TPayload> {{
+    pub fn into_result(self) -> Result<TPayload> {{
+        if self.status == "success" {{
+            return self
+                .payload
+                .ok_or_else(|| anyhow!("bridge response payload is missing"));
+        }}
+        let message = self.error.trim();
+        if message.is_empty() {{
+            return Err(anyhow!("bridge returned an unknown error"));
+        }}
+        Err(anyhow!(message.to_string()))
+    }}
+}}
+
+{objects}
+
+{unions}
+'''

@@ -1,0 +1,769 @@
+// @vitest-environment jsdom
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { invoke } from "@tauri-apps/api/core";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { AgentMessageTaskPayload, OrchestrationTaskPayload, WorkflowTaskPayload } from "../mobileTypes";
+import { useMobileBridge } from "./useMobileBridge";
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn(),
+}));
+
+const SETTINGS_STORAGE_KEY = "ghost-os-mobile.settings";
+
+describe("useMobileBridge", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    vi.clearAllMocks();
+    vi.mocked(invoke).mockImplementation(async (command: string, args?: unknown) => {
+      if (command !== "bridge_bus_request") {
+        return {};
+      }
+
+      const request = bridgeBusRequestFromArgs(args);
+      return {
+        error: "",
+        payload: payloadForAction(request.action, request.params),
+        status: "success",
+      };
+    });
+  });
+
+  it("sends the persisted HTTP API token with bridge requests", async () => {
+    window.localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        apiToken: " 080906 ",
+        bridgeUrl: "http://100.80.12.34:8080",
+        connectionMode: "http",
+      }),
+    );
+
+    const { result } = renderHook(() => useMobileBridge());
+
+    await result.current.connectBridge();
+
+    await waitFor(() => {
+      expect(bridgeBusRequests().some((request) => request.action === "SESSIONS_LIST")).toBe(true);
+    });
+    expect(bridgeBusRequests().every((request) => request.apiToken === "080906")).toBe(true);
+    await waitFor(() => {
+      expect(storedSettings().lastSuccessfulConnection).toMatchObject({ apiToken: "080906" });
+    });
+  });
+
+  it("loads a full session through paginated SESSION_GET pages", async () => {
+    useHTTPSettings();
+    vi.mocked(invoke).mockImplementation(async (command: string, args?: unknown) => {
+      if (command !== "bridge_bus_request") {
+        return {};
+      }
+
+      const request = bridgeBusRequestFromArgs(args);
+      if (request.action !== "SESSION_GET") {
+        return {
+          error: "",
+          payload: payloadForAction(request.action, request.params),
+          status: "success",
+        };
+      }
+
+      return {
+        error: "",
+        payload: request.params.before === 3
+          ? sessionDetailPayload([
+            { index: 0, role: "user", text: "first" },
+            { index: 1, role: "assistant", text: "second" },
+          ], false)
+          : sessionDetailPayload([
+            { index: 3, role: "assistant", text: "fourth" },
+            { index: 2, role: "user", text: "third" },
+          ], true),
+        status: "success",
+      };
+    });
+
+    const { result } = renderHook(() => useMobileBridge());
+
+    const detail = await result.current.getFullSession("session-1");
+
+    expect(bridgeBusRequests().filter((request) => request.action === "SESSION_GET").map((request) => request.params)).toEqual([
+      { id: "session-1", limit: 200 },
+      { before: 3, id: "session-1", limit: 200 },
+    ]);
+    expect(detail.messages.map((message) => message.index)).toEqual([0, 1, 2, 3]);
+    expect(detail.page.has_more_before).toBe(false);
+  });
+
+  it("searches sessions through SESSIONS_SEARCH", async () => {
+    useHTTPSettings();
+    vi.mocked(invoke).mockImplementation(async (command: string, args?: unknown) => {
+      if (command !== "bridge_bus_request") {
+        return {};
+      }
+
+      const request = bridgeBusRequestFromArgs(args);
+      if (request.action !== "SESSIONS_SEARCH") {
+        return {
+          error: "",
+          payload: payloadForAction(request.action, request.params),
+          status: "success",
+        };
+      }
+
+      return {
+        error: "",
+        payload: [{
+          created_at: "2026-01-01T00:00:00.000Z",
+          id: "session-search",
+          message_count: 2,
+          title: "Search result",
+          token_count: 12,
+          updated_at: "2026-01-02T00:00:00.000Z",
+        }],
+        status: "success",
+      };
+    });
+
+    const { result } = renderHook(() => useMobileBridge());
+
+    const sessions = await result.current.searchSessions(" fulltext ");
+
+    expect(lastBridgeBusRequest("SESSIONS_SEARCH")?.params).toEqual({ query: "fulltext" });
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]?.id).toBe("session-search");
+  });
+
+  it("records the last successful HTTP connection after bridge connect succeeds", async () => {
+    window.localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        apiToken: " token ",
+        autoConnectEnabled: false,
+        bridgeUrl: "http://100.80.12.34:8080",
+        connectionMode: "http",
+      }),
+    );
+
+    const { result } = renderHook(() => useMobileBridge());
+
+    await result.current.connectBridge();
+
+    await waitFor(() => {
+      expect(storedSettings().lastSuccessfulConnection).toMatchObject({
+        apiToken: "token",
+        bridgeUrl: "http://100.80.12.34:8080",
+        connectionMode: "http",
+      });
+    });
+  });
+
+  it("keeps the previous successful connection when bridge connect fails", async () => {
+    window.localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        apiToken: "new-token",
+        autoConnectEnabled: false,
+        bridgeUrl: "http://new.example:8080",
+        connectionMode: "http",
+        lastSuccessfulConnection: {
+          apiToken: "old-token",
+          bridgeUrl: "http://old.example:8080",
+          connectionMode: "http",
+        },
+      }),
+    );
+    vi.mocked(invoke).mockImplementation(async (command: string, args?: unknown) => {
+      if (command !== "bridge_bus_request") {
+        return {};
+      }
+
+      const request = bridgeBusRequestFromArgs(args);
+      if (request.action === "CONFIG_GET") {
+        return {
+          error: "connect failed",
+          payload: {},
+          status: "error",
+        };
+      }
+      return {
+        error: "",
+        payload: payloadForAction(request.action, request.params),
+        status: "success",
+      };
+    });
+
+    const { result } = renderHook(() => useMobileBridge());
+
+    await result.current.connectBridge();
+
+    await waitFor(() => {
+      expect(result.current.connectionStatus.tone).toBe("error");
+    });
+    expect(storedSettings().lastSuccessfulConnection).toMatchObject({
+      apiToken: "old-token",
+      bridgeUrl: "http://old.example:8080",
+      connectionMode: "http",
+    });
+  });
+
+  it("auto connects with the last successful HTTP connection on startup", async () => {
+    window.localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        apiToken: "draft-token",
+        autoConnectEnabled: true,
+        bridgeUrl: "http://draft.example:8080",
+        connectionMode: "http",
+        lastSuccessfulConnection: {
+          apiToken: "last-token",
+          bridgeUrl: "http://last.example:8080",
+          connectionMode: "http",
+        },
+      }),
+    );
+
+    const { result } = renderHook(() => useMobileBridge());
+
+    await waitFor(() => {
+      expect(result.current.connectionStatus.tone).toBe("success");
+    });
+    const requests = bridgeBusRequests();
+    expect(requests.some((request) => request.action === "CONFIG_GET")).toBe(true);
+    expect(requests.every((request) => request.baseUrl === "http://last.example:8080")).toBe(true);
+    expect(requests.every((request) => request.apiToken === "last-token")).toBe(true);
+    expect(result.current.settings.bridgeUrl).toBe("http://last.example:8080");
+  });
+
+  it("does not auto connect when auto connect is off", async () => {
+    window.localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        autoConnectEnabled: false,
+        bridgeUrl: "http://last.example:8080",
+        connectionMode: "http",
+        lastSuccessfulConnection: {
+          bridgeUrl: "http://last.example:8080",
+          connectionMode: "http",
+        },
+      }),
+    );
+
+    renderHook(() => useMobileBridge());
+
+    await waitFor(() => {
+      expect(bridgeBusRequests()).toEqual([]);
+    });
+  });
+
+  it("does not fail bridge connection when skill management is unsupported", async () => {
+    window.localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        apiToken: "token",
+        bridgeUrl: "http://100.80.12.34:8080",
+        connectionMode: "http",
+      }),
+    );
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(invoke).mockImplementation(async (command: string, args?: unknown) => {
+      if (command !== "bridge_bus_request") {
+        return {};
+      }
+
+      const request = bridgeBusRequestFromArgs(args);
+      if (request.action === "SKILL_LIST") {
+        return {
+          error: 'unsupported action "SKILL_LIST", expected one of: AGENT_SEND|CONFIG_GET',
+          payload: {},
+          status: "error",
+        };
+      }
+      return {
+        error: "",
+        payload: payloadForAction(request.action, request.params),
+        status: "success",
+      };
+    });
+
+    try {
+      const { result } = renderHook(() => useMobileBridge());
+
+      await result.current.connectBridge();
+
+      await waitFor(() => {
+        expect(result.current.connectionStatus.tone).toBe("success");
+      });
+      await waitFor(() => {
+        expect(result.current.skillListError).toBe("电脑端不支持技能管理");
+      });
+      expect(result.current.config).toEqual({});
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it("requests user and orchestration task lists after bridge connection succeeds", async () => {
+    window.localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        apiToken: "token",
+        bridgeUrl: "http://100.80.12.34:8080",
+        connectionMode: "http",
+      }),
+    );
+
+    const { result } = renderHook(() => useMobileBridge());
+
+    await result.current.connectBridge();
+
+    await waitFor(() => {
+      expect(bridgeBusRequests().some((request) => request.action === "TASK_LIST")).toBe(true);
+    });
+    expect(bridgeBusRequests().filter((request) => request.action === "TASK_LIST").map((request) => request.params))
+      .toEqual([{ scope: "user" }, { scope: "orchestration" }]);
+  });
+
+  it("syncs remote providers to local after connect even when model following is off", async () => {
+    window.localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        apiToken: "token",
+        bridgeUrl: "http://100.80.12.34:8080",
+        connectionMode: "http",
+        remoteExecutionEnabled: false,
+      }),
+    );
+    vi.mocked(invoke).mockImplementation(async (command: string, args?: unknown) => {
+      if (command !== "bridge_bus_request") {
+        return {};
+      }
+
+      const request = bridgeBusRequestFromArgs(args);
+      return {
+        error: "",
+        payload: request.action === "CONFIG_PROVIDERS_GET"
+          ? remoteProviderListPayload()
+          : payloadForAction(request.action, request.params),
+        status: "success",
+      };
+    });
+
+    const { result } = renderHook(() => useMobileBridge());
+
+    await result.current.connectBridge();
+
+    await waitFor(() => {
+      expect(bridgeBusRequests().some((request) => request.action === "CONFIG_PROVIDERS_GET")).toBe(true);
+    });
+    await waitFor(() => {
+      expect(result.current.localProviderList?.providers[0]).toMatchObject({
+        name: "Remote OpenAI",
+        provider_id: "remote-provider-1",
+      });
+    });
+  });
+
+  it("uses the synced computer provider for local sends when model following is off", async () => {
+    window.localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        apiToken: "token",
+        bridgeUrl: "http://100.80.12.34:8080",
+        connectionMode: "http",
+        remoteExecutionEnabled: false,
+      }),
+    );
+    vi.mocked(invoke).mockImplementation(async (command: string, args?: unknown) => {
+      if (command === "mobile_local_llm_send") {
+        return {
+          message: "local reply",
+          model: "gpt-4o",
+          provider_id: "remote-provider-1",
+        };
+      }
+      if (command !== "bridge_bus_request") {
+        return {};
+      }
+
+      const request = bridgeBusRequestFromArgs(args);
+      return {
+        error: "",
+        payload: request.action === "CONFIG_PROVIDERS_GET"
+          ? remoteProviderListPayload()
+          : payloadForAction(request.action, request.params),
+        status: "success",
+      };
+    });
+    const onReply = vi.fn();
+    const onSessionId = vi.fn();
+    const onStatus = vi.fn();
+    const { result } = renderHook(() => useMobileBridge());
+
+    await act(async () => {
+      await result.current.connectBridge();
+    });
+    await waitFor(() => {
+      expect(result.current.providerList?.providers[0]).toMatchObject({
+        provider_id: "remote-provider-1",
+      });
+    });
+
+    let sent = { ok: false };
+    await act(async () => {
+      sent = await result.current.sendAgentMessage({
+        history: [],
+        message: "hello",
+        onReply,
+        onSessionId,
+        onStatus,
+      });
+    });
+
+    expect(sent).toMatchObject({ mode: "local", ok: true });
+    const localSend = vi.mocked(invoke).mock.calls.find(([command]) => command === "mobile_local_llm_send");
+    expect(localSend?.[1]).toMatchObject({
+      request: {
+        model: "gpt-4o",
+        providerId: "remote-provider-1",
+      },
+    });
+    expect(onReply).toHaveBeenCalledWith(expect.objectContaining({ message: "local reply" }));
+    expect(onStatus).not.toHaveBeenCalledWith(expect.objectContaining({ text: "请先配置 provider 和模型" }));
+  });
+
+  it("switches the local model without updating computer config when model following is off", async () => {
+    useHTTPSettings();
+    const { result } = renderHook(() => useMobileBridge());
+
+    await act(async () => {
+      await result.current.switchModel(" phone-model ");
+    });
+
+    await waitFor(() => {
+      expect(storedSettings().localModel).toBe("phone-model");
+    });
+    expect(bridgeBusRequests().some((request) => request.action === "CONFIG_UPDATE")).toBe(false);
+  });
+
+  it("refreshTasks requests user tasks and keeps agent message and workflow tasks", async () => {
+    useHTTPSettings();
+    vi.mocked(invoke).mockImplementation(async (command: string, args?: unknown) => {
+      if (command !== "bridge_bus_request") {
+        return {};
+      }
+
+      const request = bridgeBusRequestFromArgs(args);
+      return {
+        error: "",
+        payload: request.action === "TASK_LIST"
+          ? [
+            loopTask({ id: "loop-1", enabled: true }),
+            loopTask({ id: "text-1", agent_mode: "single" }),
+            workflowTask({ id: "workflow-1" }),
+            { id: "orchestration-1", task_kind: "orchestration" },
+            { id: "unknown-1", task_kind: "unknown" },
+          ]
+          : payloadForAction(request.action, request.params),
+        status: "success",
+      };
+    });
+    const { result } = renderHook(() => useMobileBridge());
+
+    await result.current.refreshTasks();
+
+    expect(bridgeBusRequests().find((request) => request.action === "TASK_LIST")?.params).toEqual({ scope: "user" });
+    await waitFor(() => {
+      expect(result.current.taskList?.map((task) => task.id)).toEqual(["loop-1", "text-1", "workflow-1"]);
+    });
+  });
+
+  it("setTaskEnabled, runTaskNow, and deleteTask send the expected task actions", async () => {
+    useHTTPSettings();
+    const { result } = renderHook(() => useMobileBridge());
+
+    await result.current.setTaskEnabled("loop-1", false);
+    await result.current.runTaskNow("loop-1");
+    await result.current.deleteTask("loop-1");
+
+    expect(lastBridgeBusRequest("TASK_UPDATE")?.params).toEqual({
+      id: "loop-1",
+      scope: "user",
+      enabled: false,
+    });
+    expect(lastBridgeBusRequest("TASK_RUN_NOW")?.params).toEqual({
+      id: "loop-1",
+      scope: "user",
+      start_only: true,
+    });
+    expect(lastBridgeBusRequest("TASK_DELETE")?.params).toEqual({
+      id: "loop-1",
+      scope: "user",
+    });
+  });
+
+  it("refreshOrchestrations requests orchestration tasks only", async () => {
+    useHTTPSettings();
+    vi.mocked(invoke).mockImplementation(async (command: string, args?: unknown) => {
+      if (command !== "bridge_bus_request") {
+        return {};
+      }
+
+      const request = bridgeBusRequestFromArgs(args);
+      return {
+        error: "",
+        payload: request.action === "TASK_LIST"
+          ? [
+            orchestrationTask({ id: "orchestration-1" }),
+            orchestrationTask({ id: "orchestration-2", enabled: false }),
+            loopTask({ id: "loop-1" }),
+            { id: "unknown-1", task_kind: "unknown" },
+          ]
+          : payloadForAction(request.action, request.params),
+        status: "success",
+      };
+    });
+    const { result } = renderHook(() => useMobileBridge());
+
+    await result.current.refreshOrchestrations();
+
+    expect(bridgeBusRequests().find((request) => request.action === "TASK_LIST")?.params)
+      .toEqual({ scope: "orchestration" });
+    await waitFor(() => {
+      expect(result.current.orchestrationList?.map((task) => task.id)).toEqual(["orchestration-1", "orchestration-2"]);
+    });
+  });
+
+  it("setOrchestrationEnabled, runTaskNow, and deleteOrchestration send orchestration-scoped task actions", async () => {
+    useHTTPSettings();
+    const { result } = renderHook(() => useMobileBridge());
+
+    await result.current.setOrchestrationEnabled("orchestration-1", false);
+    await result.current.runTaskNow("orchestration-1", "orchestration");
+    await result.current.deleteOrchestration("orchestration-1");
+
+    expect(lastBridgeBusRequest("TASK_UPDATE")?.params).toEqual({
+      id: "orchestration-1",
+      scope: "orchestration",
+      enabled: false,
+    });
+    expect(lastBridgeBusRequest("TASK_RUN_NOW")?.params).toEqual({
+      id: "orchestration-1",
+      scope: "orchestration",
+      start_only: true,
+    });
+    expect(lastBridgeBusRequest("TASK_DELETE")?.params).toEqual({
+      id: "orchestration-1",
+      scope: "orchestration",
+    });
+    expect(bridgeBusRequests().some((request) => request.action === "TASK_CREATE")).toBe(false);
+  });
+});
+
+interface BridgeBusRequest {
+  action: string;
+  apiToken?: string;
+  baseUrl: string;
+  params: Record<string, unknown>;
+}
+
+function storedSettings(): Record<string, unknown> {
+  return JSON.parse(window.localStorage.getItem(SETTINGS_STORAGE_KEY) || "{}") as Record<string, unknown>;
+}
+
+function bridgeBusRequests(): BridgeBusRequest[] {
+  return vi
+    .mocked(invoke)
+    .mock.calls.filter(([command]) => command === "bridge_bus_request")
+    .map(([, args]) => bridgeBusRequestFromArgs(args));
+}
+
+function lastBridgeBusRequest(action: string): BridgeBusRequest | undefined {
+  const requests = bridgeBusRequests().filter((request) => request.action === action);
+  return requests[requests.length - 1];
+}
+
+function bridgeBusRequestFromArgs(args: unknown): BridgeBusRequest {
+  const record = args as { request?: BridgeBusRequest };
+  if (!record.request) {
+    throw new Error("bridge_bus_request args must include request");
+  }
+  return record.request;
+}
+
+function payloadForAction(action: string, params: Record<string, unknown> = {}): unknown {
+  switch (action) {
+    case "CONFIG_GET":
+      return {};
+    case "CONFIG_PROVIDERS_GET":
+      return { active_provider: "", providers: [] };
+    case "SESSIONS_LIST":
+    case "SESSIONS_SEARCH":
+    case "SKILL_LIST":
+    case "TASK_LIST":
+      return [];
+    case "TASK_UPDATE":
+      if (params.scope === "orchestration") {
+        return orchestrationTaskFromParams(params);
+      }
+      return loopTaskFromParams(params);
+    case "TASK_RUN_NOW":
+    case "TASK_DELETE":
+      return {};
+    default:
+      return {};
+  }
+}
+
+function remoteProviderListPayload(): Record<string, unknown> {
+  return {
+    active_provider: "Remote OpenAI",
+    active_provider_id: "remote-provider-1",
+    providers: [{
+      api_key_set: true,
+      base_url: "https://api.openai.com/v1",
+      models: ["gpt-4o"],
+      name: "Remote OpenAI",
+      provider_id: "remote-provider-1",
+      type: "openai",
+      updated_at: "2026-01-01T00:00:00.000Z",
+    }],
+    provider_sync_records: [{
+      api_key_set: true,
+      base_url: "https://api.openai.com/v1",
+      models: ["gpt-4o"],
+      name: "Remote OpenAI",
+      provider_id: "remote-provider-1",
+      type: "openai",
+      updated_at: "2026-01-01T00:00:00.000Z",
+    }],
+  };
+}
+
+function sessionDetailPayload(messages: Array<Record<string, unknown>>, hasMoreBefore: boolean): Record<string, unknown> {
+  return {
+    created_at: "2026-01-01T00:00:00.000Z",
+    id: "session-1",
+    message_count: 4,
+    messages,
+    page: {
+      has_more_before: hasMoreBefore,
+      limit: 200,
+      next_before: hasMoreBefore ? 3 : null,
+    },
+    title: "Session 1",
+    token_count: 10,
+    updated_at: "2026-01-02T00:00:00.000Z",
+  };
+}
+
+function useHTTPSettings(): void {
+  window.localStorage.setItem(
+    SETTINGS_STORAGE_KEY,
+    JSON.stringify({
+      apiToken: "token",
+      bridgeUrl: "http://100.80.12.34:8080",
+      connectionMode: "http",
+    }),
+  );
+}
+
+function loopTask(overrides: Partial<AgentMessageTaskPayload> = {}): AgentMessageTaskPayload {
+  return {
+    id: "loop-1",
+    message: "检查状态",
+    agent_mode: "relay",
+    relay: {
+      stop_policy: "max_rounds",
+      max_rounds: 4,
+      execution_timeout_ms: 0,
+    },
+    task_kind: "agent_message",
+    schedule_type: "interval",
+    interval_seconds: 300,
+    enabled: true,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function workflowTask(overrides: Partial<WorkflowTaskPayload> = {}): WorkflowTaskPayload {
+  return {
+    id: "workflow-1",
+    task_kind: "workflow",
+    workflow: {
+      nodes: [
+        { id: "start", type: "start" },
+        { id: "agent", type: "agent" },
+      ],
+      edges: [],
+    },
+    schedule_type: "interval",
+    interval_seconds: 300,
+    enabled: true,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function orchestrationTask(overrides: Partial<OrchestrationTaskPayload> = {}): OrchestrationTaskPayload {
+  return {
+    id: "orchestration-1",
+    name: "客服编排",
+    task_kind: "orchestration",
+    orchestration: {
+      nodes: [
+        {
+          id: "group-1",
+          type: "group",
+          group: {
+            title: "一线",
+            shared_context: "",
+            speaking_mode: "sequential",
+            max_rounds: 4,
+          },
+        },
+        {
+          id: "agent-1",
+          type: "agent",
+          agent: {
+            title: "分析",
+            message: "分析问题",
+          },
+        },
+      ],
+      edges: [
+        { from_node_id: "group-1", to_node_id: "agent-1", kind: "member" },
+      ],
+    },
+    schedule_type: "interval",
+    interval_seconds: 300,
+    enabled: true,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function loopTaskFromParams(params: Record<string, unknown>): AgentMessageTaskPayload {
+  const cronExpr = typeof params.cron_expr === "string" ? params.cron_expr : undefined;
+  const intervalSeconds = typeof params.interval_seconds === "number" ? params.interval_seconds : undefined;
+  return loopTask({
+    id: typeof params.id === "string" ? params.id : "loop-created",
+    message: typeof params.message === "string" ? params.message : "检查状态",
+    relay: params.relay as AgentMessageTaskPayload["relay"],
+    schedule_type: cronExpr ? "cron" : "interval",
+    cron_expr: cronExpr,
+    interval_seconds: cronExpr ? undefined : intervalSeconds ?? 300,
+    enabled: typeof params.enabled === "boolean" ? params.enabled : true,
+  });
+}
+
+function orchestrationTaskFromParams(params: Record<string, unknown>): OrchestrationTaskPayload {
+  return orchestrationTask({
+    id: typeof params.id === "string" ? params.id : "orchestration-created",
+    enabled: typeof params.enabled === "boolean" ? params.enabled : true,
+  });
+}

@@ -10,6 +10,18 @@ type = "openai"
 base_url = "https://api.openai.com/v1"
 api_key = "sk-your-key"
 models = ["gpt-4o", "gpt-4.1-mini"]
+# context_window_tokens = 128000
+# response_reserve_tokens = 2000
+# model_context_window_tokens = { "gpt-4o" = 128000, "gpt-4.1-mini" = 128000 }
+# model_response_reserve_tokens = { "gpt-4o" = 2000 }
+
+# Codex / Responses API example
+# chat_path = "/responses"
+# [providers.codex]
+# type = "codex"
+# base_url = "https://api.openai.com/v1"
+# api_key = "sk-your-key"
+# models = ["gpt-5-codex"]
 
 # OpenAI-compatible gateway example
 # [providers.crs]
@@ -17,6 +29,8 @@ models = ["gpt-4o", "gpt-4.1-mini"]
 # base_url = "https://lldai.online/openai"
 # api_key = "sk-your-key"
 # models = ["gpt-5.4", "gpt-4"]
+# context_window_tokens = 1000000
+# response_reserve_tokens = 0
 
 # Anthropic example
 # [providers.anthropic]
@@ -28,47 +42,39 @@ bind_addr = "127.0.0.1:8080"
 api_token = "change-me"
 cors_origins = ["http://localhost:3000", "http://localhost:5173"]
 
+[mobile_webrtc]
+# WebRTC mobile control path is opt-in; HTTP/Tailscale remains available as manual fallback.
+enabled = false
+signaling_url = "wss://signaling.example.com/ws"
+signaling_token = "change-me"
+pc_id = "ghost-pc-main"
+credential_store_path = "~/.ghost-os/mobile-devices.json"
+# Public-network deployments should include TURN. STUN-only configs may fail ICE traversal.
+ice_servers = [
+  { urls = ["turn:turn.example.com:3478"], username = "turn-user", credential = "turn-password" },
+]
+
 sessions_path = "~/.ghost-os/sessions"
-memory_warm_path = "~/.ghost-os/memory/warm.json"
-memory_cold_path = "~/.ghost-os/memory/cold"
-
+# Whether assistant messages are rendered as Markdown in Web chat (default: true).
+# assistant_markdown_enabled = true
+# Whether the first session system prompt is visible in Web chat history (default: true).
+# session_system_prompt_visible_enabled = true
+# tasks_path = "~/.ghost-os/tasks"
+# project_root = "/abs/path/to/project"
+# web_search_tavily_api_key = "tvly-..."
+# web_search_exa_api_key = "exa-..."
 prompts_path = "prompts.yaml"
+# Prompt section assembly (optional)
+# prompts_dir = "~/.ghost-os/prompts"
+# prompts_core_files = ["core_job/base.md", "core_job/runtime.md"]
+# prompts_runtime_constraint_files = ["runtime/base.md"]
+# prompts_response_rule_files = ["response/base.md"]
 native_persistent = false
-
-memory_auto_recall_enabled = true
-memory_auto_recall_limit = 5
-memory_warm_ttl = "24h"
-memory_evolution_enabled = false
-memory_evolution_interval = "1h"
-memory_graph_enabled = false
-memory_graph_path = "~/.ghost-os/memory/graph"
-memory_graph_extract_on_archive = true
-memory_graph_extract_on_evolve = true
-memory_graph_max_hops = 1
-memory_graph_max_hits = 6
-memory_graph_min_confidence = 0.72
-memory_graph_namespace = "default"
-memory_graph_debug_enabled = false
-memory_decision_enabled = false
-memory_decision_capture_on_turn = true
-memory_decision_path = "~/.ghost-os/memory/decision"
-memory_decision_max_hits = 4
-memory_decision_min_confidence = 0.75
-memory_decision_min_reuse_score = 0.70
-memory_decision_recipe_enabled = true
-memory_decision_recipe_interval = "6h"
-memory_decision_recipe_min_support = 3
-memory_decision_debug_enabled = false
-memory_decision_selector_hint_enabled = true
-memory_decision_recipe_reuse_enabled = true
-memory_decision_recipe_execution_tracking_enabled = true
-memory_decision_recipe_backfill_enabled = true
-memory_decision_recipe_default_enabled = true
-memory_decision_recipe_default_gray_percent = 10
-memory_decision_recipe_min_selection_confidence = 0.72
-memory_decision_recipe_min_success_rate = 0.66
-memory_decision_recipe_backfill_batch_size = 50
-memory_decision_recipe_backfill_interval = "30m"
+# native_binary_path = "/abs/path/to/native"
+# native_binary_roots = ["./drivers/native/target/release", "./drivers/native/target/debug"]
+# native_binary_candidates = ["native", "native.exe"]
+# codex_cli_path = "/abs/path/to/codex"
+# node_bin_path = "/abs/path/to/node"
 
 worker_model = ""
 worker_max_concurrency = 4
@@ -85,6 +91,33 @@ tool_selector_timeout_ms = 1500
 tool_selector_confidence = 0.75
 tool_selector_shadow = false
 tool_selector_recent_messages = 6
+# Resident tools are opt-in: only tools listed in tool_allowlist are exposed at turn start.
+# Session skills loaded later still depend on `sfind` itself being enabled and allowlisted.
+# tool_allowlist_only does not affect Web/CLI model switching.
+# tool_allowlist_only = true
+# Highest priority hard constraints for tools:
+# - if tool_allowlist is empty, no tools are resident by default
+# - allowlist tools are always forced into the final runnable set
+# - blocklist tools are always removed from the final runnable set
+# tool_allowlist = ["script_exec", "web_search"]
+# tool_blocklist = ["web_search"]
+# Disabled skills are hidden from runtime prompt + sfind, but still listed in Web Settings.
+# skill_blocklist = ["skill_xxx"]
+# Workflow task tool nodes are unrestricted by default.
+# Set workflow_tool_allowlist only when you need explicit restrictions.
+# Tools that require an active session, such as ask_human and sfind,
+# are rejected from this list at config-load time.
+# workflow_tool_allowlist = ["script_exec", "web_search"]
+
+# mem0-style memory augmentation
+# Responses API request options (optional)
+# response_prompt_cache_key = "ghost-session-cache-key"
+# response_prompt_cache_retention = "retain"
+# response_safety_identifier = "local-user"
+# response_store = false
+# response_metadata = { app = "ghost-os", channel = "bridge" }
+# Enable only when you explicitly want legacy retry behavior for codex continuation 4xx.
+# codex_stateless_retry_enabled = false
 
 # Extra headers for provider requests
 # [provider_headers]

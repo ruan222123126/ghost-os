@@ -1,13 +1,7 @@
 // Next.js API route for session collection operations (create/list).
 
-import { bridgeUnavailableResponse, passThroughToBridge } from '@/lib/bridgeProxy';
+import { createBridgeRouteHandler } from '@/lib/server/bridge';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
-  try {
-    return await passThroughToBridge('/api/sessions', { method: 'GET' });
-  } catch (error) {
-    return bridgeUnavailableResponse(error);
-  }
-}
+export const GET = createBridgeRouteHandler('GET', '/api/sessions');

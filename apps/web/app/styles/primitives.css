@@ -211,15 +211,26 @@
 .icon-button:focus-visible,
 .ui-btn:focus-visible,
 .ui-btn-secondary:focus-visible,
+.session-card:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(var(--ui-field-ring) / 0.18);
+}
+
+.input:focus,
+.textarea:focus,
+.select:focus,
+.ui-input:focus,
+.ui-textarea:focus,
+.ui-select:focus,
 .input:focus-visible,
 .textarea:focus-visible,
 .select:focus-visible,
 .ui-input:focus-visible,
 .ui-textarea:focus-visible,
-.ui-select:focus-visible,
-.session-card:focus-visible {
+.ui-select:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgb(var(--ui-field-ring) / 0.18);
+  box-shadow: none;
+  border-color: rgb(var(--ui-field-border-hover) / 0.92);
 }
 
 .button:disabled,
@@ -292,6 +303,42 @@
   border-color: rgb(233 99 84 / 0.28);
   background: rgb(255 241 238 / 0.96);
   color: rgb(152 48 41);
+}
+
+@keyframes top-loading-bar-slide {
+  0% {
+    transform: translateX(-10%) scaleX(0.1);
+  }
+
+  50% {
+    transform: translateX(30%) scaleX(0.5);
+  }
+
+  100% {
+    transform: translateX(100%) scaleX(0.1);
+  }
+}
+
+.top-loading-bar {
+  width: 100%;
+  height: 3px;
+  overflow: hidden;
+  pointer-events: none;
+  background: transparent;
+  transition: opacity 500ms ease-in-out;
+}
+
+.top-loading-bar-fill {
+  width: 100%;
+  height: 100%;
+  background: rgb(0 0 0);
+  box-shadow: 0 0 8px rgb(0 0 0 / 0.3);
+  transform-origin: left center;
+  animation: top-loading-bar-slide 1.2s linear infinite;
+}
+
+.chat-history-loading-bar {
+  flex: 0 0 3px;
 }
 
 .input,
@@ -383,5 +430,5 @@
 
 .ui-scroll {
   scrollbar-width: thin;
-  scrollbar-color: rgb(var(--ui-scroll-thumb)) rgb(var(--ui-scroll-track));
+  scrollbar-color: rgb(var(--ui-scroll-thumb) / 0.56) rgb(var(--ui-scroll-track) / 0.16);
 }

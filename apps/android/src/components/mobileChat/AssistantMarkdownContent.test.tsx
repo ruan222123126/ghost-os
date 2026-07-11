@@ -1,0 +1,58 @@
+// @vitest-environment jsdom
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { AssistantMarkdownContent } from "./AssistantMarkdownContent";
+
+vi.mock("markstream-react", async () => {
+  const React = await import("react");
+
+  return {
+    default: ({
+      codeBlockProps,
+      content,
+      final,
+      htmlPolicy,
+      typewriter,
+    }: {
+      codeBlockProps?: { showCopyButton?: boolean };
+      content: string;
+      final?: boolean;
+      htmlPolicy?: string;
+      typewriter?: boolean;
+    }) => React.createElement(
+      "div",
+      {
+        "data-final": String(final),
+        "data-html-policy": htmlPolicy,
+        "data-show-copy": String(codeBlockProps?.showCopyButton),
+        "data-testid": "markstream-renderer",
+        "data-typewriter": String(typewriter),
+      },
+      content,
+    ),
+  };
+});
+
+describe("AssistantMarkdownContent", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("renders content through Markstream", () => {
+    render(<AssistantMarkdownContent content="# Heading" />);
+
+    const renderer = screen.getByTestId("markstream-renderer");
+    expect(renderer.textContent).toBe("# Heading");
+    expect(renderer.getAttribute("data-final")).toBe("true");
+    expect(renderer.getAttribute("data-html-policy")).toBe("safe");
+  });
+
+  it("marks streaming content as non-final", () => {
+    render(<AssistantMarkdownContent content="```ts\nconsole.log(1)" final={false} showCopyButton={false} />);
+
+    const renderer = screen.getByTestId("markstream-renderer");
+    expect(renderer.getAttribute("data-final")).toBe("false");
+    expect(renderer.getAttribute("data-typewriter")).toBe("true");
+    expect(renderer.getAttribute("data-show-copy")).toBe("false");
+  });
+});

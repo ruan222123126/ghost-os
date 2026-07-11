@@ -26,3 +26,17 @@ func RenderTemplate(template string, vars map[string]string) string {
 		return value
 	})
 }
+
+func TemplateReferencesVariable(template string, name string) bool {
+	if template == "" || name == "" {
+		return false
+	}
+
+	matches := templateVariablePattern.FindAllStringSubmatch(template, -1)
+	for _, match := range matches {
+		if len(match) == 2 && match[1] == name {
+			return true
+		}
+	}
+	return false
+}

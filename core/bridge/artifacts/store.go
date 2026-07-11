@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 const (
@@ -32,7 +31,6 @@ type SessionFileArtifact struct {
 	SourcePath  string `json:"source_path,omitempty"`
 	StoredPath  string `json:"stored_path"`
 	Note        string `json:"note,omitempty"`
-	CreatedAt   string `json:"created_at,omitempty"`
 }
 
 type SessionArtifactStore struct {
@@ -112,7 +110,6 @@ func (s *SessionArtifactStore) WriteMetadata(artifact SessionFileArtifact) error
 	artifact.StoredPath = strings.TrimSpace(artifact.StoredPath)
 	artifact.SourcePath = strings.TrimSpace(artifact.SourcePath)
 	artifact.Note = strings.TrimSpace(artifact.Note)
-	artifact.CreatedAt = time.Now().UTC().Format(time.RFC3339)
 	if artifact.Name == "" || artifact.DownloadURL == "" || artifact.StoredPath == "" {
 		return errors.New("artifact metadata is incomplete")
 	}
@@ -180,18 +177,17 @@ func normalizeIdentifier(value string, label string) (string, error) {
 		return "", fmt.Errorf("invalid %s", label)
 	}
 	for _, ch := range trimmed {
-		switch {
-		case ch >= 'a' && ch <= 'z':
-		case ch >= 'A' && ch <= 'Z':
-		case ch >= '0' && ch <= '9':
-		case ch == '-' || ch == '_':
-		default:
+		if !isIdentifierChar(ch) {
 			return "", fmt.Errorf("invalid %s", label)
 		}
 	}
-	// Keep legacy separator checks as an extra guardrail.
-	if strings.Contains(trimmed, "/") || strings.Contains(trimmed, string(filepath.Separator)) {
-		return "", fmt.Errorf("invalid %s", label)
-	}
 	return trimmed, nil
+}
+
+func isIdentifierChar(ch rune) bool {
+	return (ch >= 'a' && ch <= 'z') ||
+		(ch >= 'A' && ch <= 'Z') ||
+		(ch >= '0' && ch <= '9') ||
+		ch == '-' ||
+		ch == '_'
 }

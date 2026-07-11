@@ -1,0 +1,121 @@
+/* Assistant markdown rendering and code-block presentation. */
+
+.assistant-markdown {
+  white-space: normal;
+}
+
+.assistant-markdown > :first-child {
+  margin-top: 0;
+}
+
+.assistant-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.assistant-markdown h1,
+.assistant-markdown h2,
+.assistant-markdown h3,
+.assistant-markdown h4,
+.assistant-markdown h5,
+.assistant-markdown h6 {
+  margin: 18px 0 10px;
+  color: rgb(10 10 10);
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  line-height: 1.35;
+}
+
+.assistant-markdown h1 {
+  font-size: 1.25rem;
+}
+
+.assistant-markdown h2 {
+  font-size: 1.15rem;
+}
+
+.assistant-markdown h3 {
+  font-size: 1.08rem;
+  text-transform: uppercase;
+}
+
+.assistant-markdown p {
+  margin: 12px 0;
+  color: rgb(64 64 64);
+}
+
+.assistant-markdown ul,
+.assistant-markdown ol {
+  margin: 10px 0;
+  padding-left: 22px;
+}
+
+.assistant-markdown li {
+  margin: 4px 0;
+}
+
+.assistant-markdown hr {
+  margin: 14px 0;
+  border: 0;
+  border-top: 1px solid rgb(214 214 214 / 0.8);
+}
+
+.assistant-markdown blockquote {
+  margin: 14px 0;
+  padding: 4px 0 4px 14px;
+  border-left: 2px solid rgb(10 10 10);
+  background: transparent;
+  color: rgb(82 82 82);
+}
+
+.assistant-markdown table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  margin: 12px 0;
+  overflow-x: auto;
+  border-collapse: collapse;
+  border: 1px solid rgb(226 226 226);
+  border-radius: 10px;
+}
+
+.assistant-markdown th,
+.assistant-markdown td {
+  padding: 8px 10px;
+  border: 1px solid rgb(226 226 226 / 0.9);
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.assistant-markdown thead th {
+  background: rgb(250 250 250);
+  color: rgb(64 64 64);
+  font-weight: 600;
+}
+
+.assistant-markdown .link-node {
+  color: rgb(194 78 40);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.assistant-markdown .link-node:hover {
+  color: rgb(164 63 31);
+}
+
+.assistant-markdown :not(pre) > code {
+  padding: 1px 5px;
+  border: 1px solid rgb(226 226 226);
+  border-radius: 6px;
+  background: rgb(247 247 247);
+  color: rgb(56 56 56);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.9em;
+  white-space: break-spaces;
+}
+
+@media (max-width: 768px) {
+  .assistant-markdown {
+    font-size: 15px;
+  }
+}
