@@ -53,7 +53,7 @@ describe('components/message/AssistantMarkdownRenderer', () => {
     expect(html).toContain('data-html-policy="safe"');
   });
 
-  it('marks streaming content as non-final with typewriter enabled', () => {
+  it('marks streaming content as non-final without restarting a typewriter animation', () => {
     const html = renderToStaticMarkup(
       React.createElement(AssistantMarkdownRenderer, {
         content: '```ts\nconsole.log(1)',
@@ -62,7 +62,7 @@ describe('components/message/AssistantMarkdownRenderer', () => {
     );
 
     expect(html).toContain('data-final="false"');
-    expect(html).toContain('data-typewriter="true"');
+    expect(html).toContain('data-typewriter="false"');
   });
 
   it('forwards code copy visibility to Markstream code blocks', () => {

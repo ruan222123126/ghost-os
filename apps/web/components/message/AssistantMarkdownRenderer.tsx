@@ -78,6 +78,6 @@ export const AssistantMarkdownRenderer: FC<AssistantMarkdownRendererProps> = ({
     infographicProps={{ showCopyButton }}
     mermaidProps={{ showCopyButton }}
     showTooltips={false}
-    typewriter={!final}
+    typewriter={false}
   />
 );
