@@ -55,11 +55,43 @@ type rpcEnvelope struct {
 	Error   *rpcError       `json:"error,omitempty"`
 }
 
+type appServerProcess struct {
+	cmd    *exec.Cmd
+	stdin  io.WriteCloser
+	stdout io.ReadCloser
+	stderr io.ReadCloser
+}
+
 func NewAppServerClient(cfg ClientConfig) CodexClient {
 	return &appServerClient{
 		cfg:     cfg,
 		pending: make(map[int]chan rpcResponse),
 	}
+}
+
+func startAppServerProcess(cfg ClientConfig, launchSpec codexLaunchSpec) (appServerProcess, error) {
+	cmd := exec.Command(launchSpec.executablePath, "app-server", "--stdio")
+	cmd.Dir = strings.TrimSpace(cfg.CWD)
+	if cmd.Dir == "" {
+		cmd.Dir = "."
+	}
+	cmd.Env = codexEnv(launchSpec.pathOverride)
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return appServerProcess{}, fmt.Errorf("open codex stdin: %w", err)
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return appServerProcess{}, fmt.Errorf("open codex stdout: %w", err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return appServerProcess{}, fmt.Errorf("open codex stderr: %w", err)
+	}
+	if err := cmd.Start(); err != nil {
+		return appServerProcess{}, fmt.Errorf("start codex app-server: %w", err)
+	}
+	return appServerProcess{cmd: cmd, stdin: stdin, stdout: stdout, stderr: stderr}, nil
 }
 
 func (c *appServerClient) SetEventHandler(handler func(CodexEvent)) {
@@ -85,40 +117,19 @@ func (c *appServerClient) Connect(ctx context.Context) error {
 		c.mu.Unlock()
 		return fmt.Errorf("prepare codex app-server launch: %w", err)
 	}
-	cmd := exec.Command(launchSpec.executablePath, "app-server", "--stdio")
-	cmd.Dir = strings.TrimSpace(c.cfg.CWD)
-	if cmd.Dir == "" {
-		cmd.Dir = "."
-	}
-	cmd.Env = codexEnv(launchSpec.pathOverride)
-
-	stdin, err := cmd.StdinPipe()
+	process, err := startAppServerProcess(c.cfg, launchSpec)
 	if err != nil {
 		c.mu.Unlock()
-		return fmt.Errorf("open codex stdin: %w", err)
+		return err
 	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		c.mu.Unlock()
-		return fmt.Errorf("open codex stdout: %w", err)
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		c.mu.Unlock()
-		return fmt.Errorf("open codex stderr: %w", err)
-	}
-	if err := cmd.Start(); err != nil {
-		c.mu.Unlock()
-		return fmt.Errorf("start codex app-server: %w", err)
-	}
-	c.cmd = cmd
-	c.stdin = stdin
+	c.cmd = process.cmd
+	c.stdin = process.stdin
 	c.connected = true
 	c.mu.Unlock()
 
-	go c.readStdout(stdout)
-	go c.readStderr(stderr)
-	go c.waitProcess(cmd)
+	go c.readStdout(process.stdout)
+	go c.readStderr(process.stderr)
+	go c.waitProcess(process.cmd)
 
 	initParams := map[string]any{
 		"clientInfo": map[string]any{
