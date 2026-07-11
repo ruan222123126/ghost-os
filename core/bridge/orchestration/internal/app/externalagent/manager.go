@@ -240,6 +240,9 @@ func (m *Manager) Stop(ctx context.Context, req api.ExternalAgentStopParams) (ap
 		ext.TurnID = ""
 		ext.PendingApprovals = nil
 	})
+	if err := m.persistCancelledRun(sessionID, active.traceID); err != nil {
+		return api.ExternalAgentResponse{}, err
+	}
 	return api.ExternalAgentResponse{
 		Status:    StatusIdle,
 		Provider:  ProviderCodex,

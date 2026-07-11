@@ -37,6 +37,7 @@ type DefaultHandlers struct {
 	HumanResponse          TypedHandler[api.HumanResponseParams]
 	SessionsList           TraceHandler
 	SessionsSearch         TypedHandler[api.SessionSearchParams]
+	SessionRunStatesGet    TypedHandler[api.SessionRunStatesGetRequest]
 	SessionGet             TypedHandler[api.SessionGetParams]
 	SessionAppend          TypedHandler[api.SessionAppendRequest]
 	SkillList              TraceHandler
@@ -88,6 +89,7 @@ func registerHumanActions(router *Router, handlers DefaultHandlers) {
 func registerSessionActions(router *Router, handlers DefaultHandlers) {
 	RegisterTrace(router, bus.ActionSessionsList, handlers.SessionsList)
 	RegisterTyped(router, bus.ActionSessionsSearch, handlers.SessionsSearch)
+	RegisterTyped(router, bus.ActionSessionRunStatesGet, handlers.SessionRunStatesGet)
 	RegisterTyped(router, bus.ActionSessionGet, handlers.SessionGet)
 	RegisterTyped(router, bus.ActionSessionAppend, handlers.SessionAppend)
 }

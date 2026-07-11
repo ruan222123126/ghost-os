@@ -43,6 +43,8 @@ class EmittersTest(unittest.TestCase):
         rendered = render_ts(self.schema)
 
         self.assertIn("export interface SessionHumanInteraction {", rendered)
+        self.assertIn("export interface SessionRunState {", rendered)
+        self.assertIn("export interface SessionRunStatesGetRequest {", rendered)
         self.assertIn("export interface AgentStreamEvent {", rendered)
         self.assertIn("export interface AgentAwaitingHumanStreamPayload {", rendered)
         self.assertIn("options?: AskHumanOption[];", rendered)
@@ -68,6 +70,7 @@ class EmittersTest(unittest.TestCase):
 
         self.assertIn("pub enum AgentPayload {", rust)
         self.assertIn("pub struct AgentStreamEvent {", rust)
+        self.assertIn("pub struct SessionRunState {", rust)
         self.assertIn("pub struct AgentAwaitingHumanStreamPayload {", rust)
         self.assertIn("AwaitingHuman(AgentSendAwaitingHumanResponse)", rust)
         self.assertIn("pub assignments: BTreeMap<String, String>", rust)
@@ -75,6 +78,7 @@ class EmittersTest(unittest.TestCase):
         self.assertIn("sealed interface AgentSendResponse", kotlin)
         self.assertIn('const val STATUS_AWAITING_HUMAN = "awaiting_human"', kotlin)
         self.assertIn("data class SessionPushEvent(", kotlin)
+        self.assertIn("data class SessionRunState(", kotlin)
         self.assertIn('const val TYPE_AWAITING_HUMAN = "awaiting_human"', kotlin)
         self.assertIn('const val KIND_TEXT = "text"', kotlin)
         self.assertIn(") : AgentSendResponse", kotlin)
@@ -97,6 +101,7 @@ class EmittersTest(unittest.TestCase):
         self.assertIn("WorkflowModels.kt", files)
         self.assertIn("OrchestrationModels.kt", files)
         self.assertIn("data class ApiRequest<TParams>(", files["ApiModels.kt"])
+        self.assertIn("data class SessionRunStatesGetRequest(", files["SessionModels.kt"])
         self.assertIn("@Serializable\nsealed interface AgentSendResponse", files["AgentModels.kt"])
         self.assertIn('const val STATUS_AWAITING_HUMAN = "awaiting_human"', files["AgentModels.kt"])
         self.assertIn("data class SessionPushEvent(", files["StreamingModels.kt"])

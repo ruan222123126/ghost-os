@@ -82,6 +82,9 @@ func (s *sessionDraftStoreCheckpointSink) persistTurnDraftEvent(
 	event streaming.Event,
 ) error {
 	now := s.nowUTC()
+	if ProjectSessionRunState(s.state, event, now) {
+		s.dirty = true
+	}
 	if ProjectTurnDraft(s.state, event, now) {
 		s.dirty = true
 	}
@@ -94,7 +97,11 @@ func (s *sessionDraftStoreCheckpointSink) persistTurnDraftEvent(
 func (s *sessionDraftStoreCheckpointSink) persistTerminalTurnDraftEvent(
 	event streaming.Event,
 ) error {
-	if ProjectTurnDraft(s.state, event, s.nowUTC()) {
+	now := s.nowUTC()
+	if ProjectSessionRunState(s.state, event, now) {
+		s.dirty = true
+	}
+	if ProjectTurnDraft(s.state, event, now) {
 		s.dirty = true
 	}
 	if event.Type == streaming.EventDone && s.state.ClearAssistantDraft(s.nowUTC()) {
@@ -116,6 +123,7 @@ func (s *sessionDraftStoreCheckpointSink) ensureState() error {
 		ID:             loaded.ID,
 		AssistantDraft: loaded.AssistantDraft,
 		TurnDraft:      loaded.TurnDraft,
+		LastRunState:   loaded.LastRunState,
 	}
 	return nil
 }
@@ -134,6 +142,7 @@ func (s *sessionDraftStoreCheckpointSink) saveDraftIfNeeded(force bool) error {
 	}
 	latest.AssistantDraft = s.state.AssistantDraft
 	latest.TurnDraft = s.state.TurnDraft
+	latest.LastRunState = s.state.LastRunState
 	if err := s.sessionStore.Save(latest); err != nil {
 		return err
 	}

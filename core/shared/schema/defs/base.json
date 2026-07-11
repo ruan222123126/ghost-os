@@ -13,6 +13,7 @@
         "HUMAN_RESPONSE",
         "SESSIONS_LIST",
         "SESSIONS_SEARCH",
+        "SESSION_RUN_STATES_GET",
         "SESSION_GET",
         "SESSION_APPEND",
         "CONFIG_GET",

@@ -54,6 +54,8 @@ import type {
   SessionGetOptions,
   SessionMetadata,
   SessionRuntimeSelection,
+  SessionRunState,
+  SessionRunStatesGetRequest,
   SkillPayload,
   StatusMessage,
   StoredConnectionSnapshot,
@@ -533,6 +535,12 @@ export function useMobileBridge() {
     setProviderList(payload);
     return payload;
   }, [requestBridge]);
+
+  const getSessionRunStates = useCallback(
+    (params: SessionRunStatesGetRequest): Promise<SessionRunState[]> =>
+      requestBridge<SessionRunState[]>("SESSION_RUN_STATES_GET", { ...params }),
+    [requestBridge],
+  );
 
   const loadCodexModelCatalog = useCallback(async (): Promise<CodexModelCatalogPayload> => {
     setCodexModelCatalogError("");
@@ -1596,6 +1604,7 @@ export function useMobileBridge() {
     deleteTask,
     getFullSession,
     getSession,
+    getSessionRunStates,
     host,
     providerList: mergedProviderList,
     localProviderList: selectedLocalProviderList,

@@ -3,9 +3,33 @@ package trace
 import (
 	"context"
 	"testing"
+	"time"
 
+	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
 )
+
+func TestProjectSessionRunStateMapsLifecycleEvents(t *testing.T) {
+	sess := &session.Session{ID: "session-1"}
+	at := time.Date(2026, time.July, 11, 8, 0, 0, 0, time.UTC)
+	events := []struct {
+		eventType streaming.EventType
+		status    session.RunStatus
+	}{
+		{streaming.EventRunStarted, session.RunStatusRunning},
+		{streaming.EventAwaitingHuman, session.RunStatusAwaitingHuman},
+		{streaming.EventDone, session.RunStatusSuccess},
+	}
+	for index, item := range events {
+		event := streaming.Event{Type: item.eventType, TraceID: "trace-1"}
+		if !ProjectSessionRunState(sess, event, at.Add(time.Duration(index)*time.Second)) {
+			t.Fatalf("event %s should update run state", item.eventType)
+		}
+		if sess.LastRunState == nil || sess.LastRunState.Status != item.status {
+			t.Fatalf("event %s projected %+v", item.eventType, sess.LastRunState)
+		}
+	}
+}
 
 func TestStreamTerminalBufferBuffersTerminalEventsUntilFlush(t *testing.T) {
 	recording := &recordingAppEventSink{}

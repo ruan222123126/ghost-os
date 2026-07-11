@@ -1,0 +1,132 @@
+// CODE GENERATED. DO NOT EDIT. Source: core/shared/schema.json
+// Source: core/shared/schema.json (https://ghost-os.dev/schemas/bus-envelope.schema.json)
+
+package dev.ghostos.android.model
+
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+
+@Serializable
+data class WorkflowNode(
+    val id: String,
+    val type: String,
+    val start: WorkflowStartNode? = null,
+    val tool: WorkflowToolNode? = null,
+    val llm: WorkflowLLMNode? = null,
+    val agent: WorkflowAgentNode? = null,
+    @SerialName("if")
+    val ifValue: WorkflowIfNode? = null,
+    val loop: WorkflowLoopNode? = null
+)
+
+@Serializable
+data class WorkflowEdge(
+    @SerialName("from_node_id")
+    val fromNodeId: String,
+    @SerialName("to_node_id")
+    val toNodeId: String
+)
+
+@Serializable
+data class WorkflowDefinition(
+    val nodes: List<WorkflowNode>,
+    val edges: List<WorkflowEdge>
+)
+
+@Serializable
+data class WorkflowToolNode(
+    @SerialName("tool_name")
+    val toolName: String,
+    val arguments: JsonObject? = null
+)
+
+@Serializable
+data class WorkflowLLMNode(
+    val prompt: String,
+    @SerialName("system_prompt")
+    val systemPrompt: String? = null
+)
+
+@Serializable
+data class WorkflowAgentNode(
+    val message: String,
+    @SerialName("runtime_overrides")
+    val runtimeOverrides: TaskRuntimeOverrides? = null
+)
+
+@Serializable
+data class WorkflowIfNode(
+    @SerialName("source_node_id")
+    val sourceNodeId: String? = null,
+    val operator: String,
+    val value: String? = null,
+    @SerialName("true_node_id")
+    val trueNodeId: String,
+    @SerialName("false_node_id")
+    val falseNodeId: String
+)
+
+@Serializable
+data class WorkflowTaskCreateRequest(
+    @SerialName("task_kind")
+    val taskKind: String,
+    val workflow: WorkflowDefinition,
+    @SerialName("interval_seconds")
+    val intervalSeconds: Int? = null,
+    @SerialName("cron_expr")
+    val cronExpr: String? = null,
+    @SerialName("trace_id")
+    val traceId: String? = null,
+    val scope: String? = null
+) : TaskCreateRequest
+
+@Serializable
+data class WorkflowLoopNode(
+    @SerialName("max_iterations")
+    val maxIterations: Int,
+    @SerialName("body_node_id")
+    val bodyNodeId: String,
+    @SerialName("exit_node_id")
+    val exitNodeId: String
+)
+
+@Serializable
+data class WorkflowTaskPayload(
+    val id: String,
+    @SerialName("task_kind")
+    val taskKind: String,
+    val workflow: WorkflowDefinition,
+    @SerialName("schedule_type")
+    val scheduleType: String,
+    @SerialName("interval_seconds")
+    val intervalSeconds: Int? = null,
+    @SerialName("cron_expr")
+    val cronExpr: String? = null,
+    val enabled: Boolean,
+    @SerialName("created_at")
+    val createdAt: String,
+    @SerialName("updated_at")
+    val updatedAt: String,
+    @SerialName("last_run_at")
+    val lastRunAt: String? = null,
+    @SerialName("next_run_at")
+    val nextRunAt: String? = null,
+    @SerialName("last_error")
+    val lastError: String? = null
+) : TaskPayload
+
+@Serializable
+data class WorkflowStartNode(
+    val inputs: List<WorkflowInputVariable>? = null
+)
+
+@Serializable
+data class WorkflowInputVariable(
+    val name: String,
+    val type: String,
+    val required: Boolean? = null,
+    val default: JsonElement? = null,
+    val description: String? = null
+)

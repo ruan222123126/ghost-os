@@ -19,6 +19,7 @@ const (
 	busActionHumanResponse          = bus.ActionHumanResponse
 	busActionSessionsList           = bus.ActionSessionsList
 	busActionSessionsSearch         = bus.ActionSessionsSearch
+	busActionSessionRunStatesGet    = bus.ActionSessionRunStatesGet
 	busActionSessionGet             = bus.ActionSessionGet
 	busActionSessionAppend          = bus.ActionSessionAppend
 	busActionConfigGet              = bus.ActionConfigGet
@@ -80,7 +81,9 @@ type agentStreamMessagePayload = api.AgentStreamMessagePayload
 type sessionMessage = api.SessionMessage
 type agentDonePayload = api.AgentDonePayload
 type sessionMetadata = api.SessionMetadata
+type sessionRunState = api.SessionRunState
 type sessionRuntimeSelection = api.SessionRuntimeSelection
+type sessionRunStatesGetRequest = api.SessionRunStatesGetRequest
 type sessionSidebarPartition = api.SessionSidebarPartition
 type sessionSidebarPartitionState = api.SessionSidebarPartitionState
 type sessionSidebarPartitionPutRequest = api.SessionSidebarPartitionPutRequest

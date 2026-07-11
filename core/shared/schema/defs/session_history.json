@@ -86,6 +86,68 @@
         "kotlin": { "name": "SessionMetadata" }
       }
     },
+    "sessionRunState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "session_id",
+        "title",
+        "status",
+        "trace_id",
+        "started_at",
+        "updated_at",
+        "terminal_at"
+      ],
+      "properties": {
+        "session_id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": [
+            "running",
+            "awaiting_human",
+            "success",
+            "error",
+            "cancelled",
+            "idle"
+          ]
+        },
+        "trace_id": { "type": "string" },
+        "started_at": { "type": "string" },
+        "updated_at": { "type": "string" },
+        "terminal_at": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 171,
+        "go": { "name": "sessionRunState" },
+        "ts": { "name": "SessionRunState" },
+        "rust": { "name": "SessionRunState" },
+        "kotlin": { "name": "SessionRunState" }
+      }
+    },
+    "sessionRunStatesGetRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30
+        },
+        "session_ids": {
+          "type": "array",
+          "maxItems": 30,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      },
+      "x-codegen": {
+        "order": 172,
+        "go": { "name": "sessionRunStatesGetRequest" },
+        "ts": { "name": "SessionRunStatesGetRequest" },
+        "rust": { "name": "SessionRunStatesGetRequest" },
+        "kotlin": { "name": "SessionRunStatesGetRequest" }
+      }
+    },
     "sessionRuntimeSelection": {
       "type": "object",
       "additionalProperties": false,

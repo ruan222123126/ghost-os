@@ -1,7 +1,7 @@
 // CODE GENERATED. DO NOT EDIT. Source: core/shared/schema.json
 // Source: core/shared/schema.json (https://ghost-os.dev/schemas/bus-envelope.schema.json)
 
-export type BusAction = 'AGENT_SEND' | 'AGENT_STOP' | 'EXTERNAL_AGENT_START' | 'EXTERNAL_AGENT_SEND' | 'EXTERNAL_AGENT_STOP' | 'EXTERNAL_AGENT_APPROVE' | 'EXTERNAL_AGENT_MODELS_GET' | 'HUMAN_RESPONSE' | 'SESSIONS_LIST' | 'SESSIONS_SEARCH' | 'SESSION_GET' | 'SESSION_APPEND' | 'CONFIG_GET' | 'CONFIG_UPDATE' | 'CONFIG_PROVIDERS_GET' | 'CONFIG_PROVIDER_EXPORT' | 'CONFIG_PROVIDER_CREATE' | 'CONFIG_PROVIDER_UPDATE' | 'CONFIG_PROVIDER_DELETE' | 'SKILL_LIST' | 'SKILL_UPDATE' | 'SKILL_DELETE' | 'TASK_CREATE' | 'TASK_LIST' | 'TASK_GET' | 'TASK_UPDATE' | 'TASK_RUN_NOW' | 'TASK_STOP' | 'TASK_LOGS' | 'TASK_DELETE';
+export type BusAction = 'AGENT_SEND' | 'AGENT_STOP' | 'EXTERNAL_AGENT_START' | 'EXTERNAL_AGENT_SEND' | 'EXTERNAL_AGENT_STOP' | 'EXTERNAL_AGENT_APPROVE' | 'EXTERNAL_AGENT_MODELS_GET' | 'HUMAN_RESPONSE' | 'SESSIONS_LIST' | 'SESSIONS_SEARCH' | 'SESSION_RUN_STATES_GET' | 'SESSION_GET' | 'SESSION_APPEND' | 'CONFIG_GET' | 'CONFIG_UPDATE' | 'CONFIG_PROVIDERS_GET' | 'CONFIG_PROVIDER_EXPORT' | 'CONFIG_PROVIDER_CREATE' | 'CONFIG_PROVIDER_UPDATE' | 'CONFIG_PROVIDER_DELETE' | 'SKILL_LIST' | 'SKILL_UPDATE' | 'SKILL_DELETE' | 'TASK_CREATE' | 'TASK_LIST' | 'TASK_GET' | 'TASK_UPDATE' | 'TASK_RUN_NOW' | 'TASK_STOP' | 'TASK_LOGS' | 'TASK_DELETE';
 export type BusStatus = 'success' | 'error';
 
 export interface ApiRequest<TParams extends object> {
@@ -269,12 +269,27 @@ export interface SessionMetadata {
   token_count: number;
 }
 
+export interface SessionRunState {
+  session_id: string;
+  title: string;
+  status: 'running' | 'awaiting_human' | 'success' | 'error' | 'cancelled' | 'idle';
+  trace_id: string;
+  started_at: string;
+  updated_at: string;
+  terminal_at: string;
+}
+
 export interface SessionRuntimeSelection {
   runtime: 'ghost' | 'codex';
   provider?: string;
   provider_type?: 'openai' | 'anthropic' | 'custom' | 'codex';
   model?: string;
   mode?: 'default' | 'plan';
+}
+
+export interface SessionRunStatesGetRequest {
+  limit?: number;
+  session_ids?: string[];
 }
 
 export interface SessionSidebarPartition {

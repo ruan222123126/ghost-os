@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"ghost-os/bridge/agent"
 	agentturnadapter "ghost-os/bridge/orchestration/internal/adapters/agentturnservice"
@@ -16,6 +17,8 @@ import (
 	"ghost-os/bridge/streaming"
 	bridgeTasks "ghost-os/bridge/tasks"
 )
+
+var errSessionEnded = errors.New("session has already ended")
 
 type preparedAgentTurnRequest = agentturn.PreparedRequest
 
@@ -246,7 +249,39 @@ func (s *bridgeService) executeAgentStopAction(
 	params agentStopParams,
 	traceID string,
 ) (ServiceResult, error) {
-	return s.agentTurnService().Stop(ctx, params, traceID)
+	handle := s.runHandleForStop(params)
+	result, err := s.agentTurnService().Stop(ctx, params, traceID)
+	if err != nil || handle == nil {
+		return result, err
+	}
+	if persistErr := s.persistCancelledRun(handle.SessionID, handle.TraceID); persistErr != nil {
+		return ServiceResult{}, bus.WrapError(ServiceErrorInternal, persistErr)
+	}
+	return result, nil
+}
+
+func (s *bridgeService) runHandleForStop(params agentStopParams) *RunHandle {
+	if s == nil || s.runRegistry == nil {
+		return nil
+	}
+	if sessionID := strings.TrimSpace(params.SessionID); sessionID != "" {
+		return s.runRegistry.GetBySessionID(sessionID)
+	}
+	return s.runRegistry.GetByTraceID(params.TraceID)
+}
+
+func (s *bridgeService) persistCancelledRun(sessionID string, traceID string) error {
+	if s == nil || s.sessionStore == nil {
+		return errors.New("session store is not configured")
+	}
+	sess, err := s.sessionStore.Load(sessionID)
+	if err != nil {
+		return err
+	}
+	if !sess.SetLastRunState(session.RunStatusCancelled, traceID, time.Now().UTC()) {
+		return nil
+	}
+	return s.sessionStore.Save(sess)
 }
 
 func (s *bridgeService) executeAgentStreamAction(

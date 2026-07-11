@@ -72,6 +72,21 @@ type SessionMetadata struct {
 	TokenCount   int    `json:"token_count"`
 }
 
+type SessionRunState struct {
+	SessionID  string `json:"session_id"`
+	Title      string `json:"title"`
+	Status     string `json:"status"`
+	TraceID    string `json:"trace_id"`
+	StartedAt  string `json:"started_at"`
+	UpdatedAt  string `json:"updated_at"`
+	TerminalAt string `json:"terminal_at"`
+}
+
+type SessionRunStatesGetRequest struct {
+	Limit      *int     `json:"limit,omitempty"`
+	SessionIDs []string `json:"session_ids,omitempty"`
+}
+
 type SessionRuntimeSelection struct {
 	Runtime      string `json:"runtime"`
 	Provider     string `json:"provider,omitempty"`

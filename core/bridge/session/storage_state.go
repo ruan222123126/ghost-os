@@ -22,6 +22,7 @@ type sessionStoredState struct {
 	DynamicSkillLoads    map[string]DynamicSkillLoad     `json:"dynamic_skill_loads,omitempty"`
 	AssistantDraft       *AssistantDraft                 `json:"assistant_draft,omitempty"`
 	TurnDraft            *TurnDraft                      `json:"turn_draft,omitempty"`
+	LastRunState         *LastRunState                   `json:"last_run_state,omitempty"`
 	LastRuntimeSelection *RuntimeSelection               `json:"last_runtime_selection,omitempty"`
 }
 
@@ -50,6 +51,7 @@ func encodeSessionState(sess *Session) (string, error) {
 		DynamicSkillLoads:    cloneDynamicSkillLoads(sess.DynamicSkillLoads),
 		AssistantDraft:       cloneAssistantDraft(sess.AssistantDraft),
 		TurnDraft:            cloneTurnDraft(sess.TurnDraft),
+		LastRunState:         cloneLastRunState(sess.LastRunState),
 		LastRuntimeSelection: CloneRuntimeSelection(sess.LastRuntimeSelection),
 	}
 	return encodeSessionRecordState(state)
@@ -97,6 +99,7 @@ func sessionFromRecord(record sessionRecord, messages []llm.Message) *Session {
 		DynamicSkillLoads:    cloneDynamicSkillLoads(record.State.DynamicSkillLoads),
 		AssistantDraft:       cloneAssistantDraft(record.State.AssistantDraft),
 		TurnDraft:            cloneTurnDraft(record.State.TurnDraft),
+		LastRunState:         cloneLastRunState(record.State.LastRunState),
 		LastRuntimeSelection: CloneRuntimeSelection(record.State.LastRuntimeSelection),
 	}
 	sess.setPersistedSnapshot()

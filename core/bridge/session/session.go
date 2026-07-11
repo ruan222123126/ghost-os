@@ -31,6 +31,7 @@ type Session struct {
 	DynamicSkillLoads    map[string]DynamicSkillLoad     `json:"dynamic_skill_loads,omitempty"`
 	AssistantDraft       *AssistantDraft                 `json:"assistant_draft,omitempty"`
 	TurnDraft            *TurnDraft                      `json:"turn_draft,omitempty"`
+	LastRunState         *LastRunState                   `json:"last_run_state,omitempty"`
 	LastRuntimeSelection *RuntimeSelection               `json:"last_runtime_selection,omitempty"`
 
 	persistedMessageCount int

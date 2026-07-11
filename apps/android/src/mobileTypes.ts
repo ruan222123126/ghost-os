@@ -5,6 +5,8 @@ import type {
   SessionMessage as SharedSessionMessage,
   SessionMessagePage as SharedSessionMessagePage,
   SessionMetadata as SharedSessionMetadata,
+  SessionRunState as SharedSessionRunState,
+  SessionRunStatesGetRequest as SharedSessionRunStatesGetRequest,
   SessionRuntimeSelection as SharedSessionRuntimeSelection,
   SessionToolCall as SharedSessionToolCall,
   SessionToolResult as SharedSessionToolResult,
@@ -28,6 +30,8 @@ export type AgentModeSelection = "normal" | "plan" | null;
 export type AgentRequestMode = "plan";
 export type ExternalCodexPermissionMode = "read-only" | "default" | "safe-yolo" | "yolo";
 export type ExternalAgentApprovalDecision = "approved" | "approved_for_session" | "denied" | "abort";
+export type SessionRunState = SharedSessionRunState;
+export type SessionRunStatesGetRequest = SharedSessionRunStatesGetRequest;
 
 export interface MobilePairingInfo {
   deviceId: string;

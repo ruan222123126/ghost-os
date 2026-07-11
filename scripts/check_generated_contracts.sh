@@ -5,8 +5,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GENERATED_FILES=(
   "core/bridge/orchestration/envelope_generated.go"
-  "apps/web/lib/envelope.generated.ts"
+  "apps/shared/envelope.generated.ts"
   "apps/cli/src/envelope_generated.rs"
+  "apps/android/src-tauri/gen/android/app/src/main/java/dev/ghostos/android/model"
 )
 
 main() {

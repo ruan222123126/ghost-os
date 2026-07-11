@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 
@@ -27,6 +27,7 @@ interface MockHistoryItem {
 const mocks = vi.hoisted(() => ({
   bridgeSendAgentMessage: vi.fn(),
   bridgeStopAgentRun: vi.fn(),
+  useCompletionTracker: vi.fn(),
   useMobileSessions: vi.fn((options: MockMobileSessionsOptions) => ({
     activeMessages: [],
     activeReply: undefined,
@@ -39,6 +40,7 @@ const mocks = vi.hoisted(() => ({
     hasConversation: false,
     hasOlderHistory: false,
     historyItems: [] as MockHistoryItem[],
+    liveRunningSessions: [],
     loadOlderHistory: vi.fn(),
     loadingOlderHistory: false,
     loadingSessionMessages: false,
@@ -123,6 +125,7 @@ vi.mock("./hooks/useMobileBridge", () => ({
     sessionsLoaded: true,
     setOrchestrationEnabled: vi.fn(),
     setSettings: vi.fn(),
+    setStatus: vi.fn(),
     setTaskEnabled: vi.fn(),
     settings: {
       autoConnectEnabled: false,
@@ -145,6 +148,10 @@ vi.mock("./hooks/useMobileBridge", () => ({
   }),
 }));
 
+vi.mock("./hooks/useMobileSessionCompletionTracker", () => ({
+  useMobileSessionCompletionTracker: mocks.useCompletionTracker,
+}));
+
 vi.mock("./hooks/useMobileSessions", () => ({
   useMobileSessions: mocks.useMobileSessions,
 }));
@@ -153,6 +160,7 @@ describe("App Codex mode routing", () => {
   beforeEach(() => {
     mocks.bridgeSendAgentMessage.mockResolvedValue({ mode: "remote", ok: true });
     mocks.bridgeStopAgentRun.mockResolvedValue({ ok: true, status: "stopped" });
+    mocks.useCompletionTracker.mockClear();
     mocks.useMobileSessions.mockClear();
   });
 
@@ -194,21 +202,17 @@ describe("App Codex mode routing", () => {
       })
     );
 
-    const { rerender } = render(<App />);
+    render(<App />);
 
     expect(screen.queryByText("设计复盘会话已完成")).toBeNull();
-
-    mocks.useMobileSessions.mockImplementation((options: MockMobileSessionsOptions) =>
-      mockMobileSessions(options, {
-        activeSessionId: "session-2",
-        historyItems: [
-          historyItem("session-1", "设计复盘", "success"),
-          historyItem("session-2", "当前会话", undefined),
-        ],
-        selectSession,
-      })
-    );
-    rerender(<App />);
+    act(() => {
+      trackerOptions().onCompleted({
+        notificationKey: "session:session-1:trace:trace-1:status:success",
+        sessionId: "session-1",
+        title: "设计复盘",
+        traceId: "trace-1",
+      });
+    });
 
     const card = await screen.findByText("设计复盘会话已完成");
     fireEvent.click(card);
@@ -229,19 +233,9 @@ describe("App Codex mode routing", () => {
       })
     );
 
-    const { rerender } = render(<App />);
+    render(<App />);
 
     expect(screen.queryByText("已完成任务会话已完成")).toBeNull();
-
-    mocks.useMobileSessions.mockImplementation((options: MockMobileSessionsOptions) =>
-      mockMobileSessions(options, {
-        historyItems: [
-          historyItem("session-1", "已完成任务", "success"),
-          historyItem("session-2", "状态补全任务", "success"),
-        ],
-      })
-    );
-    rerender(<App />);
 
     await waitFor(() => {
       expect(screen.queryByText("状态补全任务会话已完成")).toBeNull();
@@ -269,6 +263,7 @@ function mockMobileSessions(
     hasConversation: false,
     hasOlderHistory: false,
     historyItems: overrides.historyItems ?? [],
+    liveRunningSessions: [],
     loadOlderHistory: vi.fn(),
     loadingOlderHistory: false,
     loadingSessionMessages: false,
@@ -288,6 +283,18 @@ function mockMobileSessions(
     startNewSession: vi.fn(),
     stopCurrentRun: vi.fn(),
   };
+}
+
+function trackerOptions(): {
+  onCompleted: (event: {
+    notificationKey: string;
+    sessionId: string;
+    title: string;
+    traceId: string;
+  }) => void;
+} {
+  const calls = mocks.useCompletionTracker.mock.calls;
+  return calls[calls.length - 1]?.[0] as ReturnType<typeof trackerOptions>;
 }
 
 function historyItem(id: string, title: string, status: MockHistoryItem["status"]): MockHistoryItem {

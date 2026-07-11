@@ -11,6 +11,7 @@ const (
 	ActionHumanResponse          = "HUMAN_RESPONSE"
 	ActionSessionsList           = "SESSIONS_LIST"
 	ActionSessionsSearch         = "SESSIONS_SEARCH"
+	ActionSessionRunStatesGet    = "SESSION_RUN_STATES_GET"
 	ActionSessionGet             = "SESSION_GET"
 	ActionSessionAppend          = "SESSION_APPEND"
 	ActionConfigGet              = "CONFIG_GET"

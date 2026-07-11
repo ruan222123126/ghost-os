@@ -57,6 +57,8 @@ OUTPUT_GROUPS = (
             "sessionHumanInteraction",
             "sessionMessage",
             "sessionMetadata",
+            "sessionRunState",
+            "sessionRunStatesGetRequest",
             "sessionRuntimeSelection",
             "sessionSidebarPartition",
             "sessionSidebarPartitionState",

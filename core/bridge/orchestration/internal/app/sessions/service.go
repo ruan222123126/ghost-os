@@ -12,6 +12,7 @@ import (
 const (
 	ActionList                 = "SESSIONS_LIST"
 	ActionSearch               = "SESSIONS_SEARCH"
+	ActionRunStatesGet         = "SESSION_RUN_STATES_GET"
 	ActionGet                  = "SESSION_GET"
 	ActionAppend               = "SESSION_APPEND"
 	ActionDelete               = "SESSION_DELETE"
@@ -31,6 +32,7 @@ var (
 
 type Store interface {
 	ListMetadata() ([]session.SessionMetadata, error)
+	ListRunStates(session.RunStateQuery) ([]session.SessionRunState, error)
 	SearchMetadata(string, int) ([]session.SessionMetadata, error)
 	Load(string) (*session.Session, error)
 	LoadPage(string, session.PageParams) (*session.Session, session.MessagePage, error)

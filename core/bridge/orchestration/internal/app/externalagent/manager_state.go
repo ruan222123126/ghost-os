@@ -23,6 +23,20 @@ func (r *runtimeSession) registerApproval(id string) chan string {
 	return ch
 }
 
+func (m *Manager) persistCancelledRun(sessionID string, traceID string) error {
+	if m == nil || m.SessionStore == nil {
+		return fmt.Errorf("session store is not configured")
+	}
+	sess, err := m.SessionStore.Load(sessionID)
+	if err != nil {
+		return err
+	}
+	if !sess.SetLastRunState(session.RunStatusCancelled, traceID, time.Now().UTC()) {
+		return nil
+	}
+	return m.SessionStore.Save(sess)
+}
+
 func (r *runtimeSession) resolveApproval(id string, decision string) error {
 	r.mu.Lock()
 	ch := r.pending[strings.TrimSpace(id)]

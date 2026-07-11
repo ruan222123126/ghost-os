@@ -18,6 +18,8 @@ const BRIDGE_BUS_PATH: &str = "api/bus";
 const MOBILE_CONVERSATIONS_FILE: &str = "mobile-conversations.v1.json";
 const MOBILE_LOCAL_PROVIDERS_FILE: &str = "mobile-local-providers.v1.json";
 const MOBILE_LOCAL_PROVIDER_SECRETS_FILE: &str = "mobile-local-provider-secrets.v1.json";
+const MOBILE_NOTIFICATION_KEYS_FILE: &str = "mobile-notification-keys.v1.json";
+const MOBILE_NOTIFICATION_KEY_LIMIT: usize = 100;
 const REQUEST_TIMEOUT_SECS: u64 = 60;
 const SSE_CONTENT_TYPE: &str = "text/event-stream";
 const STREAM_IPC_FLUSH_INTERVAL_MS: u64 = 50;
@@ -436,6 +438,41 @@ async fn mobile_conversations_save(
         write_mobile_conversations(&path, &conversations)
     })
     .await
+}
+
+#[tauri::command]
+fn mobile_notification_key_contains(
+    app: tauri::AppHandle,
+    notification_key: String,
+) -> Result<bool, String> {
+    let key = notification_key.trim();
+    if key.is_empty() {
+        return Err("notification_key is required".to_string());
+    }
+    Ok(
+        read_mobile_notification_keys(&mobile_notification_keys_path(&app)?)?
+            .iter()
+            .any(|stored| stored == key),
+    )
+}
+
+#[tauri::command]
+fn mobile_notification_key_record(
+    app: tauri::AppHandle,
+    notification_key: String,
+) -> Result<(), String> {
+    let key = notification_key.trim();
+    if key.is_empty() {
+        return Err("notification_key is required".to_string());
+    }
+    let path = mobile_notification_keys_path(&app)?;
+    let mut keys = read_mobile_notification_keys(&path)?;
+    keys.retain(|stored| stored != key);
+    keys.push(key.to_string());
+    if keys.len() > MOBILE_NOTIFICATION_KEY_LIMIT {
+        keys.drain(..keys.len() - MOBILE_NOTIFICATION_KEY_LIMIT);
+    }
+    write_mobile_notification_keys(&path, &keys)
 }
 
 #[tauri::command]
@@ -858,6 +895,36 @@ fn mobile_local_provider_secrets_path(app: &tauri::AppHandle) -> Result<PathBuf,
         .app_config_dir()
         .map_err(|err| format!("resolve local provider secrets directory failed: {err}"))?;
     Ok(dir.join(MOBILE_LOCAL_PROVIDER_SECRETS_FILE))
+}
+
+fn mobile_notification_keys_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|err| format!("resolve mobile notification key directory failed: {err}"))?;
+    Ok(dir.join(MOBILE_NOTIFICATION_KEYS_FILE))
+}
+
+fn read_mobile_notification_keys(path: &Path) -> Result<Vec<String>, String> {
+    match fs::read_to_string(path) {
+        Ok(raw) if raw.trim().is_empty() => Ok(Vec::new()),
+        Ok(raw) => serde_json::from_str(&raw)
+            .map_err(|err| format!("decode mobile notification keys failed: {err}")),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+        Err(err) => Err(format!("read mobile notification keys failed: {err}")),
+    }
+}
+
+fn write_mobile_notification_keys(path: &Path, keys: &[String]) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("create mobile notification key directory failed: {err}"))?;
+    }
+    let encoded = serde_json::to_vec_pretty(keys)
+        .map_err(|err| format!("encode mobile notification keys failed: {err}"))?;
+    fs::write(path, encoded)
+        .map_err(|err| format!("write mobile notification keys failed: {err}"))?;
+    set_private_file_permissions(path, "mobile notification keys")
 }
 
 fn read_mobile_conversations(path: &Path) -> Result<Vec<Value>, String> {
@@ -1379,6 +1446,7 @@ mod tests {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             host_profile,
             bridge_agent_stream,
@@ -1392,6 +1460,8 @@ pub fn run() {
             mobile_conversation_get,
             mobile_conversations_upsert,
             mobile_conversations_save,
+            mobile_notification_key_contains,
+            mobile_notification_key_record,
             mobile_local_provider_list,
             mobile_local_provider_upsert,
             mobile_local_provider_delete,

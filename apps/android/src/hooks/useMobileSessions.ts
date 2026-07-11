@@ -11,6 +11,7 @@ import {
   upsertStoredMobileConversation,
 } from "../lib/mobileSessionStorage";
 import { hasTauriRuntime } from "../lib/bridgeBus";
+import type { TrackedSessionRun } from "../lib/mobileSessionRunTracker";
 import {
   MOBILE_PERSISTED_CONVERSATION_LIMIT,
   MOBILE_PERSISTED_SESSION_PAGE_LIMIT,
@@ -356,6 +357,22 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       sessionViews,
       storedConversations,
     ],
+  );
+  const liveRunningSessions = useMemo<TrackedSessionRun[]>(
+    () => Object.values(sessionViews).flatMap((view) => {
+      const traceId = view.run.traceId?.trim() || "";
+      if (view.run.status !== "running" || !traceId) {
+        return [];
+      }
+      return [{
+        sessionId: view.id,
+        status: "running" as const,
+        title: view.title,
+        traceId,
+        updatedAt: view.updatedAt,
+      }];
+    }),
+    [sessionViews],
   );
   const activeExternalRunningSessionId = useMemo(() => {
     if (!activeSessionId) {
@@ -1454,6 +1471,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     loadOlderHistory,
     loadingOlderHistory,
     loadingSessionMessages,
+    liveRunningSessions,
     postSendFocusRequest,
     selectSession,
     sendMessage,

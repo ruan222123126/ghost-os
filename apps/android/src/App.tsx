@@ -10,15 +10,16 @@ import {
   ScrollDownButton,
 } from "./components/MobileChatHome";
 import type { MobileChatComposerHandle } from "./components/MobileChatHome";
-import type { SidebarHistoryItem } from "./components/mobileChat/types";
 import { MobileConnectionPanel } from "./components/MobileConnectionPanel";
 import { MobileSearchPage } from "./components/MobileSearchPage";
 import { MobileSettingsPanel } from "./components/MobileSettingsPanel";
 import { useBodyScrollLock } from "./hooks/useBodyScrollLock";
 import { useChatFeedScroll } from "./hooks/useChatFeedScroll";
 import { useMobileBridge } from "./hooks/useMobileBridge";
+import { useMobileSessionCompletionNotifications } from "./hooks/useMobileSessionCompletionNotifications";
 import { useMobileSessions } from "./hooks/useMobileSessions";
 import { normalizeCodexModel } from "./lib/codexModels";
+import type { SessionCompletionEvent } from "./lib/mobileSessionRunTracker";
 import type {
   AgentModeSelection,
   AgentRuntimeType,
@@ -100,6 +101,7 @@ function App() {
     deleteTask,
     getFullSession,
     getSession,
+    getSessionRunStates,
     host,
     orchestrationList,
     orchestrationListError,
@@ -115,6 +117,7 @@ function App() {
     sessions,
     sessionsLoaded,
     setSettings,
+    setStatus,
     setOrchestrationEnabled,
     setTaskEnabled,
     settings,
@@ -144,13 +147,13 @@ function App() {
   const composerRef = useRef<MobileChatComposerHandle>(null);
   const virtualScrollToBottomRef = useRef<(() => void) | null>(null);
   const pendingSelectHistoryTimeoutRef = useRef<number | null>(null);
-  const previousHistoryStatusRef = useRef<Map<string, SidebarHistoryItem["status"]>>(new Map());
   const localRuntimeConfig = useMemo(() => buildLocalRuntimeConfig(providerList, settings), [providerList, settings]);
   const chatConfig = settings.remoteExecutionEnabled ? config : localRuntimeConfig;
   const chatProviderList = providerList;
   const activeCodexModel = normalizeCodexModel(codexModel, codexModelCatalog);
   const effectiveAgentRuntime = resolveEffectiveAgentRuntime(agentRuntime, agentMode);
   const effectiveRuntimeConfig = effectiveAgentRuntime === "codex" ? config : chatConfig;
+  const connectionScope = `${settings.connectionMode}:${bridgeUrl}:${settings.pairing?.deviceId ?? ""}:${settings.pairing?.pcId ?? ""}:${settings.pairing?.signalingUrl ?? ""}`;
   const sendAgentMessageForRuntime = useCallback(
     (options: Parameters<typeof sendAgentMessage>[0]) => sendAgentMessage({
       ...options,
@@ -187,7 +190,7 @@ function App() {
   const mobileSessions = useMobileSessions({
     bridgeConnected: Boolean(config),
     appendSessionMessages,
-    computerSessionSyncScope: `${settings.connectionMode}:${bridgeUrl}:${settings.pairing?.deviceId ?? ""}:${settings.pairing?.pcId ?? ""}:${settings.pairing?.signalingUrl ?? ""}`,
+    computerSessionSyncScope: connectionScope,
     getFullSession,
     getSession,
     onSessionRuntimeSelection: applySessionRuntimeSelection,
@@ -202,6 +205,28 @@ function App() {
     sessions,
     sessionsLoaded,
     stopAgentRun: stopAgentRunForRuntime,
+  });
+  const handleSessionCompleted = useCallback((event: SessionCompletionEvent): void => {
+    setCompletionNotifications((current) => [
+      ...current.filter((notification) => notification.id !== event.sessionId),
+      { id: event.sessionId, title: event.title.trim() || "该会话" },
+    ].slice(-COMPLETION_NOTIFICATION_STACK_LIMIT));
+  }, []);
+  const knownSessionIds = useMemo(
+    () => [...new Set([...sessions.map((session) => session.id), ...mobileSessions.historyItems.map((item) => item.id)])],
+    [mobileSessions.historyItems, sessions],
+  );
+  useMobileSessionCompletionNotifications({
+    activeSessionId: mobileSessions.activeSessionId,
+    connected: connectionStatus.tone === "success",
+    connectionScope,
+    getSessionRunStates,
+    knownSessionIds,
+    liveRunningSessions: mobileSessions.liveRunningSessions,
+    onInAppCompletion: handleSessionCompleted,
+    onStatus: setStatus,
+    selectSession: mobileSessions.selectSession,
+    sessionsLoaded,
   });
   const displayStatus = mobileSessions.activeStatus.tone === "idle" ? status : mobileSessions.activeStatus;
   const supportsComposerSkills = Boolean(config) && (effectiveAgentRuntime === "codex" || settings.remoteExecutionEnabled);
@@ -269,34 +294,6 @@ function App() {
       clearPendingSelectHistory();
     };
   }, []);
-
-  useEffect(() => {
-    const previousStatuses = previousHistoryStatusRef.current;
-    const completedItems = mobileSessions.historyItems.filter((item) =>
-      item.status === "success"
-        && previousStatuses.get(item.id) === "running"
-    );
-
-    if (completedItems.length > 0) {
-      setCompletionNotifications((current) => {
-        const existingIds = new Set(current.map((notification) => notification.id));
-        const additions = completedItems
-          .filter((item) => !existingIds.has(item.id))
-          .map((item) => ({
-            id: item.id,
-            title: item.title.trim() || "该会话",
-          }));
-        if (additions.length === 0) {
-          return current;
-        }
-        return [...current, ...additions].slice(-COMPLETION_NOTIFICATION_STACK_LIMIT);
-      });
-    }
-
-    previousHistoryStatusRef.current = new Map(
-      mobileSessions.historyItems.map((item) => [item.id, item.status]),
-    );
-  }, [mobileSessions.historyItems]);
 
   function switchAgentRuntime(runtime: AgentRuntimeType): void {
     setAgentRuntime(runtime);

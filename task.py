@@ -13,8 +13,9 @@ NATIVE_REQUIRED_FEATURE = "python-sandbox"
 CONTRACT_PATHS = (
     "core/shared/schema.json",
     "core/bridge/orchestration/envelope_generated.go",
-    "apps/web/lib/envelope.generated.ts",
+    "apps/shared/envelope.generated.ts",
     "apps/cli/src/envelope_generated.rs",
+    "apps/android/src-tauri/gen/android/app/src/main/java/dev/ghostos/android/model",
 )
 
 
@@ -322,7 +323,7 @@ def check_layers() -> int:
     return run(["bash", "scripts/check-layers.sh"], ROOT)
 
 
-# gen_contracts 从 core/shared/schema.json 生成 Go/TS/Rust 契约类型。
+# gen_contracts 从 core/shared/schema.json 生成 Go/TS/Rust/Kotlin 契约类型。
 def gen_contracts() -> int:
     print("generate shared contract types...", flush=True)
     return run(["python3", "core/shared/generate_envelope_types.py"], ROOT)

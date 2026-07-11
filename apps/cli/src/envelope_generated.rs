@@ -400,6 +400,17 @@ pub struct SessionMetadata {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionRunState {
+    pub session_id: String,
+    pub title: String,
+    pub status: String,
+    pub trace_id: String,
+    pub started_at: String,
+    pub updated_at: String,
+    pub terminal_at: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct SessionRuntimeSelection {
     pub runtime: String,
     #[serde(default)]
@@ -410,6 +421,14 @@ pub struct SessionRuntimeSelection {
     pub model: Option<String>,
     #[serde(default)]
     pub mode: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionRunStatesGetRequest {
+    #[serde(default)]
+    pub limit: Option<i64>,
+    #[serde(default)]
+    pub session_ids: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
