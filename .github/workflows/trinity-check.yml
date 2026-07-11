@@ -110,7 +110,15 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install Linux native dependencies
-        run: sudo apt-get update && sudo apt-get install --yes libxcb1-dev
+        run: sudo apt-get update && sudo apt-get install --yes libxcb1-dev ripgrep
+
+      - name: Compile tests
+        run: |
+          if [ -n "${{ matrix.feature_args }}" ]; then
+            cargo test --manifest-path drivers/native/Cargo.toml ${{ matrix.feature_args }} --no-run
+          else
+            cargo test --manifest-path drivers/native/Cargo.toml --no-run
+          fi
 
       - name: Run tests
         run: |
