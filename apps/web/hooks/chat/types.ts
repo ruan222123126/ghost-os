@@ -2,6 +2,7 @@ import type { SetStateAction } from 'react';
 import type { ActiveAgentRun } from '@/lib/chat-stream/types';
 import type { ChatRuntimeAction } from '@/lib/chatRuntime/actions';
 import type {
+  AgentRuntimeType,
   ChatMessage,
   ChatSendInput,
   ExternalCodexPermissionMode,

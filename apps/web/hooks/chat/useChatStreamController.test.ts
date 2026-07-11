@@ -33,8 +33,8 @@ describe('hooks/chat/useChatStreamController', () => {
           { initialLocale: 'en-US' },
           React.createElement(HookProbe, {
             beginHistorySync: (sessionId) => events.push(`beginHistorySync:${sessionId}`),
-            currentSessionId: 'session-error',
             endHistorySync: (sessionId) => events.push(`endHistorySync:${sessionId}`),
+            getCurrentSessionId: () => 'session-error',
             onRender: (state) => {
               latestState = state;
             },
@@ -50,6 +50,7 @@ describe('hooks/chat/useChatStreamController', () => {
 
     await act(async () => {
       await expect(latestState!.runAgentStream({
+        agentRuntime: 'ghost',
         message: 'hello',
         traceId: 'trace-error',
       })).rejects.toThrow('stream failed');
@@ -78,8 +79,8 @@ describe('hooks/chat/useChatStreamController', () => {
           { initialLocale: 'en-US' },
           React.createElement(HookProbe, {
             beginHistorySync: (sessionId) => events.push(`beginHistorySync:${sessionId}`),
-            currentSessionId: 'session-stop',
             endHistorySync: (sessionId) => events.push(`endHistorySync:${sessionId}`),
+            getCurrentSessionId: () => 'session-stop',
             onRender: (state) => {
               latestState = state;
             },
@@ -95,6 +96,7 @@ describe('hooks/chat/useChatStreamController', () => {
 
     await act(async () => {
       await expect(latestState!.runAgentStream({
+        agentRuntime: 'ghost',
         message: 'hello',
         signal: abortController.signal,
         traceId: 'trace-stop',
@@ -128,8 +130,8 @@ describe('hooks/chat/useChatStreamController', () => {
               }
             },
             beginHistorySync: (sessionId) => events.push(`beginHistorySync:${sessionId}`),
-            currentSessionId: '',
             endHistorySync: (sessionId) => events.push(`endHistorySync:${sessionId}`),
+            getCurrentSessionId: () => '',
             migrateSessionState: (fromSessionId, toSessionId) => {
               events.push(`migrate:${fromSessionId}->${toSessionId}`);
             },
@@ -149,6 +151,7 @@ describe('hooks/chat/useChatStreamController', () => {
 
     await act(async () => {
       await expect(latestState!.runAgentStream({
+        agentRuntime: 'ghost',
         message: 'hello',
         traceId: 'trace-resolved',
       })).resolves.toEqual({
@@ -170,28 +173,46 @@ describe('hooks/chat/useChatStreamController', () => {
   });
 });
 
-function HookProbe(props: {
+interface HookProbeProps {
   applyRuntimeActions?: HookProps['applyRuntimeActions'];
   beginHistorySync: HookProps['beginHistorySync'];
-  currentSessionId: string;
   endHistorySync: HookProps['endHistorySync'];
+  getCurrentSessionId: HookProps['getCurrentSessionId'];
   migrateSessionState?: HookProps['migrateSessionState'];
   onRender: (state: HookRenderState) => void;
   onSessionResolved?: HookProps['onSessionResolved'];
   setChatError: HookProps['setChatError'];
   syncRecentHistory: HookProps['syncRecentHistory'];
-}) {
+}
+
+function noopApplyRuntimeActions() {}
+
+function noopMigrateSessionState() {}
+
+function noopSessionResolved() {}
+
+function HookProbe({
+  applyRuntimeActions = noopApplyRuntimeActions,
+  beginHistorySync,
+  endHistorySync,
+  getCurrentSessionId,
+  migrateSessionState = noopMigrateSessionState,
+  onRender,
+  onSessionResolved = noopSessionResolved,
+  setChatError,
+  syncRecentHistory,
+}: HookProbeProps) {
   const state = useChatStreamController({
-    applyRuntimeActions: props.applyRuntimeActions ?? (() => undefined),
-    beginHistorySync: props.beginHistorySync,
-    endHistorySync: props.endHistorySync,
-    getCurrentSessionId: () => props.currentSessionId,
-    migrateSessionState: props.migrateSessionState ?? (() => undefined),
-    onSessionResolved: props.onSessionResolved ?? (() => undefined),
-    setChatError: props.setChatError,
-    syncRecentHistory: props.syncRecentHistory,
+    applyRuntimeActions,
+    beginHistorySync,
+    endHistorySync,
+    getCurrentSessionId,
+    migrateSessionState,
+    onSessionResolved,
+    setChatError,
+    syncRecentHistory,
   });
-  props.onRender(state);
+  onRender(state);
   return null;
 }
 
