@@ -33,6 +33,33 @@ describe("MobileChatComposer", () => {
     expect(onSend).toHaveBeenCalledWith("保留这条草稿", undefined);
   });
 
+  it("keeps the submitted draft cleared until the pending send finally fails", async () => {
+    let finishSend: ((sent: boolean) => void) | undefined;
+    const onSend = vi.fn(() => new Promise<boolean>((resolve) => {
+      finishSend = resolve;
+    }));
+    render(
+      <MobileChatComposer
+        agentMode={null}
+        canEnableCodexMode={false}
+        canSend
+        canStop={false}
+        loading={false}
+        onChangeAgentMode={vi.fn()}
+        onSend={onSend}
+      />,
+    );
+
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "重连期间不要恢复" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送任务" }));
+
+    expect(screen.getByRole<HTMLTextAreaElement>("textbox").value).toBe("");
+    act(() => finishSend?.(false));
+    await waitFor(() => {
+      expect(screen.getByRole<HTMLTextAreaElement>("textbox").value).toBe("重连期间不要恢复");
+    });
+  });
+
   it("exposes isolated reset and suggestion-fill controls", () => {
     const ref = createRef<MobileChatComposerHandle>();
     render(

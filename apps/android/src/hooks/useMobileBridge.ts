@@ -1440,6 +1440,9 @@ export function useMobileBridge() {
             body: params,
             message: agentMessage,
             onEvent: applyEvent,
+            onReconnectAttempt: (attempt, maxAttempts) => {
+              projector.setStatus({ tone: "loading", text: `连接中断，正在重连（${attempt}/${maxAttempts}）` });
+            },
             path: agentRuntime === "codex" ? EXTERNAL_AGENT_STREAM_PATH : undefined,
             requestId,
             sessionId: initialSessionId,

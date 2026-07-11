@@ -13,6 +13,7 @@ use tauri::{Emitter, Manager};
 const BRIDGE_AGENT_STREAM_PATH: &str = "api/agent/stream";
 const BRIDGE_EXTERNAL_AGENT_STREAM_PATH: &str = "api/external-agent/stream";
 const BRIDGE_AGENT_STREAM_CHUNK_EVENT: &str = "bridge-agent-stream-chunk";
+const BRIDGE_RUN_EVENTS_PATH: &str = "api/runs";
 const BRIDGE_BUS_PATH: &str = "api/bus";
 const MOBILE_CONVERSATIONS_FILE: &str = "mobile-conversations.v1.json";
 const MOBILE_LOCAL_PROVIDERS_FILE: &str = "mobile-local-providers.v1.json";
@@ -52,6 +53,16 @@ struct BridgeAgentStreamCommand {
     request_id: String,
     runtime_overrides: Option<Value>,
     session_id: Option<String>,
+    trace_id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BridgeAgentStreamReconnectCommand {
+    base_url: String,
+    api_token: Option<String>,
+    last_event_id: Option<String>,
+    request_id: String,
     trace_id: String,
 }
 
@@ -289,6 +300,41 @@ async fn bridge_agent_stream(
 }
 
 #[tauri::command]
+async fn bridge_agent_stream_reconnect(
+    app: tauri::AppHandle,
+    request: BridgeAgentStreamReconnectCommand,
+) -> Result<(), String> {
+    let trace_id = request.trace_id.trim();
+    if trace_id.is_empty() {
+        return Err("bridge stream trace ID is required".to_string());
+    }
+    if request.request_id.trim().is_empty() {
+        return Err("bridge stream request ID is required".to_string());
+    }
+
+    let url = bridge_run_events_url(&request.base_url, trace_id)?;
+    let client = reqwest::Client::builder()
+        .build()
+        .map_err(|err| format!("create bridge reconnect client failed: {err}"))?;
+    let mut builder = client
+        .get(url)
+        .header(reqwest::header::ACCEPT, SSE_CONTENT_TYPE)
+        .header("X-Trace-ID", trace_id);
+    if let Some(token) = normalized_token(request.api_token) {
+        builder = builder.header("X-API-Token", token);
+    }
+    if let Some(last_event_id) = normalized_token(request.last_event_id) {
+        builder = builder.header("Last-Event-ID", last_event_id);
+    }
+
+    let response = builder
+        .send()
+        .await
+        .map_err(|err| format!("bridge stream reconnect failed: {err}"))?;
+    ensure_stream_response(response, app, request.request_id).await
+}
+
+#[tauri::command]
 fn mobile_credential_save(
     app: tauri::AppHandle,
     device_id: String,
@@ -516,6 +562,15 @@ fn bridge_agent_stream_url(base_url: &str) -> Result<reqwest::Url, String> {
 
 fn bridge_stream_url(base_url: &str, path: &str) -> Result<reqwest::Url, String> {
     bridge_api_url(base_url, path)
+}
+
+fn bridge_run_events_url(base_url: &str, trace_id: &str) -> Result<reqwest::Url, String> {
+    let mut url = bridge_api_url(base_url, BRIDGE_RUN_EVENTS_PATH)?;
+    url.path_segments_mut()
+        .map_err(|_| "bridge URL cannot contain run event path segments".to_string())?
+        .push(trace_id)
+        .push("events");
+    Ok(url)
 }
 
 fn bridge_api_url(base_url: &str, path: &str) -> Result<reqwest::Url, String> {
@@ -1230,6 +1285,17 @@ mod tests {
     }
 
     #[test]
+    fn bridge_run_events_url_encodes_trace_id() {
+        let url =
+            bridge_run_events_url("http://127.0.0.1:8711", "trace one").expect("run events URL");
+
+        assert_eq!(
+            url.as_str(),
+            "http://127.0.0.1:8711/api/runs/trace%20one/events"
+        );
+    }
+
+    #[test]
     fn parse_unexpected_stream_response_prefers_error_field() {
         let message = parse_unexpected_stream_response_body(
             reqwest::StatusCode::BAD_REQUEST,
@@ -1316,6 +1382,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             host_profile,
             bridge_agent_stream,
+            bridge_agent_stream_reconnect,
             bridge_bus_request,
             mobile_credential_save,
             mobile_credential_load,

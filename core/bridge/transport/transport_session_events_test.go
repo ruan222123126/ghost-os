@@ -201,6 +201,81 @@ func TestHandleSessionEventsBroadcastsStreamProgress(t *testing.T) {
 	}
 }
 
+func TestHandleRunEventsReplaysAfterLastEventIDThroughTerminalEvent(t *testing.T) {
+	handler, service, _ := newTestHandlerWithService(t, nil, nil)
+	hub := service.SessionPushHub()
+	hub.Publish(bridgeorchestration.SessionPushEvent{
+		ID:        "trace-resume:000001",
+		Type:      bridgeorchestration.SessionPushRunStarted,
+		TraceID:   "trace-resume",
+		SessionID: "session-resume",
+		Payload:   map[string]any{"session_id": "session-resume"},
+	})
+	hub.Publish(bridgeorchestration.SessionPushEvent{
+		ID:        "trace-resume:000002",
+		Type:      bridgeorchestration.SessionPushCompletionDelta,
+		TraceID:   "trace-resume",
+		SessionID: "session-resume",
+		Payload:   map[string]any{"kind": "text", "text": "continued"},
+	})
+	hub.Publish(bridgeorchestration.SessionPushEvent{
+		ID:        "trace-resume:000003",
+		Type:      bridgeorchestration.SessionPushDone,
+		TraceID:   "trace-resume",
+		SessionID: "session-resume",
+		Payload:   map[string]any{"session_ended": false},
+	})
+
+	response := serveRequest(
+		handler,
+		http.MethodGet,
+		"/api/runs/trace-resume/events",
+		"",
+		map[string]string{"Last-Event-ID": "trace-resume:000001"},
+	)
+	if response.Code != http.StatusOK {
+		t.Fatalf("unexpected status: got %d body=%s", response.Code, response.Body.String())
+	}
+	events := decodeAgentSSEEvents(t, response.Body.String())
+	if len(events) != 2 {
+		t.Fatalf("unexpected replay event count: got %d events=%+v", len(events), events)
+	}
+	if events[0].ID != "trace-resume:000002" || events[0].Type != streaming.EventCompletionDelta {
+		t.Fatalf("unexpected replay delta: %+v", events[0])
+	}
+	if events[1].ID != "trace-resume:000003" || events[1].Type != streaming.EventDone {
+		t.Fatalf("unexpected replay terminal event: %+v", events[1])
+	}
+}
+
+func TestHandleRunEventsRejectsUnknownTrace(t *testing.T) {
+	handler, _, _ := newTestHandlerWithService(t, nil, nil)
+
+	response := serveRequest(handler, http.MethodGet, "/api/runs/missing/events", "", nil)
+
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("unexpected status: got %d want %d", response.Code, http.StatusNotFound)
+	}
+}
+
+func decodeAgentSSEEvents(t *testing.T, body string) []streaming.Event {
+	t.Helper()
+	events := make([]streaming.Event, 0)
+	for _, block := range strings.Split(body, "\n\n") {
+		for _, line := range strings.Split(block, "\n") {
+			if !strings.HasPrefix(line, "data: ") {
+				continue
+			}
+			var event streaming.Event
+			if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &event); err != nil {
+				t.Fatalf("decode resumed agent event: %v", err)
+			}
+			events = append(events, event)
+		}
+	}
+	return events
+}
+
 type decodedSessionPushEvent struct {
 	ID        string                                   `json:"id"`
 	Type      bridgeorchestration.SessionPushEventType `json:"type"`

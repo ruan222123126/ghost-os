@@ -12,6 +12,7 @@ import {
 
 const BRIDGE_AGENT_STREAM_CHUNK_EVENT = "bridge-agent-stream-chunk";
 const SSE_BLOCK_SEPARATOR = "\n\n";
+const STREAM_RECONNECT_DELAYS_MS = [300, 700, 1500] as const;
 
 type AgentStreamEventType =
   | "run_started"
@@ -105,6 +106,7 @@ interface StreamAgentMessageHTTPOptions {
   body?: Record<string, unknown>;
   message: string;
   onEvent: (event: AgentStreamEvent) => void;
+  onReconnectAttempt?: (attempt: number, maxAttempts: number) => void;
   path?: string;
   requestId: string;
   runtimeOverrides?: Record<string, unknown>;
@@ -124,6 +126,14 @@ interface BridgeAgentStreamCommand {
   traceId: string;
 }
 
+interface BridgeAgentStreamReconnectCommand {
+  apiToken?: string;
+  baseUrl: string;
+  lastEventId?: string;
+  requestId: string;
+  traceId: string;
+}
+
 interface BridgeAgentStreamChunk {
   requestId: string;
   chunk: number[];
@@ -132,6 +142,14 @@ interface BridgeAgentStreamChunk {
 interface SSEParseResult {
   blocks: string[];
   rest: string;
+}
+
+interface BridgeStreamInvocationOptions {
+  consumeText: (text: string, flush: boolean) => void;
+  flushDecoder: () => string;
+  getStreamError: () => Error | null;
+  invokeStream: () => Promise<void>;
+  summary: AgentStreamSummary;
 }
 
 const AGENT_STREAM_EVENT_TYPES = {
@@ -154,9 +172,11 @@ const COMPLETION_DELTA_KINDS = {
 } as const satisfies Record<CompletionDeltaKind, true>;
 
 export async function streamAgentMessageHTTP(options: StreamAgentMessageHTTPOptions): Promise<AgentStreamResult> {
-  const decoder = new TextDecoder();
   const summary = createAgentStreamSummary();
+  const seenEventIds = new Set<string>();
+  let decoder = new TextDecoder();
   let buffer = "";
+  let lastEventId = "";
   let streamError: Error | null = null;
 
   function consumeText(text: string, flush: boolean): void {
@@ -170,9 +190,11 @@ export async function streamAgentMessageHTTP(options: StreamAgentMessageHTTPOpti
       buffer = parsed.rest;
       for (const block of parsed.blocks) {
         const event = parseSSEBlock(block);
-        if (!event) {
+        if (!event || seenEventIds.has(event.id)) {
           continue;
         }
+        seenEventIds.add(event.id);
+        lastEventId = event.id;
         options.onEvent(event);
         updateAgentStreamSummary(summary, event);
       }
@@ -189,17 +211,84 @@ export async function streamAgentMessageHTTP(options: StreamAgentMessageHTTPOpti
   });
 
   try {
-    await invoke<void>("bridge_agent_stream", { request: buildBridgeAgentStreamCommand(options) });
-    await flushPendingEventCallbacks();
-    consumeText(decoder.decode(), true);
-    if (streamError) {
-      throw streamError;
+    const initialError = await consumeBridgeStreamInvocation({
+      consumeText,
+      flushDecoder: () => decoder.decode(),
+      getStreamError: () => streamError,
+      invokeStream: () => invoke<void>("bridge_agent_stream", { request: buildBridgeAgentStreamCommand(options) }),
+      summary,
+    });
+    if (!initialError) {
+      return summary.result;
     }
-    assertAgentStreamTerminal(summary);
-    return summary.result;
+    if (!isReconnectableBridgeStreamError(initialError)) {
+      throw initialError;
+    }
+
+    let finalError = initialError;
+    for (const [index, delayMs] of STREAM_RECONNECT_DELAYS_MS.entries()) {
+      const attempt = index + 1;
+      options.onReconnectAttempt?.(attempt, STREAM_RECONNECT_DELAYS_MS.length);
+      await waitForReconnect(delayMs);
+      decoder = new TextDecoder();
+      buffer = "";
+      const reconnectRequest = buildBridgeAgentStreamReconnectCommand(options, lastEventId);
+      const reconnectError = await consumeBridgeStreamInvocation({
+        consumeText,
+        flushDecoder: () => decoder.decode(),
+        getStreamError: () => streamError,
+        invokeStream: () => invoke<void>("bridge_agent_stream_reconnect", { request: reconnectRequest }),
+        summary,
+      });
+      if (!reconnectError) {
+        return summary.result;
+      }
+      finalError = reconnectError;
+    }
+    throw finalError;
   } finally {
     unlisten();
   }
+}
+
+async function consumeBridgeStreamInvocation(options: BridgeStreamInvocationOptions): Promise<Error | null> {
+  try {
+    await options.invokeStream();
+    await flushPendingEventCallbacks();
+    options.consumeText(options.flushDecoder(), true);
+  } catch (error) {
+    await flushPendingEventCallbacks();
+    const streamError = options.getStreamError();
+    if (streamError) {
+      throw streamError;
+    }
+    if (options.summary.sawTerminalEvent) {
+      return null;
+    }
+    return toError(error);
+  }
+
+  const streamError = options.getStreamError();
+  if (streamError) {
+    throw streamError;
+  }
+  try {
+    assertAgentStreamTerminal(options.summary);
+    return null;
+  } catch (error) {
+    return toError(error);
+  }
+}
+
+function isReconnectableBridgeStreamError(error: Error): boolean {
+  return error.message.includes("read bridge stream failed:") ||
+    error.message === "agent stream closed before terminal event";
+}
+
+async function waitForReconnect(delayMs: number): Promise<void> {
+  await new Promise<void>((resolve) => {
+    window.setTimeout(resolve, delayMs);
+  });
 }
 
 export function createAgentStreamSummary(): AgentStreamSummary {
@@ -368,6 +457,19 @@ function buildBridgeAgentStreamCommand(options: StreamAgentMessageHTTPOptions): 
     requestId: options.requestId,
     runtimeOverrides: options.runtimeOverrides,
     sessionId: options.sessionId?.trim() || undefined,
+    traceId: options.traceId,
+  };
+}
+
+function buildBridgeAgentStreamReconnectCommand(
+  options: StreamAgentMessageHTTPOptions,
+  lastEventId: string,
+): BridgeAgentStreamReconnectCommand {
+  return {
+    apiToken: options.apiToken?.trim() || undefined,
+    baseUrl: options.baseUrl,
+    lastEventId: lastEventId || undefined,
+    requestId: options.requestId,
     traceId: options.traceId,
   };
 }
