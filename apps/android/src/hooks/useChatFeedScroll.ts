@@ -8,6 +8,7 @@ const SCROLL_DIRECTION_TOLERANCE_PX = 2;
 const USER_SCROLL_INTENT_RELEASE_MS = 240;
 const USER_SCROLL_END_RELEASE_MS = 320;
 const CHAT_FEED_CONTENT_SELECTOR = "[data-chat-feed-content]";
+const HISTORY_ANCHOR_SELECTOR = "[data-history-anchor-key]";
 
 interface UseChatFeedScrollOptions {
   hasOlderHistory?: boolean;
@@ -26,6 +27,9 @@ interface PostSendFocusRequest {
 }
 
 interface HistoryAnchorSnapshot {
+  anchorKey: string | null;
+  anchorViewportTop: number;
+  contentInserted: boolean;
   messageCount: number;
   scrollHeight: number;
   scrollTop: number;
@@ -158,6 +162,7 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     }
 
     const resizeObserver = new ResizeObserver(() => {
+      compensateHistoryAnchor();
       if (smoothScrollInProgressRef.current) {
         setShowScrollDown(false);
         return;
@@ -241,12 +246,14 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
   }
 
   function handleUserScrollStart(): void {
+    historyAnchorRef.current = null;
     interruptSmoothScroll();
     userScrollIntentRef.current = true;
     clearUserScrollIntentTimeout();
   }
 
   function handleUserScrollIntent(): void {
+    historyAnchorRef.current = null;
     interruptSmoothScroll();
     userScrollIntentRef.current = true;
     scheduleUserScrollIntentRelease(USER_SCROLL_INTENT_RELEASE_MS);
@@ -336,7 +343,11 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
 
     olderLoadPendingRef.current = true;
     autoScrollRef.current = false;
+    const visibleAnchor = findVisibleHistoryAnchor(element);
     historyAnchorRef.current = {
+      anchorKey: visibleAnchor?.key ?? null,
+      anchorViewportTop: visibleAnchor?.viewportTop ?? 0,
+      contentInserted: false,
       messageCount: options.messages.length,
       scrollHeight: element.scrollHeight,
       scrollTop: element.scrollTop,
@@ -354,20 +365,23 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     if (!element || !anchor) {
       return;
     }
-    if (options.messages.length <= anchor.messageCount) {
-      if (!options.loadingOlderHistory) {
+    if (!anchor.contentInserted && options.messages.length <= anchor.messageCount) {
+      if (!options.loadingOlderHistory && !olderLoadPendingRef.current) {
         historyAnchorRef.current = null;
       }
       return;
     }
+    anchor.contentInserted = true;
 
-    const delta = element.scrollHeight - anchor.scrollHeight;
-    if (delta <= 0) {
-      historyAnchorRef.current = null;
+    const anchoredElement = findHistoryAnchorElement(element, anchor.anchorKey);
+    const delta = anchoredElement
+      ? anchoredElement.getBoundingClientRect().top - element.getBoundingClientRect().top - anchor.anchorViewportTop
+      : element.scrollHeight - anchor.scrollHeight;
+    if (anchoredElement ? Math.abs(delta) < 0.5 : delta <= 0) {
       return;
     }
 
-    const nextScrollTop = anchor.scrollTop + delta;
+    const nextScrollTop = anchoredElement ? element.scrollTop + delta : anchor.scrollTop + delta;
     withAutoScrollBehavior(element, () => {
       element.scrollTop = nextScrollTop;
     });
@@ -376,7 +390,6 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
       spacerAnchor.viewportBottom += delta;
     }
     previousScrollTopRef.current = nextScrollTop;
-    historyAnchorRef.current = null;
   }
 
   function forceScrollToBottom(behavior: ScrollBehavior): void {
@@ -447,6 +460,25 @@ export function useChatFeedScroll(options: UseChatFeedScrollOptions) {
     trailingSpacerPx,
     trailingSpacerRef,
   };
+}
+
+function findVisibleHistoryAnchor(element: HTMLElement): { key: string; viewportTop: number } | null {
+  const rootTop = element.getBoundingClientRect().top;
+  const candidates = Array.from(element.querySelectorAll<HTMLElement>(HISTORY_ANCHOR_SELECTOR));
+  const anchor = candidates.find((candidate) => candidate.getBoundingClientRect().bottom > rootTop) ?? candidates[0];
+  const key = anchor?.dataset.historyAnchorKey;
+  if (!anchor || !key) {
+    return null;
+  }
+  return { key, viewportTop: anchor.getBoundingClientRect().top - rootTop };
+}
+
+function findHistoryAnchorElement(element: HTMLElement, key: string | null): HTMLElement | null {
+  if (!key) {
+    return null;
+  }
+  return Array.from(element.querySelectorAll<HTMLElement>(HISTORY_ANCHOR_SELECTOR))
+    .find((candidate) => candidate.dataset.historyAnchorKey === key) ?? null;
 }
 
 function distanceFromBottom(element: HTMLElement): number {

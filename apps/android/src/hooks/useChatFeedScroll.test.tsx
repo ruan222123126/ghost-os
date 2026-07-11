@@ -281,11 +281,11 @@ describe("useChatFeedScroll", () => {
       />,
     );
 
-    expect(metrics.scrollTop).toBe(400);
+    expect(metrics.scrollTop).toBe(260);
     expect(feedElement().scrollTo).not.toHaveBeenCalled();
   });
 
-  it("does not adjust scrollTop when prepended history resizes after render", async () => {
+  it("keeps the same visible row anchored when prepended history resizes after render", async () => {
     const metrics = feedMetrics({ clientHeight: 500, scrollHeight: 1000, scrollTop: 0 });
     const loadOlderHistory = vi.fn(async () => undefined);
     const latest = message("session-1:1:user", "user");
@@ -310,7 +310,7 @@ describe("useChatFeedScroll", () => {
       <ScrollHarness
         feedItems={[
           feedItem("older", 0, 220),
-          feedItem("latest", 260, 340),
+          feedItem("latest", 300, 380),
         ]}
         hasOlderHistory={false}
         messages={loadedMessages}
@@ -326,7 +326,7 @@ describe("useChatFeedScroll", () => {
     rerender(
       <ScrollHarness
         feedItems={[
-          feedItem("older", -260, 80),
+          feedItem("older", -300, 120),
           feedItem("latest", 120, 200),
         ]}
         hasOlderHistory={false}
@@ -337,7 +337,7 @@ describe("useChatFeedScroll", () => {
     );
     notifyResize(feedContentElement());
 
-    expect(metrics.scrollTop).toBe(300);
+    expect(metrics.scrollTop).toBe(420);
   });
 
   it("temporarily disables smooth behavior while compensating prepended history", async () => {
@@ -421,7 +421,7 @@ describe("useChatFeedScroll", () => {
       />,
     );
 
-    expect(metrics.scrollTop).toBe(360);
+    expect(metrics.scrollTop).toBe(260);
     expect(feedElement().scrollTo).not.toHaveBeenCalled();
   });
 
@@ -673,6 +673,7 @@ function ScrollHarness(props: {
               applyFeedItemMetrics(node, item);
             }}
             data-chat-feed-item=""
+            data-history-anchor-key={item.id}
           />
         ))}
       </div>

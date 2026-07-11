@@ -247,6 +247,7 @@ export const ConversationMessageList = memo(function ConversationMessageList(pro
             key={virtualItem.key}
             ref={virtualizer.measureElement}
             className="conversation-virtual-row"
+            data-history-anchor-key={String(virtualItem.key)}
             data-index={virtualItem.index}
             style={{ transform: `translateY(${virtualItem.start}px)` }}
           >
