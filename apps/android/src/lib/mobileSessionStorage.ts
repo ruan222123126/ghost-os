@@ -19,6 +19,7 @@ interface ConversationUpsert {
   createdAt?: string;
   preserveExistingTitle?: boolean;
   sourceMessageCount?: number;
+  sourceSnapshotComplete?: boolean;
   syncedMessageCount?: number;
   updatedAt?: string;
 }
@@ -182,14 +183,28 @@ export function upsertStoredMobileConversation(
   const existing = conversations.find((conversation) => conversation.id === id);
   const incomingTitle = upsert.title.trim();
   const existingTitle = existing?.title.trim();
+  const sourceMessageCount = upsert.bridgeMessageCount ?? upsert.sourceMessageCount ?? existing?.source_message_count;
+  const syncedMessageCount = upsert.syncedMessageCount ?? existing?.synced_message_count;
+  const updatedAt = upsert.updatedAt?.trim() || now;
+  const preserveCompleteSnapshot = upsert.sourceSnapshotComplete === false
+    && existing?.source_snapshot_complete === true
+    && sourceMessageCount === existing.source_message_count
+    && updatedAt === existing.updated_at;
+  const sourceSnapshotComplete = preserveCompleteSnapshot
+    ? true
+    : upsert.sourceSnapshotComplete ?? existing?.source_snapshot_complete;
+  const persistedSyncedMessageCount = preserveCompleteSnapshot
+    ? existing.synced_message_count
+    : syncedMessageCount;
   const next: StoredMobileConversation = {
     created_at: upsert.createdAt?.trim() || existing?.created_at || now,
     id,
-    messages: upsert.messages,
-    source_message_count: upsert.bridgeMessageCount ?? upsert.sourceMessageCount ?? existing?.source_message_count,
-    synced_message_count: upsert.syncedMessageCount ?? existing?.synced_message_count,
+    messages: preserveCompleteSnapshot ? existing.messages : upsert.messages,
+    ...(sourceMessageCount === undefined ? {} : { source_message_count: sourceMessageCount }),
+    ...(sourceSnapshotComplete === undefined ? {} : { source_snapshot_complete: sourceSnapshotComplete }),
+    ...(persistedSyncedMessageCount === undefined ? {} : { synced_message_count: persistedSyncedMessageCount }),
     title: upsert.preserveExistingTitle ? existingTitle || incomingTitle || id : incomingTitle || existingTitle || id,
-    updated_at: upsert.updatedAt?.trim() || now,
+    updated_at: updatedAt,
   };
 
   return [next, ...conversations.filter((conversation) => conversation.id !== id)].sort(compareConversationsByUpdatedAt);
@@ -217,6 +232,7 @@ function normalizeConversation(value: unknown): StoredMobileConversation | null 
   const createdAt = asTrimmedString(record.created_at);
   const updatedAt = asTrimmedString(record.updated_at);
   const sourceMessageCount = asOptionalInteger(record.source_message_count);
+  const sourceSnapshotComplete = asBoolean(record.source_snapshot_complete);
   const syncedMessageCount = asOptionalInteger(record.synced_message_count);
   if (!id || !createdAt || !updatedAt) {
     return null;
@@ -227,6 +243,7 @@ function normalizeConversation(value: unknown): StoredMobileConversation | null 
     id,
     messages: normalizeMessages(record.messages, id),
     ...(sourceMessageCount === undefined ? {} : { source_message_count: sourceMessageCount }),
+    ...(sourceSnapshotComplete === undefined ? {} : { source_snapshot_complete: sourceSnapshotComplete }),
     ...(syncedMessageCount === undefined ? {} : { synced_message_count: syncedMessageCount }),
     title: title || id,
     updated_at: updatedAt,

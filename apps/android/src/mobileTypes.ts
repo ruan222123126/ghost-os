@@ -369,6 +369,7 @@ export interface StoredMobileConversation {
   created_at: string;
   updated_at: string;
   messages: MobileConversationMessage[];
+  source_snapshot_complete?: boolean;
   source_message_count?: number;
   synced_message_count?: number;
 }

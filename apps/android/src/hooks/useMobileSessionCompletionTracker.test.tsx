@@ -24,8 +24,10 @@ describe("useMobileSessionCompletionTracker", () => {
       connected: true,
       connectionScope: "bridge-a",
       getSessionRunStates,
-      liveRunningSessions: [],
+      liveSessionRuns: [],
       onCompleted,
+      onError: vi.fn(),
+      visible: true,
     }));
     await flushPromises();
 
@@ -40,8 +42,11 @@ describe("useMobileSessionCompletionTracker", () => {
     expect(getSessionRunStates).toHaveBeenNthCalledWith(2, { session_ids: ["session-1"] });
     expect(onCompleted).toHaveBeenCalledTimes(1);
 
-    act(() => vi.advanceTimersByTime(20_000));
-    expect(getSessionRunStates).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      vi.advanceTimersByTime(3_301);
+      await Promise.resolve();
+    });
+    expect(getSessionRunStates).toHaveBeenNthCalledWith(3, { limit: 30 });
   });
 
   it("does not overlap an in-flight poll", async () => {
@@ -56,8 +61,10 @@ describe("useMobileSessionCompletionTracker", () => {
       connected: true,
       connectionScope: "bridge-a",
       getSessionRunStates,
-      liveRunningSessions: [],
+      liveSessionRuns: [],
       onCompleted: vi.fn(),
+      onError: vi.fn(),
+      visible: true,
     }));
     await flushPromises();
 
@@ -85,8 +92,10 @@ describe("useMobileSessionCompletionTracker", () => {
         connected: props.connected,
         connectionScope: props.scope,
         getSessionRunStates,
-        liveRunningSessions: [],
+        liveSessionRuns: [],
         onCompleted,
+        onError: vi.fn(),
+        visible: true,
       }),
       { initialProps: { connected: true, scope: "bridge-a" } },
     );

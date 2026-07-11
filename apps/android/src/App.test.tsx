@@ -40,7 +40,7 @@ const mocks = vi.hoisted(() => ({
     hasConversation: false,
     hasOlderHistory: false,
     historyItems: [] as MockHistoryItem[],
-    liveRunningSessions: [],
+    liveSessionRuns: [],
     loadOlderHistory: vi.fn(),
     loadingOlderHistory: false,
     loadingSessionMessages: false,
@@ -223,6 +223,63 @@ describe("App Codex mode routing", () => {
     });
   });
 
+  it("does not notify when the currently viewed session completes", async () => {
+    mocks.useMobileSessions.mockImplementation((options: MockMobileSessionsOptions) =>
+      mockMobileSessions(options, {
+        activeSessionId: "session-1",
+        historyItems: [historyItem("session-1", "当前会话", "running")],
+      })
+    );
+
+    render(<App />);
+    act(() => {
+      trackerOptions().onCompleted({
+        notificationKey: "session:session-1:trace:trace-1:status:success",
+        sessionId: "session-1",
+        title: "当前会话",
+        traceId: "trace-1",
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("当前会话会话已完成")).toBeNull();
+    });
+  });
+
+  it("shows the shared black loading bar immediately while switching history sessions", async () => {
+    let resolveSelection: (() => void) | undefined;
+    const selectSession = vi.fn(
+      (_sessionId: string) => new Promise<void>((resolve) => {
+        resolveSelection = resolve;
+      }),
+    );
+    mocks.useMobileSessions.mockImplementation((options: MockMobileSessionsOptions) =>
+      mockMobileSessions(options, {
+        activeSessionId: "session-2",
+        historyItems: [
+          historyItem("session-1", "设计复盘", undefined),
+          historyItem("session-2", "当前会话", undefined),
+        ],
+        selectSession,
+      })
+    );
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "打开侧边栏" }));
+    fireEvent.click(screen.getByRole("button", { name: "设计复盘" }));
+
+    const loadingBar = screen.getByRole("status", { name: "消息加载中" });
+    expect(loadingBar.classList.contains("mobile-top-loading-bar")).toBe(true);
+    await waitFor(() => expect(selectSession).toHaveBeenCalledWith("session-1"));
+
+    resolveSelection?.();
+
+    await waitFor(() => {
+      expect(screen.queryByRole("status", { name: "消息加载中" })).toBeNull();
+    });
+  });
+
   it("does not notify for sessions that were already completed before this app lifecycle", async () => {
     mocks.useMobileSessions.mockImplementation((options: MockMobileSessionsOptions) =>
       mockMobileSessions(options, {
@@ -263,7 +320,7 @@ function mockMobileSessions(
     hasConversation: false,
     hasOlderHistory: false,
     historyItems: overrides.historyItems ?? [],
-    liveRunningSessions: [],
+    liveSessionRuns: [],
     loadOlderHistory: vi.fn(),
     loadingOlderHistory: false,
     loadingSessionMessages: false,

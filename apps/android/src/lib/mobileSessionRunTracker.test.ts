@@ -4,6 +4,7 @@ import {
   FOREGROUND_POLL_INTERVAL_MS,
   jitteredPollInterval,
   reconcileSessionRuns,
+  reconcileTrackedSessionRuns,
   seedTrackedRunningSessions,
   sessionRunNotificationKey,
   type TrackedSessionRun,
@@ -34,6 +35,24 @@ describe("mobileSessionRunTracker", () => {
     }]);
     expect(first.hotSessionIds.size).toBe(0);
     expect(second.completed).toEqual([]);
+  });
+
+  it("notifies immediately when a live stream moves from running to success", () => {
+    const previous = { "session-1": trackedRun("running") };
+    const completedRun = {
+      ...trackedRun("success"),
+      updatedAt: "2026-07-11T08:01:00Z",
+    };
+
+    const result = reconcileTrackedSessionRuns(previous, [completedRun]);
+
+    expect(result.completed).toEqual([{
+      notificationKey: "session:session-1:trace:trace-1:status:success",
+      sessionId: "session-1",
+      title: "Session 1",
+      traceId: "trace-1",
+    }]);
+    expect(result.hotSessionIds.size).toBe(0);
   });
 
   it("does not treat a new trace terminal state as the previous run completion", () => {

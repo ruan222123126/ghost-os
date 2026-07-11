@@ -164,11 +164,16 @@ export function createRunningRunState(
   };
 }
 
-export function createSuccessRunState(statusText: string, sessionEnded = false): MobileSessionRunState {
+export function createSuccessRunState(
+  statusText: string,
+  sessionEnded = false,
+  traceId?: string,
+): MobileSessionRunState {
   return {
     sessionEnded,
     status: "success",
     statusText,
+    traceId,
   };
 }
 

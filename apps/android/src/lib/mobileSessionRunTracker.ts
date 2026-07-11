@@ -42,6 +42,7 @@ export interface ReconcileSessionRunsResult {
 interface MobileSessionCompletionTrackerRuntimeOptions {
   getSessionRunStates: (params: SessionRunStatesGetRequest) => Promise<SessionRunState[]>;
   onCompleted: (event: SessionCompletionEvent) => void | Promise<void>;
+  onError: (error: unknown) => void;
   visible: boolean;
 }
 
@@ -52,8 +53,10 @@ export class MobileSessionCompletionTrackerRuntime {
   private getSessionRunStates: MobileSessionCompletionTrackerRuntimeOptions["getSessionRunStates"];
   private hotSessionIds = new Set<string>();
   private inFlight = false;
-  private liveRunningSessions: TrackedSessionRun[] = [];
+  private lastError = "";
+  private liveSessionRuns: TrackedSessionRun[] = [];
   private onCompleted: MobileSessionCompletionTrackerRuntimeOptions["onCompleted"];
+  private onError: MobileSessionCompletionTrackerRuntimeOptions["onError"];
   private pendingReconcileEpoch: number | null = null;
   private sessions: Record<string, TrackedSessionRun> = {};
   private timer: number | null = null;
@@ -62,22 +65,31 @@ export class MobileSessionCompletionTrackerRuntime {
   constructor(options: MobileSessionCompletionTrackerRuntimeOptions) {
     this.getSessionRunStates = options.getSessionRunStates;
     this.onCompleted = options.onCompleted;
+    this.onError = options.onError;
     this.visible = options.visible;
   }
 
-  updateCallbacks(options: Pick<MobileSessionCompletionTrackerRuntimeOptions, "getSessionRunStates" | "onCompleted">): void {
+  updateCallbacks(
+    options: Pick<MobileSessionCompletionTrackerRuntimeOptions, "getSessionRunStates" | "onCompleted" | "onError">,
+  ): void {
     this.getSessionRunStates = options.getSessionRunStates;
     this.onCompleted = options.onCompleted;
+    this.onError = options.onError;
   }
 
-  updateLiveRunningSessions(running: TrackedSessionRun[]): void {
-    this.liveRunningSessions = running;
-    this.seedLiveRuns();
+  updateLiveSessionRuns(runs: TrackedSessionRun[]): void {
+    this.liveSessionRuns = runs;
+    this.applyLiveRuns();
     this.scheduleNextPoll();
   }
 
   setVisible(visible: boolean): void {
+    const becameVisible = !this.visible && visible;
     this.visible = visible;
+    if (becameVisible && this.connected) {
+      void this.reconcileRecentSessions(this.connectionEpoch);
+      return;
+    }
     this.scheduleNextPoll();
   }
 
@@ -88,7 +100,7 @@ export class MobileSessionCompletionTrackerRuntime {
     this.connectionEpoch += 1;
     this.sessions = loadMobileSessionRunTrackerState(scope).sessions;
     this.hotSessionIds = new Set();
-    this.seedLiveRuns();
+    this.applyLiveRuns();
     this.pendingReconcileEpoch = this.connectionEpoch;
     void this.reconcileRecentSessions(this.connectionEpoch);
   }
@@ -100,11 +112,12 @@ export class MobileSessionCompletionTrackerRuntime {
     this.clearPollTimer();
   }
 
-  private seedLiveRuns(): void {
-    const seeded = seedTrackedRunningSessions(this.sessions, this.liveRunningSessions);
-    this.sessions = seeded.sessions;
-    this.hotSessionIds = seeded.hotSessionIds;
+  private applyLiveRuns(): void {
+    const result = reconcileTrackedSessionRuns(this.sessions, this.liveSessionRuns);
+    this.sessions = result.sessions;
+    this.hotSessionIds = result.hotSessionIds;
     this.persist();
+    this.emitCompletions(result.completed);
   }
 
   private async reconcileRecentSessions(epoch: number): Promise<void> {
@@ -117,11 +130,12 @@ export class MobileSessionCompletionTrackerRuntime {
     try {
       const states = await this.getSessionRunStates({ limit: RECENT_SESSION_RECONCILE_LIMIT });
       if (this.isCurrentEpoch(epoch)) {
+        this.clearError();
         this.commitReconciliation(states, true);
       }
     } catch (error) {
       if (this.isCurrentEpoch(epoch)) {
-        console.error("[MobileSessionCompletionTrackerRuntime] reconcile failed", error);
+        this.reportError("reconcile", error);
       }
     } finally {
       this.finishRequest(epoch);
@@ -137,11 +151,12 @@ export class MobileSessionCompletionTrackerRuntime {
     try {
       const states = await this.getSessionRunStates({ session_ids: [...this.hotSessionIds] });
       if (this.isCurrentEpoch(epoch)) {
+        this.clearError();
         this.commitReconciliation(states, false);
       }
     } catch (error) {
       if (this.isCurrentEpoch(epoch)) {
-        console.error("[MobileSessionCompletionTrackerRuntime] poll failed", error);
+        this.reportError("poll", error);
       }
     } finally {
       this.finishRequest(epoch);
@@ -162,11 +177,15 @@ export class MobileSessionCompletionTrackerRuntime {
 
   private commitReconciliation(states: SessionRunState[], replace: boolean): void {
     const result = reconcileSessionRuns(this.sessions, states, replace);
-    const seeded = seedTrackedRunningSessions(result.sessions, this.liveRunningSessions);
-    this.sessions = seeded.sessions;
-    this.hotSessionIds = seeded.hotSessionIds;
+    const merged = reconcileTrackedSessionRuns(result.sessions, this.liveSessionRuns);
+    this.sessions = merged.sessions;
+    this.hotSessionIds = merged.hotSessionIds;
     this.persist();
-    for (const completion of result.completed) {
+    this.emitCompletions([...result.completed, ...merged.completed]);
+  }
+
+  private emitCompletions(completions: SessionCompletionEvent[]): void {
+    for (const completion of deduplicateCompletions(completions)) {
       void Promise.resolve(this.onCompleted(completion)).catch((error: unknown) => {
         console.error("[MobileSessionCompletionTrackerRuntime] completion callback failed", error);
       });
@@ -175,15 +194,37 @@ export class MobileSessionCompletionTrackerRuntime {
 
   private scheduleNextPoll(): void {
     this.clearPollTimer();
-    if (!this.connected || this.hotSessionIds.size === 0) {
+    if (!this.connected) {
       return;
     }
     const epoch = this.connectionEpoch;
     const interval = this.visible ? FOREGROUND_POLL_INTERVAL_MS : BACKGROUND_POLL_INTERVAL_MS;
     this.timer = window.setTimeout(() => {
       this.timer = null;
-      void this.pollTrackedSessions(epoch);
+      if (this.hotSessionIds.size > 0) {
+        void this.pollTrackedSessions(epoch);
+        return;
+      }
+      void this.reconcileRecentSessions(epoch);
     }, jitteredPollInterval(interval));
+  }
+
+  private reportError(operation: string, error: unknown): void {
+    console.error(`[MobileSessionCompletionTrackerRuntime] ${operation} failed`, error);
+    const message = error instanceof Error ? error.message : String(error);
+    if (message === this.lastError) {
+      return;
+    }
+    this.lastError = message;
+    try {
+      this.onError(error);
+    } catch (callbackError) {
+      console.error("[MobileSessionCompletionTrackerRuntime] error callback failed", callbackError);
+    }
+  }
+
+  private clearError(): void {
+    this.lastError = "";
   }
 
   private clearPollTimer(): void {
@@ -273,6 +314,42 @@ export function seedTrackedRunningSessions(
   return { completed: [], hotSessionIds, sessions: next };
 }
 
+export function reconcileTrackedSessionRuns(
+  previous: Record<string, TrackedSessionRun>,
+  incoming: TrackedSessionRun[],
+): ReconcileSessionRunsResult {
+  const sessions = { ...previous };
+  const completed: SessionCompletionEvent[] = [];
+
+  for (const raw of incoming) {
+    const next = normalizeLiveTrackedSessionRun(raw);
+    if (!next) {
+      continue;
+    }
+    const current = sessions[next.sessionId];
+    if (shouldKeepCurrentRun(current, next)) {
+      continue;
+    }
+    if (shouldNotifyCompletion(current, next)) {
+      const notificationKey = sessionRunNotificationKey(next);
+      next.notificationKey = notificationKey;
+      completed.push({
+        notificationKey,
+        sessionId: next.sessionId,
+        title: next.title,
+        traceId: next.traceId,
+      });
+    }
+    sessions[next.sessionId] = next;
+  }
+
+  return {
+    completed,
+    hotSessionIds: incompleteSessionIds(sessions),
+    sessions,
+  };
+}
+
 export function isIncompleteSessionRunStatus(status: SessionRunStatus): boolean {
   return status === "running" || status === "awaiting_human";
 }
@@ -303,6 +380,52 @@ function normalizeTrackedSessionRun(raw: SessionRunState): TrackedSessionRun | n
     traceId,
     updatedAt: raw.updated_at,
   };
+}
+
+function normalizeLiveTrackedSessionRun(raw: TrackedSessionRun): TrackedSessionRun | null {
+  const sessionId = raw.sessionId.trim();
+  const traceId = raw.traceId.trim();
+  if (!sessionId || !traceId) {
+    return null;
+  }
+  return {
+    notificationKey: raw.notificationKey,
+    sessionId,
+    status: raw.status,
+    title: raw.title.trim() || sessionId,
+    traceId,
+    updatedAt: raw.updatedAt,
+  };
+}
+
+function shouldKeepCurrentRun(
+  current: TrackedSessionRun | undefined,
+  next: TrackedSessionRun,
+): boolean {
+  if (!current) {
+    return false;
+  }
+  if (current.traceId === next.traceId) {
+    return !isIncompleteSessionRunStatus(current.status) && isIncompleteSessionRunStatus(next.status);
+  }
+  return trackedRunTimestamp(current) > trackedRunTimestamp(next);
+}
+
+function trackedRunTimestamp(run: TrackedSessionRun): number {
+  const timestamp = Date.parse(run.updatedAt);
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function incompleteSessionIds(sessions: Record<string, TrackedSessionRun>): Set<string> {
+  return new Set(
+    Object.values(sessions)
+      .filter((run) => isIncompleteSessionRunStatus(run.status))
+      .map((run) => run.sessionId),
+  );
+}
+
+function deduplicateCompletions(completions: SessionCompletionEvent[]): SessionCompletionEvent[] {
+  return [...new Map(completions.map((completion) => [completion.notificationKey, completion])).values()];
 }
 
 function shouldNotifyCompletion(

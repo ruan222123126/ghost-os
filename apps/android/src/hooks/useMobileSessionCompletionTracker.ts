@@ -10,8 +10,10 @@ interface UseMobileSessionCompletionTrackerOptions {
   connected: boolean;
   connectionScope: string;
   getSessionRunStates: (params: SessionRunStatesGetRequest) => Promise<SessionRunState[]>;
-  liveRunningSessions: TrackedSessionRun[];
+  liveSessionRuns: TrackedSessionRun[];
   onCompleted: (event: SessionCompletionEvent) => void | Promise<void>;
+  onError: (error: unknown) => void;
+  visible: boolean;
 }
 
 export function useMobileSessionCompletionTracker(
@@ -21,7 +23,8 @@ export function useMobileSessionCompletionTracker(
   runtimeRef.current ??= new MobileSessionCompletionTrackerRuntime({
     getSessionRunStates: options.getSessionRunStates,
     onCompleted: options.onCompleted,
-    visible: isAppVisible(),
+    onError: options.onError,
+    visible: options.visible,
   });
   const runtime = runtimeRef.current;
 
@@ -29,18 +32,17 @@ export function useMobileSessionCompletionTracker(
     runtime.updateCallbacks({
       getSessionRunStates: options.getSessionRunStates,
       onCompleted: options.onCompleted,
+      onError: options.onError,
     });
-  }, [options.getSessionRunStates, options.onCompleted, runtime]);
+  }, [options.getSessionRunStates, options.onCompleted, options.onError, runtime]);
 
   useEffect(() => {
-    runtime.updateLiveRunningSessions(options.liveRunningSessions);
-  }, [options.liveRunningSessions, runtime]);
+    runtime.updateLiveSessionRuns(options.liveSessionRuns);
+  }, [options.liveSessionRuns, runtime]);
 
   useEffect(() => {
-    const handleVisibilityChange = (): void => runtime.setVisible(isAppVisible());
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [runtime]);
+    runtime.setVisible(options.visible);
+  }, [options.visible, runtime]);
 
   useEffect(() => {
     if (options.connected) {
@@ -50,8 +52,4 @@ export function useMobileSessionCompletionTracker(
     }
     return () => runtime.disconnect();
   }, [options.connected, options.connectionScope, runtime]);
-}
-
-function isAppVisible(): boolean {
-  return typeof document === "undefined" || document.visibilityState === "visible";
 }

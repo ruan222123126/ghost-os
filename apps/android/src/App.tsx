@@ -142,10 +142,12 @@ function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isRuntimeMenuOpen, setIsRuntimeMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [historySelectionPending, setHistorySelectionPending] = useState(false);
   const [pinnedHistoryIds, setPinnedHistoryIds] = useState<string[]>([]);
   const [completionNotifications, setCompletionNotifications] = useState<CompletionNotification[]>([]);
   const composerRef = useRef<MobileChatComposerHandle>(null);
   const virtualScrollToBottomRef = useRef<(() => void) | null>(null);
+  const historySelectionRequestIdRef = useRef(0);
   const pendingSelectHistoryTimeoutRef = useRef<number | null>(null);
   const localRuntimeConfig = useMemo(() => buildLocalRuntimeConfig(providerList, settings), [providerList, settings]);
   const chatConfig = settings.remoteExecutionEnabled ? config : localRuntimeConfig;
@@ -222,7 +224,7 @@ function App() {
     connectionScope,
     getSessionRunStates,
     knownSessionIds,
-    liveRunningSessions: mobileSessions.liveRunningSessions,
+    liveSessionRuns: mobileSessions.liveSessionRuns,
     onInAppCompletion: handleSessionCompleted,
     onStatus: setStatus,
     selectSession: mobileSessions.selectSession,
@@ -237,7 +239,9 @@ function App() {
   const isModalOpen = isSidebarOpen || isSearchOpen || isConnectionOpen || isSettingsOpen || isMoreMenuOpen;
   const hasLocalConversation = mobileSessions.hasConversation;
   const showEmptyIntro = !hasLocalConversation && !mobileSessions.loadingSessionMessages;
-  const showTopLoadingBar = mobileSessions.loadingSessionMessages || mobileSessions.loadingOlderHistory;
+  const showTopLoadingBar = historySelectionPending
+    || mobileSessions.loadingSessionMessages
+    || mobileSessions.loadingOlderHistory;
   const {
     handleScroll,
     handleUserScrollEnd,
@@ -291,6 +295,7 @@ function App() {
 
   useEffect(() => {
     return () => {
+      historySelectionRequestIdRef.current += 1;
       clearPendingSelectHistory();
     };
   }, []);
@@ -305,16 +310,19 @@ function App() {
   function selectHistory(sessionId: string): void {
     composerRef.current?.reset();
     const shouldDeferSelection = isSidebarOpen;
-    setIsSidebarOpen(false);
     clearPendingSelectHistory();
+    const requestId = historySelectionRequestIdRef.current + 1;
+    historySelectionRequestIdRef.current = requestId;
+    setHistorySelectionPending(true);
+    setIsSidebarOpen(false);
     if (shouldDeferSelection) {
       pendingSelectHistoryTimeoutRef.current = window.setTimeout(() => {
         pendingSelectHistoryTimeoutRef.current = null;
-        startHistorySelection(sessionId);
+        startHistorySelection(sessionId, requestId);
       }, SIDEBAR_CLOSE_DEFER_MS);
       return;
     }
-    startHistorySelection(sessionId);
+    startHistorySelection(sessionId, requestId);
   }
 
   function dismissCompletionNotification(sessionId: string): void {
@@ -326,9 +334,13 @@ function App() {
     selectHistory(sessionId);
   }
 
-  function startHistorySelection(sessionId: string): void {
+  function startHistorySelection(sessionId: string, requestId: number): void {
     startTransition(() => {
-      void selectSessionRef.current(sessionId);
+      void selectSessionRef.current(sessionId).finally(() => {
+        if (historySelectionRequestIdRef.current === requestId) {
+          setHistorySelectionPending(false);
+        }
+      });
     });
   }
 

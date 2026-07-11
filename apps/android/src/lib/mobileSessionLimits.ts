@@ -6,7 +6,6 @@ import type {
 
 export const MOBILE_HOT_SESSION_VIEW_LIMIT = 8;
 export const MOBILE_PERSISTED_CONVERSATION_LIMIT = 50;
-export const MOBILE_PERSISTED_SESSION_PAGE_LIMIT = 100;
 
 interface TrimMobileSessionViewsOptions {
   activeSessionId?: string;

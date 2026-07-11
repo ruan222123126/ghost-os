@@ -14,7 +14,6 @@ import { hasTauriRuntime } from "../lib/bridgeBus";
 import type { TrackedSessionRun } from "../lib/mobileSessionRunTracker";
 import {
   MOBILE_PERSISTED_CONVERSATION_LIMIT,
-  MOBILE_PERSISTED_SESSION_PAGE_LIMIT,
   recentMobileBridgeSessions,
   trimMobileSessionViews,
   trimStoredMobileConversations,
@@ -127,6 +126,7 @@ interface PersistConversationInput {
   messages: MobileConversationMessage[];
   preserveExistingTitle?: boolean;
   sourceMessageCount?: number;
+  sourceSnapshotComplete?: boolean;
   syncedMessageCount?: number;
   title: string;
   updatedAt?: string;
@@ -358,15 +358,15 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       storedConversations,
     ],
   );
-  const liveRunningSessions = useMemo<TrackedSessionRun[]>(
+  const liveSessionRuns = useMemo<TrackedSessionRun[]>(
     () => Object.values(sessionViews).flatMap((view) => {
       const traceId = view.run.traceId?.trim() || "";
-      if (view.run.status !== "running" || !traceId) {
+      if (view.run.status === "idle" || !traceId) {
         return [];
       }
       return [{
         sessionId: view.id,
-        status: "running" as const,
+        status: view.run.status,
         title: view.title,
         traceId,
         updatedAt: view.updatedAt,
@@ -766,6 +766,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
         id: detail.id,
         messages,
         sourceMessageCount: detail.message_count,
+        sourceSnapshotComplete: !detail.page.has_more_before,
         syncedMessageCount: messages.length,
         title: detail.title.trim() || currentView.title || sessionFallbackTitle(detail.id),
         updatedAt: detail.updated_at,
@@ -924,6 +925,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       id: detail.id,
       messages,
       sourceMessageCount: detail.message_count,
+      sourceSnapshotComplete: !detail.page.has_more_before,
       syncedMessageCount: messages.length,
       title,
       updatedAt: detail.updated_at,
@@ -1008,6 +1010,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
         id: detail.id,
         messages,
         sourceMessageCount: detail.message_count,
+        sourceSnapshotComplete: !detail.page.has_more_before,
         syncedMessageCount: messages.length,
         title,
         updatedAt: detail.updated_at,
@@ -1032,8 +1035,6 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       setHomeMessages([]);
       setHomeReply(undefined);
       setHomeRun(createIdleRunState());
-    } else {
-      return;
     }
     setSessionViews((current) =>
       trimSessionViewsForState(
@@ -1100,10 +1101,15 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       const next = upsertSessionView(current, sessionId, {
         messages: finalMessages,
         reply: undefined,
-        run: createSuccessRunState(reply?.session_ended ? "会话已结束" : "回复已返回", reply?.session_ended),
+        run: createSuccessRunState(
+          reply?.session_ended ? "会话已结束" : "回复已返回",
+          reply?.session_ended,
+          existing?.run.traceId,
+        ),
         title: existing?.title || findStoredTitle(storedConversations, sessionId) || title,
         unread: activeSessionIdRef.current !== sessionId,
         bridgeOwned: true,
+        updatedAt: new Date().toISOString(),
       });
       persistConversation({
         id: sessionId,
@@ -1199,6 +1205,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       id: detail.id,
       messages,
       sourceMessageCount: detail.message_count,
+      sourceSnapshotComplete: true,
       syncedMessageCount: messages.length,
       title,
       updatedAt: detail.updated_at,
@@ -1411,7 +1418,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
           return { syncedCount: 0, totalCount: options.sessions.length };
         }
         if (result.status === "conflict") {
-          const detail = await options.getSession(conversation.id, { limit: MOBILE_PERSISTED_SESSION_PAGE_LIMIT });
+          const detail = await options.getFullSession(conversation.id);
           if (syncRunIdRef.current !== runId) {
             return { syncedCount: 0, totalCount: options.sessions.length };
           }
@@ -1439,7 +1446,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
         continue;
       }
 
-      const detail = await options.getSession(session.id, { limit: MOBILE_PERSISTED_SESSION_PAGE_LIMIT });
+      const detail = await options.getFullSession(session.id);
       if (syncRunIdRef.current !== runId) {
         return { syncedCount: 0, totalCount: options.sessions.length };
       }
@@ -1471,7 +1478,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     loadOlderHistory,
     loadingOlderHistory,
     loadingSessionMessages,
-    liveRunningSessions,
+    liveSessionRuns,
     postSendFocusRequest,
     selectSession,
     sendMessage,
@@ -1524,10 +1531,9 @@ function isCancellationStatus(status: StatusMessage): boolean {
 }
 
 function isStoredConversationCurrent(conversation: StoredMobileConversation, session: SessionMetadata): boolean {
-  const syncedMessageCount = conversation.synced_message_count ?? conversation.messages.length;
-  return conversation.updated_at === session.updated_at
-    && conversation.source_message_count === session.message_count
-    && syncedMessageCount === conversation.source_message_count;
+  return conversation.source_snapshot_complete === true
+    && conversation.updated_at === session.updated_at
+    && conversation.source_message_count === session.message_count;
 }
 
 function buildComputerSessionSyncSignature(sessions: SessionMetadata[]): string {
@@ -1570,6 +1576,7 @@ function storedConversationFromSessionDetail(detail: SessionDetail): StoredMobil
     created_at: detail.created_at,
     id: detail.id,
     messages,
+    source_snapshot_complete: true,
     source_message_count: detail.message_count,
     synced_message_count: messages.length,
     title: detail.title.trim() || sessionFallbackTitle(detail.id),

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { SessionRunState, SessionRunStatesGetRequest, StatusMessage } from "../mobileTypes";
 import type { SessionCompletionEvent, TrackedSessionRun } from "../lib/mobileSessionRunTracker";
+import { errorMessage } from "../lib/bridgeBus";
 import {
   clearPendingNotificationSessionId,
   listenForMobileNotificationOpen,
@@ -8,6 +9,7 @@ import {
   showSessionCompletionNotification,
 } from "../lib/mobileNotifications";
 import { useMobileNotificationPermission } from "./useMobileNotificationPermission";
+import { useMobileAppVisibility } from "./useMobileAppVisibility";
 import { useMobileSessionCompletionTracker } from "./useMobileSessionCompletionTracker";
 
 interface UseMobileSessionCompletionNotificationsOptions {
@@ -16,7 +18,7 @@ interface UseMobileSessionCompletionNotificationsOptions {
   connectionScope: string;
   getSessionRunStates: (params: SessionRunStatesGetRequest) => Promise<SessionRunState[]>;
   knownSessionIds: string[];
-  liveRunningSessions: TrackedSessionRun[];
+  liveSessionRuns: TrackedSessionRun[];
   onInAppCompletion: (event: SessionCompletionEvent) => void;
   onStatus: (status: StatusMessage) => void;
   selectSession: (sessionId: string) => Promise<void>;
@@ -27,6 +29,7 @@ export function useMobileSessionCompletionNotifications(
   options: UseMobileSessionCompletionNotificationsOptions,
 ): void {
   const [notificationOpenToken, setNotificationOpenToken] = useState(0);
+  const appVisible = useMobileAppVisibility();
   const handlePermissionDenied = useCallback((): void => {
     options.onStatus({ tone: "error", text: "系统通知权限未开启" });
   }, [options.onStatus]);
@@ -36,10 +39,10 @@ export function useMobileSessionCompletionNotifications(
   });
 
   const handleCompleted = useCallback(async (event: SessionCompletionEvent): Promise<void> => {
-    if (event.sessionId === options.activeSessionId) {
+    if (appVisible && event.sessionId === options.activeSessionId) {
       return;
     }
-    if (document.visibilityState === "visible") {
+    if (appVisible) {
       options.onInAppCompletion(event);
       return;
     }
@@ -47,14 +50,23 @@ export function useMobileSessionCompletionNotifications(
     if (result === "permission_denied") {
       options.onStatus({ tone: "error", text: "会话已完成，但系统通知权限未开启" });
     }
-  }, [options.activeSessionId, options.onInAppCompletion, options.onStatus]);
+  }, [appVisible, options.activeSessionId, options.onInAppCompletion, options.onStatus]);
+
+  const handleTrackingError = useCallback((error: unknown): void => {
+    options.onStatus({
+      tone: "error",
+      text: `会话完成状态跟踪失败：${errorMessage(error)}`,
+    });
+  }, [options.onStatus]);
 
   useMobileSessionCompletionTracker({
     connected: options.connected,
     connectionScope: options.connectionScope,
     getSessionRunStates: options.getSessionRunStates,
-    liveRunningSessions: options.liveRunningSessions,
+    liveSessionRuns: options.liveSessionRuns,
     onCompleted: handleCompleted,
+    onError: handleTrackingError,
+    visible: appVisible,
   });
 
   useEffect(() => {

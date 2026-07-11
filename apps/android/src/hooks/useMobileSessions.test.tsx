@@ -6,7 +6,6 @@ import { useMobileSessions, mergeHistoryItems, reconcileStoredConversationsWithB
 import {
   MOBILE_HOT_SESSION_VIEW_LIMIT,
   MOBILE_PERSISTED_CONVERSATION_LIMIT,
-  MOBILE_PERSISTED_SESSION_PAGE_LIMIT,
 } from "../lib/mobileSessionLimits";
 import { MOBILE_LAST_ACTIVE_SESSION_STORAGE_KEY } from "../lib/mobileSessionStorage";
 import { buildAgentMessageWithSelectedSkill } from "../lib/selectedSkillMessage";
@@ -918,7 +917,7 @@ describe("useMobileSessions", () => {
     expect(result.current.activeMessages.map((item) => item.text)).toEqual(["one", "run one", "done from bridge"]);
   });
 
-  it("ignores a newly resolved session when the user switches before session id arrives", async () => {
+  it("keeps tracking a newly resolved session when the user switches before session id arrives", async () => {
     saveStored([
       storedConversation("session-2", "Two", [message("session-2", "user", "two")]),
     ]);
@@ -970,13 +969,25 @@ describe("useMobileSessions", () => {
       emitSessionId?.();
     });
     expect(result.current.activeSessionId).toBe("session-2");
-    expect(result.current.historyItems.find((item) => item.id === "session-new")).toBeUndefined();
+    expect(result.current.historyItems.find((item) => item.id === "session-new")?.status).toBe("running");
+    expect(result.current.liveSessionRuns).toEqual([
+      expect.objectContaining({
+        sessionId: "session-new",
+        status: "running",
+      }),
+    ]);
 
     await act(async () => {
       finishRun?.();
     });
     expect(result.current.activeSessionId).toBe("session-2");
-    expect(result.current.historyItems.find((item) => item.id === "session-new")).toBeUndefined();
+    expect(result.current.historyItems.find((item) => item.id === "session-new")?.status).toBe("success");
+    expect(result.current.liveSessionRuns).toEqual([
+      expect.objectContaining({
+        sessionId: "session-new",
+        status: "success",
+      }),
+    ]);
     expect(getSession.mock.calls.filter(([sessionId]) => sessionId === "session-new")).toHaveLength(0);
 
     await act(async () => {
@@ -1003,12 +1014,9 @@ describe("useMobileSessions", () => {
     expect(getSession).not.toHaveBeenCalled();
   });
 
-  it("syncs Bridge sessions through bounded recent pages when computer session persistence is enabled", async () => {
+  it("syncs complete Bridge sessions when computer session persistence is enabled", async () => {
     const getFullSession = vi.fn(async (sessionId: string) => sessionDetail(sessionId));
-    const getSession = vi.fn(async (sessionId: string, options?: { limit?: number }) => {
-      expect(options).toEqual({ limit: MOBILE_PERSISTED_SESSION_PAGE_LIMIT });
-      return sessionDetail(sessionId);
-    });
+    const getSession = vi.fn(async (sessionId: string) => sessionDetail(sessionId));
     const { result } = renderMobileSessions({
       getFullSession,
       getSession,
@@ -1019,8 +1027,8 @@ describe("useMobileSessions", () => {
 
     await waitFor(() => expect(result.current.computerSessionPersistStatus.text).toBe("已同步 2 个"));
 
-    expect(getFullSession).not.toHaveBeenCalled();
-    expect(getSession).toHaveBeenCalledTimes(2);
+    expect(getFullSession).toHaveBeenCalledTimes(2);
+    expect(getSession).not.toHaveBeenCalled();
     expect(loadStored().map((conversation) => conversation.id).sort()).toEqual(["session-1", "session-2"]);
     expect(loadStored()[0]).toMatchObject({ source_message_count: 1 });
   });
@@ -1050,13 +1058,11 @@ describe("useMobileSessions", () => {
     const sessions = Array.from({ length: 7 }, (_, index) =>
       sessionWithUpdatedAt(`session-${index}`, `Session ${index}`, `2026-01-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`),
     );
-    const getSession = vi.fn(async (sessionId: string, options?: { limit?: number }) => {
-      expect(options).toEqual({ limit: MOBILE_PERSISTED_SESSION_PAGE_LIMIT });
-      return sessionDetail(sessionId);
-    });
+    const getFullSession = vi.fn(async (sessionId: string) => sessionDetail(sessionId));
+    const getSession = vi.fn(async (sessionId: string) => sessionDetail(sessionId));
     const baseProps: UseMobileSessionsOptionsForTest = {
       bridgeConnected: true,
-      getFullSession: vi.fn(async (sessionId: string) => sessionDetail(sessionId)),
+      getFullSession,
       getSession,
       pinnedHistoryIds: [],
       persistComputerSessionsEnabled: true,
@@ -1072,7 +1078,8 @@ describe("useMobileSessions", () => {
     await waitFor(() => expect(result.current.computerSessionPersistStatus.text).toBe("已同步 7 个"));
 
     expect(upsertBatches.map((batch) => batch.length)).toEqual([3, 3, 1]);
-    expect(getSession).toHaveBeenCalledTimes(7);
+    expect(getFullSession).toHaveBeenCalledTimes(7);
+    expect(getSession).not.toHaveBeenCalled();
     expect([...persistedById.values()].every((conversation) => conversation.messages.length > 0)).toBe(true);
 
     rerender({
@@ -1098,14 +1105,15 @@ describe("useMobileSessions", () => {
     const sessions = Array.from({ length: 4 }, (_, index) =>
       sessionWithUpdatedAt(`session-${index}`, `Session ${index}`, `2026-01-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`),
     );
-    const getSession = vi.fn((sessionId: string) =>
+    const getFullSession = vi.fn((sessionId: string) =>
       new Promise<SessionDetail>((resolve) => {
         pendingSessionLoads.push({ resolve, sessionId });
       }),
     );
+    const getSession = vi.fn(async (sessionId: string) => sessionDetail(sessionId));
     const baseProps: UseMobileSessionsOptionsForTest = {
       bridgeConnected: true,
-      getFullSession: vi.fn(async (sessionId: string) => sessionDetail(sessionId)),
+      getFullSession,
       getSession,
       pinnedHistoryIds: [],
       persistComputerSessionsEnabled: true,
@@ -1118,7 +1126,7 @@ describe("useMobileSessions", () => {
       initialProps: baseProps,
     });
 
-    await waitFor(() => expect(getSession).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getFullSession).toHaveBeenCalledTimes(1));
 
     rerender({
       ...baseProps,
@@ -1128,7 +1136,7 @@ describe("useMobileSessions", () => {
       await Promise.resolve();
     });
 
-    expect(getSession).toHaveBeenCalledTimes(1);
+    expect(getFullSession).toHaveBeenCalledTimes(1);
 
     for (const [index] of sessions.entries()) {
       const pending = pendingSessionLoads[index];
@@ -1138,20 +1146,23 @@ describe("useMobileSessions", () => {
         await Promise.resolve();
       });
       if (index < sessions.length - 1) {
-        await waitFor(() => expect(getSession).toHaveBeenCalledTimes(index + 2));
+        await waitFor(() => expect(getFullSession).toHaveBeenCalledTimes(index + 2));
       }
     }
 
     await waitFor(() => expect(result.current.computerSessionPersistStatus.text).toBe("已同步 4 个"));
-    expect(getSession).toHaveBeenCalledTimes(4);
+    expect(getFullSession).toHaveBeenCalledTimes(4);
+    expect(getSession).not.toHaveBeenCalled();
   });
 
   it("limits computer session persistence to the most recent Bridge sessions", async () => {
     const sessions = Array.from({ length: MOBILE_PERSISTED_CONVERSATION_LIMIT + 2 }, (_, index) =>
       sessionWithUpdatedAt(`session-${index}`, `Session ${index}`, `2026-01-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`),
     );
+    const getFullSession = vi.fn(async (sessionId: string) => sessionDetail(sessionId));
     const getSession = vi.fn(async (sessionId: string) => sessionDetail(sessionId));
     const { result } = renderMobileSessions({
+      getFullSession,
       getSession,
       persistComputerSessionsEnabled: true,
       sessions,
@@ -1164,18 +1175,23 @@ describe("useMobileSessions", () => {
       ),
     );
 
-    expect(getSession).toHaveBeenCalledTimes(MOBILE_PERSISTED_CONVERSATION_LIMIT);
+    expect(getFullSession).toHaveBeenCalledTimes(MOBILE_PERSISTED_CONVERSATION_LIMIT);
+    expect(getSession).not.toHaveBeenCalled();
     expect(loadStored()).toHaveLength(MOBILE_PERSISTED_CONVERSATION_LIMIT);
     expect(loadStored().map((conversation) => conversation.id)).not.toContain("session-0");
     expect(loadStored().map((conversation) => conversation.id)).not.toContain("session-1");
   });
 
-  it("skips fully synced Bridge sessions by updated_at and source_message_count", async () => {
+  it("skips current Bridge sessions even when projection reduces the stored message count", async () => {
     saveStored([
       {
-        ...storedConversation("session-1", "Cached", [message("session-1", "user", "loaded")]),
-        source_message_count: 1,
-        synced_message_count: 1,
+        ...storedConversation("session-1", "Cached", [
+          message("session-1", "user", "run pwd"),
+          message("session-1", "assistant", "done"),
+        ]),
+        source_snapshot_complete: true,
+        source_message_count: 3,
+        synced_message_count: 2,
         updated_at: "2026-01-02T00:00:00.000Z",
       },
     ]);
@@ -1185,7 +1201,7 @@ describe("useMobileSessions", () => {
       getFullSession,
       getSession,
       persistComputerSessionsEnabled: true,
-      sessions: [session("session-1", "Bridge title")],
+      sessions: [{ ...session("session-1", "Bridge title"), message_count: 3 }],
       sessionsLoaded: true,
     });
 
@@ -1196,14 +1212,14 @@ describe("useMobileSessions", () => {
   });
 
   it("reports sync failures without saving partial success", async () => {
-    const getSession = vi.fn(async (sessionId: string) => {
+    const getFullSession = vi.fn(async (sessionId: string) => {
       if (sessionId === "session-2") {
         throw new Error("SESSION_GET failed");
       }
       return sessionDetail(sessionId);
     });
     const { result } = renderMobileSessions({
-      getSession,
+      getFullSession,
       persistComputerSessionsEnabled: true,
       sessions: [session("session-1", "One"), session("session-2", "Two")],
       sessionsLoaded: true,
@@ -1212,6 +1228,7 @@ describe("useMobileSessions", () => {
     await waitFor(() => expect(result.current.computerSessionPersistStatus.text).toBe("同步失败：SESSION_GET failed"));
 
     expect(loadStored()).toEqual([]);
+    expect(getFullSession).toHaveBeenCalledTimes(2);
   });
 });
 
