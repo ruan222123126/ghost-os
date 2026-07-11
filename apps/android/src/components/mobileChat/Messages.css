@@ -253,7 +253,6 @@
   border: 1px solid #27272a;
   border-radius: 8px;
   background: #18181b;
-  box-shadow: 0 10px 24px rgb(24 24 27 / 0.16);
 }
 
 .assistant-code-block-header {
@@ -263,8 +262,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 7px 10px 7px 12px;
-  border-bottom: 1px solid #3f3f46;
-  background: #27272a;
+  background: #18181b;
 }
 
 .assistant-code-block-language {
@@ -311,10 +309,13 @@
 
 .copy-button {
   min-height: 28px;
+  border: 0;
   padding: 4px 8px;
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  -webkit-appearance: none;
+  appearance: none;
   border-radius: 6px;
   color: #5f6368;
   background: transparent;

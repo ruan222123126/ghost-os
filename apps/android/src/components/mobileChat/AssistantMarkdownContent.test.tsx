@@ -50,6 +50,7 @@ describe("AssistantMarkdownContent", () => {
     expect(renderer.getAttribute("data-custom-id")).toBe("ghost-os-mobile-assistant-markdown");
     expect(renderer.getAttribute("data-final")).toBe("true");
     expect(renderer.getAttribute("data-html-policy")).toBe("safe");
+    expect(renderer.getAttribute("data-show-copy")).toBe("true");
   });
 
   it("adds display spacing between adjacent sentence outputs", () => {

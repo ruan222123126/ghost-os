@@ -351,7 +351,7 @@ function AssistantReplyParts(props: {
           key={part.id}
           content={part.text}
           final={props.final}
-          showCopyButton={false}
+          showCopyButton
         />
       ) : (
         <ToolCard
@@ -377,6 +377,9 @@ function ToolCard(props: {
     ? viewModel.title
     : buildToolStatusTitle(viewModel.tone, viewModel.title);
   const displayStatus = buildToolStatusLabel(viewModel.tone, viewModel.statusLabel);
+  const copyText = viewModel.details
+    ? `${viewModel.title}\n${viewModel.details}`
+    : viewModel.title;
   const approvalDisabled = Boolean(
     pendingDecision || props.tool.approvalDecision || !props.sessionId?.trim() || !props.onApproveExternalAgent,
   );
@@ -413,7 +416,10 @@ function ToolCard(props: {
       </button>
       {expanded ? (
         <div className={`tool-details is-${viewModel.tone}`}>
-          <span className="tool-details-kind">工具</span>
+          <div className="tool-details-header">
+            <span className="tool-details-kind">工具</span>
+            <MessageCopyButton text={copyText} variant="code" />
+          </div>
           <div className="tool-details-command">{viewModel.title}</div>
           {viewModel.details ? (
             <div className="tool-details-output">
