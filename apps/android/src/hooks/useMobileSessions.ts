@@ -76,6 +76,7 @@ interface SendAgentMessageResult {
   ok: boolean;
   reply?: AgentPayload;
   sessionId?: string;
+  streamInterrupted?: boolean;
 }
 
 interface StopAgentRunInput {
@@ -538,6 +539,19 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     }
 
     flushPendingReplyCommit();
+    if (result.streamInterrupted) {
+      const interruptedSessionId = result.sessionId?.trim() || targetSessionId;
+      if (interruptedSessionId) {
+        rememberResumableRunningSession(interruptedSessionId);
+        applyRunStatus(
+          interruptedSessionId,
+          { tone: "loading", text: "连接中断，后台任务仍在运行" },
+          requestId,
+          traceId,
+        );
+      }
+      return false;
+    }
     if (!result.ok) {
       return false;
     }
@@ -1296,6 +1310,15 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     if (changed) {
       setResumePollVersion((current) => current + 1);
     }
+  }
+
+  function rememberResumableRunningSession(sessionId: string): void {
+    const trimmedSessionId = sessionId.trim();
+    if (!trimmedSessionId || resumableRunningSessionIdsRef.current.has(trimmedSessionId)) {
+      return;
+    }
+    resumableRunningSessionIdsRef.current.add(trimmedSessionId);
+    setResumePollVersion((current) => current + 1);
   }
 
   function forgetResumableRunningSession(sessionId: string): void {

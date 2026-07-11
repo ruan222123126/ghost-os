@@ -2,7 +2,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createTraceId, errorMessage, hasTauriRuntime } from "../lib/bridgeBus";
 import type { BridgeBusCommand, BridgeEnvelope } from "../lib/bridgeBus";
-import { resolveSessionId, streamAgentMessageHTTP } from "../lib/agentStream";
+import {
+  isReconnectableBridgeStreamError,
+  resolveSessionId,
+  streamAgentMessageHTTP,
+} from "../lib/agentStream";
 import type { AgentStreamEvent } from "../lib/agentStream";
 import {
   createAgentPayloadFromRuntime,
@@ -88,6 +92,7 @@ interface SendAgentMessageResult {
   ok: boolean;
   reply?: AgentPayload;
   sessionId?: string;
+  streamInterrupted?: boolean;
 }
 
 interface StopAgentRunInput {
@@ -1473,7 +1478,15 @@ export function useMobileBridge() {
         };
       } catch (error) {
         cancelStreamReplyCommit(streamCommittersRef.current, requestId);
-        options.onStatus({ tone: "error", text: errorMessage(error) });
+        const resolvedError = error instanceof Error ? error : new Error(errorMessage(error));
+        if (isReconnectableBridgeStreamError(resolvedError) && runtime.sessionId) {
+          return {
+            ok: false,
+            sessionId: runtime.sessionId,
+            streamInterrupted: true,
+          };
+        }
+        options.onStatus({ tone: "error", text: resolvedError.message });
         return { ok: false };
       }
     },

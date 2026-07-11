@@ -280,7 +280,7 @@ async function consumeBridgeStreamInvocation(options: BridgeStreamInvocationOpti
   }
 }
 
-function isReconnectableBridgeStreamError(error: Error): boolean {
+export function isReconnectableBridgeStreamError(error: Error): boolean {
   return error.message.includes("read bridge stream failed:") ||
     error.message === "agent stream closed before terminal event";
 }

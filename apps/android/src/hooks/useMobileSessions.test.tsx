@@ -808,6 +808,55 @@ describe("useMobileSessions", () => {
     });
   });
 
+  it("polls a running session after its HTTP stream is interrupted", async () => {
+    let getSessionCalls = 0;
+    const getSession = vi.fn(async (sessionId: string) => {
+      getSessionCalls += 1;
+      if (getSessionCalls === 1) {
+        return sessionDetailWithMessages(sessionId, [
+          { index: 0, role: "user", text: "one" },
+        ], {
+          hasMoreBefore: false,
+          messageCount: 1,
+          nextBefore: null,
+        });
+      }
+      return sessionDetailWithMessages(sessionId, [
+        { index: 0, role: "user", text: "one" },
+        { index: 1, role: "user", text: "run one" },
+        { index: 2, role: "assistant", text: "done after stream interruption" },
+      ], {
+        hasMoreBefore: false,
+        messageCount: 3,
+        nextBefore: null,
+      });
+    });
+    const sendAgentMessage = vi.fn(async (options: SendOptions): Promise<SendResult> => {
+      options.onStatus({ tone: "loading", text: "运行中" });
+      return {
+        ok: false,
+        sessionId: options.sessionId,
+        streamInterrupted: true,
+      };
+    });
+    const { result } = renderMobileSessions({ getSession, sendAgentMessage });
+
+    await act(async () => {
+      await result.current.selectSession("session-1");
+    });
+    await act(async () => {
+      await result.current.sendMessage("run one");
+    });
+
+    await waitFor(() => expect(getSession).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(result.current.activeStatus).toEqual({ tone: "success", text: "回复已返回" }));
+    expect(result.current.activeMessages.map((item) => item.text)).toEqual([
+      "one",
+      "run one",
+      "done after stream interruption",
+    ]);
+  });
+
   it("ignores inactive session completion until the user selects it again", async () => {
     saveStored([
       storedConversation("session-1", "One", [message("session-1", "user", "one")]),
@@ -1272,6 +1321,7 @@ interface SendResult {
   ok: boolean;
   reply?: AgentPayload;
   sessionId?: string;
+  streamInterrupted?: boolean;
 }
 
 type UseMobileSessionsOptionsForTest = Parameters<typeof useMobileSessions>[0];
