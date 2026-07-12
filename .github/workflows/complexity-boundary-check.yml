@@ -45,7 +45,7 @@ jobs:
       - name: Run recovery PR complexity and boundary checks
         if: github.event_name == 'pull_request' && github.event.pull_request.number == 3
         env:
-          COMPLEXITY_DIFF_BASE: HEAD^1
+          COMPLEXITY_DIFF_BASE: 8acc9922b5efc3ceb84846a747535462da8ff0f5
         run: python3 scripts/check_complexity_limits.py
 
       # The one merge commit created from PR #3 needs the same narrow range on
