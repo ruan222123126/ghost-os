@@ -1,4 +1,4 @@
-# Ghost-OS CLI
+# Ghost-OS CLI（CLI并未完善，还在开发中）
 
 Minimal Rust terminal client for Ghost-OS bridge (`core/bridge`).
 
