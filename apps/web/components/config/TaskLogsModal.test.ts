@@ -6,6 +6,16 @@ import { WebLocaleProvider } from '@/lib/i18n/provider';
 import type { TaskRunLog } from '@/lib/types';
 import { TaskLogsModal } from './TaskLogsModal';
 
+jest.mock(
+  'markstream-react',
+  () => ({
+    __esModule: true,
+    default: ({ content }: { content: string }) => React.createElement('div', null, content),
+    setCustomComponents: jest.fn(),
+  }),
+  { virtual: true },
+);
+
 const useLiveRunViewer = jest.fn();
 
 jest.mock('@/hooks/config/useLiveRunViewer', () => ({

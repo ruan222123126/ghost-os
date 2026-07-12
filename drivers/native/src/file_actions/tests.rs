@@ -1,26 +1,32 @@
 use serde_json::json;
 use std::{
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use super::dispatch_action;
+use crate::sandbox::SandboxConfig;
+
 use super::handlers::{
     handle_apply_diff, handle_list_files, handle_read_file, handle_search_files, handle_write_file,
 };
+use super::{dispatch_action, dispatch_action_with_config};
 
 #[test]
 fn handle_read_file_returns_numbered_content() {
     let root = make_temp_dir();
+    let config = sandbox_config_for(&root);
     let file = root.join("sample.txt");
     fs::write(&file, "alpha\nbeta\ngamma\n").expect("write fixture");
 
-    let response = handle_read_file(&json!({
-        "path": file.to_string_lossy(),
-        "start_line": 2,
-        "end_line": 3
-    }));
+    let response = handle_read_file(
+        &json!({
+            "path": file.to_string_lossy(),
+            "start_line": 2,
+            "end_line": 3
+        }),
+        &config,
+    );
 
     assert_eq!(response.status, "success");
     assert_eq!(response.payload["requested_start_line"], 2);
@@ -37,13 +43,17 @@ fn handle_read_file_returns_numbered_content() {
 #[test]
 fn handle_list_files_returns_sorted_entries_with_compatible_fields() {
     let root = make_temp_dir();
+    let config = sandbox_config_for(&root);
     fs::create_dir_all(root.join("docs")).expect("create docs");
     fs::write(root.join("z-last.txt"), "z").expect("write z-last.txt");
     fs::write(root.join("a-first.txt"), "a").expect("write a-first.txt");
 
-    let response = handle_list_files(&json!({
-        "path": root.to_string_lossy(),
-    }));
+    let response = handle_list_files(
+        &json!({
+            "path": root.to_string_lossy(),
+        }),
+        &config,
+    );
 
     assert_eq!(response.status, "success");
     assert_eq!(response.payload["path"], root.to_string_lossy().to_string());
@@ -58,13 +68,17 @@ fn handle_list_files_returns_sorted_entries_with_compatible_fields() {
 #[test]
 fn handle_search_files_returns_sorted_matches() {
     let root = make_temp_dir();
+    let config = sandbox_config_for(&root);
     fs::write(root.join("b.txt"), "zzz\nneedle beta\n").expect("write b.txt");
     fs::write(root.join("a.txt"), "needle alpha\nx\nneedle zeta\n").expect("write a.txt");
 
-    let response = handle_search_files(&json!({
-        "query": "needle",
-        "path": root.to_string_lossy(),
-    }));
+    let response = handle_search_files(
+        &json!({
+            "query": "needle",
+            "path": root.to_string_lossy(),
+        }),
+        &config,
+    );
 
     assert_eq!(response.status, "success");
     assert_eq!(
@@ -81,7 +95,7 @@ fn handle_search_files_returns_sorted_matches() {
 
 #[test]
 fn handle_search_files_rejects_missing_query() {
-    let response = handle_search_files(&json!({"path": "."}));
+    let response = handle_search_files(&json!({"path": "."}), &SandboxConfig::default());
     assert_eq!(response.status, "error");
     assert_eq!(response.error, "query is required");
 }
@@ -89,12 +103,16 @@ fn handle_search_files_rejects_missing_query() {
 #[test]
 fn handle_list_files_blocks_sensitive_directory_names() {
     let root = make_temp_dir();
+    let config = sandbox_config_for(&root);
     let blocked = root.join("credentials-vault");
     fs::create_dir_all(&blocked).expect("create blocked dir");
 
-    let response = handle_list_files(&json!({
-        "path": blocked.to_string_lossy(),
-    }));
+    let response = handle_list_files(
+        &json!({
+            "path": blocked.to_string_lossy(),
+        }),
+        &config,
+    );
 
     assert_eq!(response.status, "error");
     assert!(response.error.contains("sensitive file blocked"));
@@ -105,19 +123,26 @@ fn handle_list_files_blocks_sensitive_directory_names() {
 #[test]
 fn handle_write_file_writes_and_appends_content() {
     let root = make_temp_dir();
+    let config = sandbox_config_for(&root);
     let file = root.join("write.txt");
 
-    let write = handle_write_file(&json!({
-        "path": file.to_string_lossy(),
-        "content": "alpha"
-    }));
+    let write = handle_write_file(
+        &json!({
+            "path": file.to_string_lossy(),
+            "content": "alpha"
+        }),
+        &config,
+    );
     assert_eq!(write.status, "success");
 
-    let append = handle_write_file(&json!({
-        "path": file.to_string_lossy(),
-        "content": "",
-        "mode": "append"
-    }));
+    let append = handle_write_file(
+        &json!({
+            "path": file.to_string_lossy(),
+            "content": "",
+            "mode": "append"
+        }),
+        &config,
+    );
     assert_eq!(append.status, "success");
     assert_eq!(
         fs::read_to_string(&file).expect("read written file"),
@@ -130,13 +155,17 @@ fn handle_write_file_writes_and_appends_content() {
 #[test]
 fn handle_write_file_rejects_invalid_mode() {
     let root = make_temp_dir();
+    let config = sandbox_config_for(&root);
     let file = root.join("write.txt");
 
-    let response = handle_write_file(&json!({
-        "path": file.to_string_lossy(),
-        "content": "alpha",
-        "mode": ""
-    }));
+    let response = handle_write_file(
+        &json!({
+            "path": file.to_string_lossy(),
+            "content": "alpha",
+            "mode": ""
+        }),
+        &config,
+    );
 
     assert_eq!(response.status, "error");
     assert_eq!(response.error, "mode must be 'write' or 'append'");
@@ -147,13 +176,17 @@ fn handle_write_file_rejects_invalid_mode() {
 #[test]
 fn handle_apply_diff_updates_file() {
     let root = make_temp_dir();
+    let config = sandbox_config_for(&root);
     let file = root.join("patch.txt");
     fs::write(&file, "alpha\nbeta\ngamma\n").expect("write fixture");
 
-    let response = handle_apply_diff(&json!({
-        "path": file.to_string_lossy(),
-        "diff_text": "@@ -1,3 +1,3 @@\n alpha\n-beta\n+beta2\n gamma\n"
-    }));
+    let response = handle_apply_diff(
+        &json!({
+            "path": file.to_string_lossy(),
+            "diff_text": "@@ -1,3 +1,3 @@\n alpha\n-beta\n+beta2\n gamma\n"
+        }),
+        &config,
+    );
 
     assert_eq!(response.status, "success");
     let updated = fs::read_to_string(&file).expect("read updated file");
@@ -171,20 +204,35 @@ fn dispatch_action_returns_none_for_unknown_file_action() {
 #[test]
 fn dispatch_action_routes_search_and_write_file_actions() {
     let root = make_temp_dir();
+    let config = sandbox_config_for(&root);
     fs::write(root.join("search.txt"), "needle\n").expect("write search fixture");
 
-    let search = dispatch_action(
+    let search = dispatch_action_with_config(
         "SEARCH_FILES",
         &json!({"query": "needle", "path": root.to_string_lossy()}),
+        &config,
     )
     .expect("SEARCH_FILES should dispatch");
     assert_eq!(search.status, "success");
 
-    let write = dispatch_action("WRITE_FILE", &json!({"path": ".env", "content": "y"}))
-        .expect("WRITE_FILE should dispatch");
+    let write = dispatch_action_with_config(
+        "WRITE_FILE",
+        &json!({"path": root.join(".env").to_string_lossy(), "content": "y"}),
+        &config,
+    )
+    .expect("WRITE_FILE should dispatch");
     assert_eq!(write.status, "error");
 
     fs::remove_dir_all(root).ok();
+}
+
+fn sandbox_config_for(root: &Path) -> SandboxConfig {
+    let root = root.to_string_lossy().to_string();
+    SandboxConfig {
+        allowed_read_paths: vec![root.clone()],
+        allowed_write_paths: vec![root],
+        ..SandboxConfig::default()
+    }
 }
 
 fn make_temp_dir() -> PathBuf {

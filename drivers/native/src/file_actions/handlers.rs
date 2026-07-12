@@ -12,12 +12,12 @@ use super::params::{
     ApplyDiffRequest, ListFilesRequest, ReadFileRequest, SearchFilesRequest, WriteFileRequest,
 };
 
-pub(super) fn handle_list_files(params: &Value) -> Response {
+pub(super) fn handle_list_files(params: &Value, config: &SandboxConfig) -> Response {
     let request = match ListFilesRequest::parse(params) {
         Ok(request) => request,
         Err(err) => return Response::error(err),
     };
-    let result = match list_files_impl(&sandbox_config(), &request.path) {
+    let result = match list_files_impl(config, &request.path) {
         Ok(result) => result,
         Err(err) => return Response::error(err),
     };
@@ -28,20 +28,16 @@ pub(super) fn handle_list_files(params: &Value) -> Response {
     }))
 }
 
-pub(super) fn handle_search_files(params: &Value) -> Response {
+pub(super) fn handle_search_files(params: &Value, config: &SandboxConfig) -> Response {
     let request = match SearchFilesRequest::parse(params) {
         Ok(request) => request,
         Err(err) => return Response::error(err),
     };
-    let matches = match search_files_impl(
-        &sandbox_config(),
-        &request.query,
-        &request.path,
-        request.max_results,
-    ) {
-        Ok(matches) => matches,
-        Err(err) => return Response::error(err),
-    };
+    let matches =
+        match search_files_impl(config, &request.query, &request.path, request.max_results) {
+            Ok(matches) => matches,
+            Err(err) => return Response::error(err),
+        };
 
     Response::success(json!({
         "matches": matches.iter().map(|item| {
@@ -54,17 +50,12 @@ pub(super) fn handle_search_files(params: &Value) -> Response {
     }))
 }
 
-pub(super) fn handle_read_file(params: &Value) -> Response {
+pub(super) fn handle_read_file(params: &Value, config: &SandboxConfig) -> Response {
     let request = match ReadFileRequest::parse(params) {
         Ok(request) => request,
         Err(err) => return Response::error(err),
     };
-    let result = match read_file_impl(
-        &sandbox_config(),
-        &request.path,
-        request.start_line,
-        request.end_line,
-    ) {
+    let result = match read_file_impl(config, &request.path, request.start_line, request.end_line) {
         Ok(result) => result,
         Err(err) => return Response::error(err),
     };
@@ -80,17 +71,12 @@ pub(super) fn handle_read_file(params: &Value) -> Response {
     }))
 }
 
-pub(super) fn handle_write_file(params: &Value) -> Response {
+pub(super) fn handle_write_file(params: &Value, config: &SandboxConfig) -> Response {
     let request = match WriteFileRequest::parse(params) {
         Ok(request) => request,
         Err(err) => return Response::error(err),
     };
-    let result = match write_file_impl(
-        &sandbox_config(),
-        &request.path,
-        &request.content,
-        &request.mode,
-    ) {
+    let result = match write_file_impl(config, &request.path, &request.content, &request.mode) {
         Ok(result) => result,
         Err(err) => return Response::error(err),
     };
@@ -100,12 +86,12 @@ pub(super) fn handle_write_file(params: &Value) -> Response {
     }))
 }
 
-pub(super) fn handle_apply_diff(params: &Value) -> Response {
+pub(super) fn handle_apply_diff(params: &Value, config: &SandboxConfig) -> Response {
     let request = match ApplyDiffRequest::parse(params) {
         Ok(request) => request,
         Err(err) => return Response::error(err),
     };
-    let result = match apply_diff_impl(&sandbox_config(), &request.path, &request.diff_text) {
+    let result = match apply_diff_impl(config, &request.path, &request.diff_text) {
         Ok(result) => result,
         Err(err) => return Response::error(err),
     };
@@ -125,8 +111,4 @@ pub(super) fn handle_apply_diff(params: &Value) -> Response {
         }).collect::<Vec<_>>(),
         "message": result.message,
     }))
-}
-
-fn sandbox_config() -> SandboxConfig {
-    SandboxConfig::default()
 }
