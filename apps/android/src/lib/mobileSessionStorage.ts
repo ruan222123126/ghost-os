@@ -9,6 +9,7 @@ import type {
 import { hasTauriRuntime } from "./bridgeBus";
 
 export const MOBILE_CONVERSATIONS_STORAGE_KEY = "ghost-os-mobile.conversations.v1";
+export const MOBILE_LAST_ACTIVE_SESSION_STORAGE_KEY = "ghost-os-mobile.lastActiveSessionId.v1";
 
 interface ConversationUpsert {
   bridgeMessageCount?: number;
@@ -18,8 +19,13 @@ interface ConversationUpsert {
   createdAt?: string;
   preserveExistingTitle?: boolean;
   sourceMessageCount?: number;
+  sourceSnapshotComplete?: boolean;
   syncedMessageCount?: number;
   updatedAt?: string;
+}
+
+interface PersistedConversationUpsertOptions {
+  limit?: number;
 }
 
 export function loadStoredMobileConversations(): StoredMobileConversation[] {
@@ -43,8 +49,54 @@ export async function loadPersistedMobileConversations(): Promise<StoredMobileCo
   return legacy;
 }
 
+export async function loadPersistedMobileConversationIndex(): Promise<StoredMobileConversation[]> {
+  if (!hasTauriRuntime()) {
+    return loadLocalStoredMobileConversations();
+  }
+
+  const persisted = normalizeConversationArray(await invoke<unknown>("mobile_conversations_load_index"));
+  if (persisted.length > 0) {
+    return persisted;
+  }
+
+  const legacy = loadLocalStoredMobileConversations();
+  if (legacy.length > 0) {
+    await saveTauriMobileConversations(legacy);
+  }
+  return compactStoredMobileConversations(legacy);
+}
+
+export async function loadPersistedMobileConversation(
+  sessionId: string,
+): Promise<StoredMobileConversation | undefined> {
+  const id = sessionId.trim();
+  if (!id) {
+    return undefined;
+  }
+
+  if (hasTauriRuntime()) {
+    const conversation = await invoke<unknown>("mobile_conversation_get", { sessionId: id });
+    return normalizeOptionalConversation(conversation);
+  }
+
+  return loadLocalStoredMobileConversations().find((conversation) => conversation.id === id);
+}
+
 export function saveStoredMobileConversations(conversations: StoredMobileConversation[]): void {
   window.localStorage.setItem(MOBILE_CONVERSATIONS_STORAGE_KEY, JSON.stringify(conversations));
+}
+
+export function loadStoredLastActiveMobileSessionId(): string {
+  return window.localStorage.getItem(MOBILE_LAST_ACTIVE_SESSION_STORAGE_KEY)?.trim() || "";
+}
+
+export function saveStoredLastActiveMobileSessionId(sessionId: string | undefined): void {
+  const trimmedSessionId = sessionId?.trim() || "";
+  if (!trimmedSessionId) {
+    window.localStorage.removeItem(MOBILE_LAST_ACTIVE_SESSION_STORAGE_KEY);
+    return;
+  }
+  window.localStorage.setItem(MOBILE_LAST_ACTIVE_SESSION_STORAGE_KEY, trimmedSessionId);
 }
 
 export async function savePersistedMobileConversations(conversations: StoredMobileConversation[]): Promise<void> {
@@ -53,6 +105,33 @@ export async function savePersistedMobileConversations(conversations: StoredMobi
     return;
   }
   saveStoredMobileConversations(conversations);
+}
+
+export async function upsertPersistedMobileConversations(
+  conversations: StoredMobileConversation[],
+  options: PersistedConversationUpsertOptions = {},
+): Promise<StoredMobileConversation[]> {
+  if (conversations.length === 0) {
+    return loadPersistedMobileConversationIndex();
+  }
+
+  if (hasTauriRuntime()) {
+    return normalizeConversationArray(
+      await invoke<unknown>("mobile_conversations_upsert", {
+        conversations,
+        limit: options.limit,
+      }),
+    );
+  }
+
+  const current = loadLocalStoredMobileConversations();
+  const nextById = new Map(current.map((conversation) => [conversation.id, conversation]));
+  for (const conversation of conversations) {
+    nextById.set(conversation.id, conversation);
+  }
+  const next = trimPersistedConversations([...nextById.values()], options.limit);
+  saveStoredMobileConversations(next);
+  return next;
 }
 
 function loadLocalStoredMobileConversations(): StoredMobileConversation[] {
@@ -84,6 +163,13 @@ function normalizeConversationArray(value: unknown): StoredMobileConversation[] 
   return value.map(normalizeConversation).filter(isStoredConversation);
 }
 
+function normalizeOptionalConversation(value: unknown): StoredMobileConversation | undefined {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  return normalizeConversation(value) ?? undefined;
+}
+
 export function upsertStoredMobileConversation(
   conversations: StoredMobileConversation[],
   upsert: ConversationUpsert,
@@ -97,14 +183,28 @@ export function upsertStoredMobileConversation(
   const existing = conversations.find((conversation) => conversation.id === id);
   const incomingTitle = upsert.title.trim();
   const existingTitle = existing?.title.trim();
+  const sourceMessageCount = upsert.bridgeMessageCount ?? upsert.sourceMessageCount ?? existing?.source_message_count;
+  const syncedMessageCount = upsert.syncedMessageCount ?? existing?.synced_message_count;
+  const updatedAt = upsert.updatedAt?.trim() || now;
+  const preserveCompleteSnapshot = upsert.sourceSnapshotComplete === false
+    && existing?.source_snapshot_complete === true
+    && sourceMessageCount === existing.source_message_count
+    && updatedAt === existing.updated_at;
+  const sourceSnapshotComplete = preserveCompleteSnapshot
+    ? true
+    : upsert.sourceSnapshotComplete ?? existing?.source_snapshot_complete;
+  const persistedSyncedMessageCount = preserveCompleteSnapshot
+    ? existing.synced_message_count
+    : syncedMessageCount;
   const next: StoredMobileConversation = {
     created_at: upsert.createdAt?.trim() || existing?.created_at || now,
     id,
-    messages: upsert.messages,
-    source_message_count: upsert.bridgeMessageCount ?? upsert.sourceMessageCount ?? existing?.source_message_count,
-    synced_message_count: upsert.syncedMessageCount ?? existing?.synced_message_count,
+    messages: preserveCompleteSnapshot ? existing.messages : upsert.messages,
+    ...(sourceMessageCount === undefined ? {} : { source_message_count: sourceMessageCount }),
+    ...(sourceSnapshotComplete === undefined ? {} : { source_snapshot_complete: sourceSnapshotComplete }),
+    ...(persistedSyncedMessageCount === undefined ? {} : { synced_message_count: persistedSyncedMessageCount }),
     title: upsert.preserveExistingTitle ? existingTitle || incomingTitle || id : incomingTitle || existingTitle || id,
-    updated_at: upsert.updatedAt?.trim() || now,
+    updated_at: updatedAt,
   };
 
   return [next, ...conversations.filter((conversation) => conversation.id !== id)].sort(compareConversationsByUpdatedAt);
@@ -132,6 +232,7 @@ function normalizeConversation(value: unknown): StoredMobileConversation | null 
   const createdAt = asTrimmedString(record.created_at);
   const updatedAt = asTrimmedString(record.updated_at);
   const sourceMessageCount = asOptionalInteger(record.source_message_count);
+  const sourceSnapshotComplete = asBoolean(record.source_snapshot_complete);
   const syncedMessageCount = asOptionalInteger(record.synced_message_count);
   if (!id || !createdAt || !updatedAt) {
     return null;
@@ -142,6 +243,7 @@ function normalizeConversation(value: unknown): StoredMobileConversation | null 
     id,
     messages: normalizeMessages(record.messages, id),
     ...(sourceMessageCount === undefined ? {} : { source_message_count: sourceMessageCount }),
+    ...(sourceSnapshotComplete === undefined ? {} : { source_snapshot_complete: sourceSnapshotComplete }),
     ...(syncedMessageCount === undefined ? {} : { synced_message_count: syncedMessageCount }),
     title: title || id,
     updated_at: updatedAt,
@@ -287,6 +389,25 @@ function compareConversationsByUpdatedAt(a: StoredMobileConversation, b: StoredM
     return updatedOrder;
   }
   return a.title.localeCompare(b.title, "zh-Hans");
+}
+
+function trimPersistedConversations(
+  conversations: StoredMobileConversation[],
+  limit: number | undefined,
+): StoredMobileConversation[] {
+  if (typeof limit !== "number" || !Number.isInteger(limit) || limit <= 0) {
+    return conversations.sort(compareConversationsByUpdatedAt);
+  }
+  return conversations.sort(compareConversationsByUpdatedAt).slice(0, limit);
+}
+
+function compactStoredMobileConversations(
+  conversations: StoredMobileConversation[],
+): StoredMobileConversation[] {
+  return conversations.map((conversation) => ({
+    ...conversation,
+    messages: [],
+  }));
 }
 
 function isStoredConversation(value: StoredMobileConversation | null): value is StoredMobileConversation {

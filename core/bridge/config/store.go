@@ -130,6 +130,46 @@ func (s *store) ListProviderSyncRecords() ([]ProviderRecord, error) {
 	return s.listProvidersLocked(true)
 }
 
+func (s *store) GetProvider(name string) (ProviderRecord, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	providers, err := s.listProvidersLocked(false)
+	if err != nil {
+		return ProviderRecord{}, err
+	}
+	target := strings.TrimSpace(name)
+	if target == "" {
+		return ProviderRecord{}, ErrProviderNotFound
+	}
+	for _, provider := range providers {
+		if strings.EqualFold(strings.TrimSpace(provider.Name), target) {
+			return provider, nil
+		}
+	}
+	return ProviderRecord{}, ErrProviderNotFound
+}
+
+func (s *store) GetProviderByID(providerID string) (ProviderRecord, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	providers, err := s.listProvidersLocked(false)
+	if err != nil {
+		return ProviderRecord{}, err
+	}
+	target := strings.TrimSpace(providerID)
+	if target == "" {
+		return ProviderRecord{}, ErrProviderNotFound
+	}
+	for _, provider := range providers {
+		if strings.TrimSpace(provider.ProviderID) == target {
+			return provider, nil
+		}
+	}
+	return ProviderRecord{}, ErrProviderNotFound
+}
+
 func (s *store) SystemPrompts() (SystemPromptFiles, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

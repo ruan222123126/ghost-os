@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type {
   AgentRuntimeType,
   ConfigPayload,
+  CodexModelCatalogPayload,
   ExternalCodexPermissionMode,
   ProviderListPayload,
   StatusMessage,
@@ -14,6 +15,9 @@ const RUNTIME_MENU_ANIMATION_MS = 180;
 interface ChatHeaderProps {
   agentRuntime: AgentRuntimeType;
   runtimeLabel: string;
+  codexModel?: string;
+  codexModelCatalog?: CodexModelCatalogPayload;
+  codexModelCatalogError?: string;
   codexPermissionMode?: ExternalCodexPermissionMode;
   config: ConfigPayload | undefined;
   providerList: ProviderListPayload | undefined;
@@ -24,6 +28,7 @@ interface ChatHeaderProps {
   onToggleRuntimeMenu: () => void;
   onCloseRuntimeMenu: () => void;
   onSwitchAgentRuntime: (runtime: AgentRuntimeType) => void;
+  onSwitchCodexModel?: (model: string) => void;
   onSwitchModel: (model: string) => Promise<boolean>;
   onOpenConnection: () => void;
   onOpenMoreMenu: () => void;
@@ -69,6 +74,9 @@ function HeaderRuntimeSelector(props: HeaderRuntimeSelectorProps) {
       {shouldRenderMenu ? (
         <RuntimeMenu
           agentRuntime={props.agentRuntime}
+          codexModel={props.codexModel}
+          codexModelCatalog={props.codexModelCatalog}
+          codexModelCatalogError={props.codexModelCatalogError}
           codexPermissionMode={props.codexPermissionMode}
           config={props.config}
           providerList={props.providerList}
@@ -76,6 +84,7 @@ function HeaderRuntimeSelector(props: HeaderRuntimeSelectorProps) {
           open={props.runtimeMenuOpen}
           onClose={props.onCloseRuntimeMenu}
           onSwitchAgentRuntime={props.onSwitchAgentRuntime}
+          onSwitchCodexModel={props.onSwitchCodexModel}
           onSwitchModel={props.onSwitchModel}
         />
       ) : null}

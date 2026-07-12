@@ -5,9 +5,11 @@ import type {
   AgentRuntimeType,
   ChatMessage,
   ChatSendInput,
+  ExternalAgentMode,
   ExternalCodexPermissionMode,
   PendingQuestionMessage,
   SessionImageContent,
+  SessionDetail,
   SessionTurnDraft,
   StreamingAssistantSegment,
   StreamingThinkingSegment,
@@ -15,6 +17,11 @@ import type {
 } from '@/lib/types';
 
 export type { ActiveAgentRun } from '@/lib/chat-stream/types';
+
+export interface PostSendFocusRequest {
+  messageId: string;
+  token: number;
+}
 
 export interface UseBridgeChatResult {
   committedMessages: ChatMessage[];
@@ -32,11 +39,12 @@ export interface UseBridgeChatResult {
   hasPendingQuestion: boolean;
   canStop: boolean;
   hasOlderHistory: boolean;
+  postSendFocusRequest: PostSendFocusRequest | null;
   sendChatMessage: (input: ChatSendInput) => Promise<void>;
   stopCurrentRun: () => Promise<void>;
   answerQuestion: (questionId: string, answer: string) => Promise<void>;
   cancelQuestion: (questionId: string) => Promise<void>;
-  loadSessionHistory: (sessionId: string) => Promise<void>;
+  loadSessionHistory: (sessionId: string) => Promise<SessionDetail | null>;
   loadOlderHistory: () => Promise<void>;
   clearMessages: (sessionId?: string) => void;
   backgroundCompletedSessionIds: ReadonlySet<string>;
@@ -53,9 +61,12 @@ export interface UseBridgeChatOptions {
 }
 
 export interface StreamAgentRunInput {
-  agentRuntime: AgentRuntimeType;
+  agentRuntime?: AgentRuntimeType;
+  codexMode?: ExternalAgentMode;
   images?: SessionImageContent[];
   message: string;
+  mode?: ChatSendInput['mode'];
+  model?: string;
   permissionMode?: ExternalCodexPermissionMode;
   projectRoot?: string;
   sessionId?: string;

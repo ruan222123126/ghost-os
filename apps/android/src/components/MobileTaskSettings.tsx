@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Play, Power, RefreshCw, Trash2 } from "lucide-react";
 import type { AgentMessageTaskPayload, TaskPayload, WorkflowTaskPayload } from "../mobileTypes";
+import { formatSchedule } from "../lib/taskSchedule";
 import "./MobileTaskSettings.css";
 
 interface MobileTaskSettingsProps {
@@ -201,13 +202,6 @@ function primaryTaskText(task: TaskPayload): string {
 
 function messageSummary(message: string): string {
   return message.trim().replace(/\s+/g, " ") || "空消息";
-}
-
-function formatSchedule(task: TaskPayload): string {
-  if (task.schedule_type === "interval") {
-    return `每 ${task.interval_seconds ?? 0} 秒`;
-  }
-  return `Cron ${task.cron_expr ?? ""}`;
 }
 
 function formatAgentMode(task: AgentMessageTaskPayload): string {

@@ -2,6 +2,7 @@ import type {
   AgentRequest,
   AgentStreamEvent,
   ExternalAgentRequest,
+  ExternalAgentMode,
   ExternalCodexPermissionMode,
   HumanResponseRequest,
 } from '@/lib/types';
@@ -54,6 +55,7 @@ const PAYLOAD_SESSION_ID_RESOLVERS: Partial<Record<AgentStreamEvent['type'], Eve
 export interface StreamAgentMessageOptions {
   images?: AgentRequest['images'];
   message: string;
+  mode?: AgentRequest['mode'];
   onEvent: (event: AgentStreamEvent) => void | Promise<void>;
   sessionId?: string;
   signal?: AbortSignal;
@@ -62,6 +64,8 @@ export interface StreamAgentMessageOptions {
 
 export interface StreamExternalAgentMessageOptions {
   message: string;
+  model?: string;
+  mode?: ExternalAgentMode;
   onEvent: (event: AgentStreamEvent) => void | Promise<void>;
   permissionMode: ExternalCodexPermissionMode;
   projectRoot?: string;
@@ -85,6 +89,9 @@ export async function streamMessage(options: StreamAgentMessageOptions): Promise
   if (options.images?.length) {
     body.images = options.images.map((image) => ({ ...image }));
   }
+  if (options.mode) {
+    body.mode = options.mode;
+  }
   if (options.sessionId?.trim()) {
     body.session_id = options.sessionId.trim();
   }
@@ -106,6 +113,12 @@ export async function streamExternalMessage(options: StreamExternalAgentMessageO
     permission_mode: options.permissionMode,
     provider: 'codex',
   };
+  if (options.model?.trim()) {
+    body.model = options.model.trim();
+  }
+  if (options.mode) {
+    body.mode = options.mode;
+  }
   if (options.projectRoot?.trim()) {
     body.project_root = options.projectRoot.trim();
   }

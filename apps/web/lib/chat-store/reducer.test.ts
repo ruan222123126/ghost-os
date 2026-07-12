@@ -363,6 +363,139 @@ describe('lib/chat-store/reducer', () => {
       { id: 'tool-success', toolStatus: 'success' },
     ]);
   });
+
+  it('drops draft rows already covered by committed Codex history', () => {
+    let state = createInitialState();
+    state = chatStateReducer(state, {
+      type: 'set_committed_messages',
+      updater: [
+        {
+          id: 'session:user:1',
+          kind: 'user',
+          content: 'run tests',
+        },
+        {
+          id: 'session:assistant:1',
+          kind: 'assistant',
+          content: '先检查项目。',
+        },
+        {
+          id: 'session:tool:2',
+          kind: 'tool',
+          content: 'ok',
+          toolInput: '{"command":"go test ./..."}',
+          toolName: 'codex_exec',
+          toolStatus: 'success',
+          toolCallId: 'exec-1',
+        },
+        {
+          id: 'session:assistant:3',
+          kind: 'assistant',
+          content: '测试通过。',
+        },
+      ],
+    });
+
+    state = chatStateReducer(state, {
+      type: 'hydrate_turn_draft',
+      sessionId: 'session-codex',
+      draft: {
+        trace_id: 'trace-codex',
+        turn: 1,
+        status: 'streaming',
+        pending_questions: [],
+        assistant_segments: [
+          { id: 'stream-segment:assistant:1', content: '先检查项目。' },
+          { id: 'stream-segment:assistant:2', content: '测试通过。' },
+        ],
+        thinking_segments: [],
+        tools: [{
+          id: 'stream-tool:trace-codex:exec-1',
+          content: '{"command":"go test ./..."}',
+          tool_input: '{"command":"go test ./..."}',
+          tool_name: 'codex_exec',
+          tool_status: 'pending',
+          tool_call_id: 'exec-1',
+          trace_id: 'trace-codex',
+        }],
+        item_order: [
+          'assistant:stream-segment:assistant:1',
+          'tool:stream-tool:trace-codex:exec-1',
+          'assistant:stream-segment:assistant:2',
+        ],
+      },
+    });
+
+    const view = buildChatStateView(state);
+    expect(view.streamingAssistantSegments).toEqual([]);
+    expect(view.streamingThinkingSegments).toEqual([]);
+    expect(view.streamingTools).toEqual([]);
+    expect(state.streamingItemOrder).toEqual([]);
+  });
+
+  it('drops split draft assistant rows when committed Codex history has one combined assistant message', () => {
+    let state = createInitialState();
+    state = chatStateReducer(state, {
+      type: 'set_committed_messages',
+      updater: [
+        {
+          id: 'session:user:1',
+          kind: 'user',
+          content: 'run tests',
+        },
+        {
+          id: 'session:assistant:1',
+          kind: 'assistant',
+          content: '先检查项目。测试通过。',
+        },
+        {
+          id: 'session:tool:2',
+          kind: 'tool',
+          content: 'ok',
+          toolInput: '{"command":"go test ./..."}',
+          toolName: 'codex_exec',
+          toolStatus: 'success',
+          toolCallId: 'exec-1',
+        },
+      ],
+    });
+
+    state = chatStateReducer(state, {
+      type: 'hydrate_turn_draft',
+      sessionId: 'session-codex',
+      draft: {
+        trace_id: 'trace-codex',
+        turn: 1,
+        status: 'streaming',
+        pending_questions: [],
+        assistant_segments: [
+          { id: 'stream-segment:assistant:1', content: '先检查项目。' },
+          { id: 'stream-segment:assistant:2', content: '测试通过。' },
+        ],
+        thinking_segments: [],
+        tools: [{
+          id: 'stream-tool:trace-codex:exec-1',
+          content: '{"command":"go test ./..."}',
+          tool_input: '{"command":"go test ./..."}',
+          tool_name: 'codex_exec',
+          tool_status: 'pending',
+          tool_call_id: 'exec-1',
+          trace_id: 'trace-codex',
+        }],
+        item_order: [
+          'assistant:stream-segment:assistant:1',
+          'tool:stream-tool:trace-codex:exec-1',
+          'assistant:stream-segment:assistant:2',
+        ],
+      },
+    });
+
+    const view = buildChatStateView(state);
+    expect(view.streamingAssistantSegments).toEqual([]);
+    expect(view.streamingThinkingSegments).toEqual([]);
+    expect(view.streamingTools).toEqual([]);
+    expect(state.streamingItemOrder).toEqual([]);
+  });
 });
 
 function createInitialState(): ChatStateStore {

@@ -19,6 +19,7 @@ type sseEventSink struct {
 	flusher  http.Flusher
 	traceID  string
 	sequence int
+	detached bool
 	mu       sync.Mutex
 }
 
@@ -40,6 +41,39 @@ func (s *sseEventSink) Emit(ctx context.Context, event streaming.Event) (streami
 	default:
 	}
 
+	event, data, err := s.prepareEvent(event)
+	if err != nil {
+		return event, err
+	}
+	if s.detached {
+		return event, nil
+	}
+
+	if _, err := fmt.Fprintf(s.w, "id: %s\n", event.ID); err != nil {
+		s.detached = true
+		return event, nil
+	}
+	if _, err := fmt.Fprintf(s.w, "event: %s\n", event.Type); err != nil {
+		s.detached = true
+		return event, nil
+	}
+	if _, err := fmt.Fprintf(s.w, "data: %s\n\n", data); err != nil {
+		s.detached = true
+		return event, nil
+	}
+
+	s.flusher.Flush()
+	return event, nil
+}
+
+// Detach stops client writes while still canonicalizing events for downstream sinks.
+func (s *sseEventSink) Detach() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.detached = true
+}
+
+func (s *sseEventSink) prepareEvent(event streaming.Event) (streaming.Event, []byte, error) {
 	if strings.TrimSpace(event.TraceID) == "" {
 		event.TraceID = s.traceID
 	}
@@ -50,27 +84,15 @@ func (s *sseEventSink) Emit(ctx context.Context, event streaming.Event) (streami
 	s.sequence++
 	eventID, err := streaming.FormatEventID(event.TraceID, s.sequence)
 	if err != nil {
-		return event, err
+		return event, nil, err
 	}
 	event.ID = eventID
 
 	data, err := json.Marshal(event)
 	if err != nil {
-		return event, err
+		return event, nil, err
 	}
-
-	if _, err := fmt.Fprintf(s.w, "id: %s\n", event.ID); err != nil {
-		return event, err
-	}
-	if _, err := fmt.Fprintf(s.w, "event: %s\n", event.Type); err != nil {
-		return event, err
-	}
-	if _, err := fmt.Fprintf(s.w, "data: %s\n\n", data); err != nil {
-		return event, err
-	}
-
-	s.flusher.Flush()
-	return event, nil
+	return event, data, nil
 }
 
 type observedSSEStreamSink struct {
@@ -146,15 +168,6 @@ func buildFallbackStreamErrorEvent(traceID string, sessionID string, err error) 
 	return streaming.NewEvent(traceID, sessionID, 0, "", streaming.EventError, payload)
 }
 
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if normalized := strings.TrimSpace(value); normalized != "" {
-			return normalized
-		}
-	}
-	return ""
-}
-
 func (t *transport) handleSessionEvents(w http.ResponseWriter, r *http.Request, sessionID string) {
 	if !requireMethod(w, r, http.MethodGet) {
 		return
@@ -162,9 +175,6 @@ func (t *transport) handleSessionEvents(w http.ResponseWriter, r *http.Request, 
 
 	flusher, traceID, ok := prepareSessionEventsResponse(w, r)
 	if !ok {
-		return
-	}
-	if err := t.writePendingSessionPushEvent(w, flusher, sessionID); err != nil {
 		return
 	}
 
@@ -175,6 +185,10 @@ func (t *transport) handleSessionEvents(w http.ResponseWriter, r *http.Request, 
 	}
 	ch, unsubscribe := hub.Subscribe(sessionID)
 	defer unsubscribe()
+
+	if err := t.writePendingSessionPushEvent(w, flusher, sessionID); err != nil {
+		return
+	}
 
 	streamSessionPushEvents(r.Context(), w, flusher, ch)
 }

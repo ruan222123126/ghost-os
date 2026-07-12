@@ -81,6 +81,9 @@
         "externalAgentApprovalResponse": {
             "$ref": "./schema/defs/external_agent.json#/$defs/externalAgentApprovalResponse"
         },
+        "codexModelCatalog": {
+            "$ref": "./schema/defs/external_agent.json#/$defs/codexModelCatalog"
+        },
         "humanResponseRequest": {
             "$ref": "./schema/defs/agent_human.json#/$defs/humanResponseRequest"
         },
@@ -159,6 +162,15 @@
         "sessionMetadata": {
             "$ref": "./schema/defs/session_history.json#/$defs/sessionMetadata"
         },
+        "sessionRunState": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionRunState"
+        },
+        "sessionRunStatesGetRequest": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionRunStatesGetRequest"
+        },
+        "sessionRuntimeSelection": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionRuntimeSelection"
+        },
         "sessionSidebarPartition": {
             "$ref": "./schema/defs/session_history.json#/$defs/sessionSidebarPartition"
         },
@@ -221,6 +233,9 @@
         },
         "providerBusUpdateRequest": {
             "$ref": "./schema/defs/config_provider.json#/$defs/providerBusUpdateRequest"
+        },
+        "providerExportRequest": {
+            "$ref": "./schema/defs/config_provider.json#/$defs/providerExportRequest"
         },
         "providerBusDeleteRequest": {
             "$ref": "./schema/defs/config_provider.json#/$defs/providerBusDeleteRequest"

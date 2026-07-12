@@ -23,23 +23,25 @@ type CompleteRequest struct {
 	SessionPersisted bool
 	TraceID          string
 	UserMessage      string
+	RuntimeSelection *session.RuntimeSelection
 	Response         string
 	RunErr           error
 	OnPersistErr     func(err error, awaitingHuman bool) error
 }
 
 type State struct {
-	SessionStore    *session.Store
-	RuntimeCleanup  func()
-	Persistence     Persistence
-	Session         *session.Session
-	Agent           *agent.Agent
-	ExecCtx         context.Context
-	TraceID         string
-	UserMessage     string
-	PreTurnMessages []llm.Message
-	TurnStartedAt   time.Time
-	Cleanup         func()
+	SessionStore     *session.Store
+	RuntimeCleanup   func()
+	Persistence      Persistence
+	Session          *session.Session
+	Agent            *agent.Agent
+	ExecCtx          context.Context
+	TraceID          string
+	UserMessage      string
+	PreTurnMessages  []llm.Message
+	TurnStartedAt    time.Time
+	RuntimeSelection *session.RuntimeSelection
+	Cleanup          func()
 }
 
 func (s *State) Close() {
@@ -86,6 +88,7 @@ func (s *State) Complete(
 		req.SessionPersisted = s.SessionStore != nil
 		req.TraceID = s.TraceID
 		req.UserMessage = s.UserMessage
+		req.RuntimeSelection = session.CloneRuntimeSelection(s.RuntimeSelection)
 	}
 	return Complete(req)
 }
@@ -156,6 +159,9 @@ func persistNewMessages(
 		return nil
 	}
 	newMessages = messagesForPersistence(newMessages, req.Session, req.TraceID, req.UserMessage)
+	if len(newMessages) > 0 && req.RuntimeSelection != nil {
+		req.Session.SetLastRuntimeSelection(*req.RuntimeSelection)
+	}
 	req.Session.ConversationState = req.Agent.GetConversationState()
 	return req.Persistence.CommitTurn(req.Context, req.Session, newMessages, req.TraceID, completed)
 }

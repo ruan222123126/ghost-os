@@ -102,6 +102,7 @@ func TestManagerExecuteStreamMapsCodexEventsAndHistory(t *testing.T) {
 			"output":  "mcp ok",
 			"status":  "completed",
 		}})
+		client.emit(CodexEvent{Type: "agent_message", Payload: map[string]any{"message": " done"}})
 		client.emit(CodexEvent{Type: "task_complete", Payload: map[string]any{"turn_id": "turn-1"}})
 		return "turn-1", nil
 	}
@@ -116,8 +117,8 @@ func TestManagerExecuteStreamMapsCodexEventsAndHistory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExecuteStream: %v", err)
 	}
-	if message != "hello" {
-		t.Fatalf("unexpected final message: got %q want %q", message, "hello")
+	if message != "hellodone" {
+		t.Fatalf("unexpected final message: got %q want %q", message, "hellodone")
 	}
 	if sessionID == "" {
 		t.Fatal("expected session id")
@@ -138,6 +139,7 @@ func TestManagerExecuteStreamMapsCodexEventsAndHistory(t *testing.T) {
 		streaming.EventToolCallFinished,
 		streaming.EventToolCallStarted,
 		streaming.EventToolCallFinished,
+		streaming.EventCompletionDelta,
 		streaming.EventMessage,
 		streaming.EventDone,
 	})
@@ -161,8 +163,327 @@ func TestManagerExecuteStreamMapsCodexEventsAndHistory(t *testing.T) {
 		!hasToolResult(loaded.Messages, "mcp-1", "mcp ok") {
 		t.Fatalf("expected codex tool results in history: %+v", loaded.Messages)
 	}
-	if got := loaded.Messages[len(loaded.Messages)-1]; got.Role != llm.RoleAssistant || got.Text != "hello" {
-		t.Fatalf("unexpected final history message: %+v", got)
+	assertCodexHistoryOrder(t, loaded.Messages, []historyMarker{
+		{kind: "assistant_text", value: "hello"},
+		{kind: "tool_call", value: "exec-1"},
+		{kind: "tool_result", value: "exec-1"},
+		{kind: "tool_call", value: "patch-1"},
+		{kind: "tool_result", value: "patch-1"},
+		{kind: "tool_call", value: "mcp-1"},
+		{kind: "tool_result", value: "mcp-1"},
+		{kind: "assistant_text", value: "done"},
+	})
+	if countAssistantText(loaded.Messages, "hello") != 1 || countAssistantText(loaded.Messages, "done") != 1 {
+		t.Fatalf("expected codex assistant text segments to be persisted once: %+v", loaded.Messages)
+	}
+}
+
+func TestManagerExecuteStreamMapsCodexAgentMessageContentDelta(t *testing.T) {
+	manager, sessionStore, fake := newExternalAgentTestManager(t)
+	fake.startTurn = func(ctx context.Context, client *fakeCodexClient, opts TurnOptions) (string, error) {
+		client.emit(CodexEvent{Type: "task_started", Payload: map[string]any{"turn_id": "turn-delta"}})
+		client.emit(CodexEvent{Type: "agent_message_content_delta", Payload: map[string]any{"delta": "hello"}})
+		client.emit(CodexEvent{Type: "exec_command_begin", Payload: map[string]any{
+			"call_id": "exec-delta",
+			"command": "pwd",
+		}})
+		client.emit(CodexEvent{Type: "exec_command_end", Payload: map[string]any{
+			"call_id": "exec-delta",
+			"output":  "/repo",
+			"status":  "completed",
+		}})
+		client.emit(CodexEvent{Type: "agent_message_content_delta", Payload: map[string]any{"delta": " done"}})
+		client.emit(CodexEvent{Type: "task_complete", Payload: map[string]any{"turn_id": "turn-delta"}})
+		return "turn-delta", nil
+	}
+	sink := &collectingSink{}
+
+	message, sessionID, err := manager.ExecuteStream(context.Background(), api.ExternalAgentRequest{
+		Message: "run pwd",
+	}, "trace-delta", sink, true)
+	if err != nil {
+		t.Fatalf("ExecuteStream: %v", err)
+	}
+	if message != "hellodone" {
+		t.Fatalf("unexpected final message: got %q want %q", message, "hellodone")
+	}
+	assertEventTypes(t, sink.events(), []streaming.EventType{
+		streaming.EventRunStarted,
+		streaming.EventCompletionDelta,
+		streaming.EventToolCallStarted,
+		streaming.EventToolCallFinished,
+		streaming.EventCompletionDelta,
+		streaming.EventMessage,
+		streaming.EventDone,
+	})
+
+	loaded, err := sessionStore.Load(sessionID)
+	if err != nil {
+		t.Fatalf("load session: %v", err)
+	}
+	assertCodexHistoryOrder(t, loaded.Messages, []historyMarker{
+		{kind: "assistant_text", value: "hello"},
+		{kind: "tool_call", value: "exec-delta"},
+		{kind: "tool_result", value: "exec-delta"},
+		{kind: "assistant_text", value: "done"},
+	})
+}
+
+func TestManagerExecuteStreamDoesNotReplayAgentMessageSnapshot(t *testing.T) {
+	manager, sessionStore, fake := newExternalAgentTestManager(t)
+	fake.startTurn = func(ctx context.Context, client *fakeCodexClient, opts TurnOptions) (string, error) {
+		client.emit(CodexEvent{Type: "task_started", Payload: map[string]any{"turn_id": "turn-snapshot"}})
+		client.emit(CodexEvent{Type: "agent_message_content_delta", Payload: map[string]any{"delta": "hello"}})
+		client.emit(CodexEvent{Type: codexEventAgentMessageSnapshot, Payload: map[string]any{"message": "hello"}})
+		client.emit(CodexEvent{Type: "task_complete", Payload: map[string]any{"turn_id": "turn-snapshot"}})
+		return "turn-snapshot", nil
+	}
+	sink := &collectingSink{}
+
+	message, sessionID, err := manager.ExecuteStream(context.Background(), api.ExternalAgentRequest{
+		Message: "answer once",
+	}, "trace-snapshot", sink, true)
+	if err != nil {
+		t.Fatalf("ExecuteStream: %v", err)
+	}
+	if message != "hello" {
+		t.Fatalf("unexpected final message: got %q want %q", message, "hello")
+	}
+	assertEventTypes(t, sink.events(), []streaming.EventType{
+		streaming.EventRunStarted,
+		streaming.EventCompletionDelta,
+		streaming.EventMessage,
+		streaming.EventDone,
+	})
+
+	loaded, err := sessionStore.Load(sessionID)
+	if err != nil {
+		t.Fatalf("load session: %v", err)
+	}
+	if countAssistantText(loaded.Messages, "hello") != 1 || countAssistantText(loaded.Messages, "hellohello") != 0 {
+		t.Fatalf("expected completed agent message snapshot to be persisted once: %+v", loaded.Messages)
+	}
+}
+
+func TestManagerExecuteStreamEnablesCodexPlanMode(t *testing.T) {
+	manager, sessionStore, fake := newExternalAgentTestManager(t)
+	fake.startTurn = func(ctx context.Context, client *fakeCodexClient, opts TurnOptions) (string, error) {
+		client.emit(CodexEvent{Type: "agent_message", Payload: map[string]any{"message": "planned"}})
+		client.emit(CodexEvent{Type: "task_complete", Payload: map[string]any{"turn_id": "turn-plan"}})
+		return "turn-plan", nil
+	}
+
+	message, sessionID, err := manager.ExecuteStream(context.Background(), api.ExternalAgentRequest{
+		Message: "make a plan",
+		Mode:    " PLAN ",
+		Model:   "gpt-5-codex",
+		Effort:  "high",
+	}, "trace-plan", newCollectingSink(), true)
+	if err != nil {
+		t.Fatalf("ExecuteStream: %v", err)
+	}
+	if message != "planned" {
+		t.Fatalf("unexpected message: got %q want %q", message, "planned")
+	}
+	mode := fake.collaborationMode()
+	if mode.Mode != CodexModePlan || mode.Model != "gpt-5-codex" || mode.Effort != "high" {
+		t.Fatalf("expected codex plan collaboration mode, got %+v", mode)
+	}
+
+	loaded, err := sessionStore.Load(sessionID)
+	if err != nil {
+		t.Fatalf("load session: %v", err)
+	}
+	if loaded.ExternalRuntime == nil || loaded.ExternalRuntime.Mode != CodexModePlan {
+		t.Fatalf("expected plan external runtime, got %+v", loaded.ExternalRuntime)
+	}
+	if loaded.LastRuntimeSelection == nil || loaded.LastRuntimeSelection.Mode != session.RuntimeSelectionModePlan {
+		t.Fatalf("expected plan runtime selection, got %+v", loaded.LastRuntimeSelection)
+	}
+}
+
+func TestManagerExecuteStreamPersistsRunningTurnDraft(t *testing.T) {
+	manager, sessionStore, fake := newExternalAgentTestManager(t)
+	fake.turnStarted = make(chan struct{})
+	emitMore := make(chan struct{})
+	finish := make(chan struct{})
+	fake.startTurn = func(ctx context.Context, client *fakeCodexClient, opts TurnOptions) (string, error) {
+		client.emit(CodexEvent{Type: "task_started", Payload: map[string]any{"turn_id": "turn-draft"}})
+		client.emit(CodexEvent{Type: "agent_message_content_delta", Payload: map[string]any{"delta": "partial"}})
+		close(client.turnStarted)
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-emitMore:
+		}
+		client.emit(CodexEvent{Type: "agent_message_content_delta", Payload: map[string]any{"delta": " answer"}})
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-finish:
+		}
+		client.emit(CodexEvent{Type: "task_complete", Payload: map[string]any{"turn_id": "turn-draft"}})
+		return "turn-draft", nil
+	}
+
+	sink := newCollectingSink()
+	done := make(chan executeResult, 1)
+	go func() {
+		message, sessionID, err := manager.ExecuteStream(context.Background(), api.ExternalAgentRequest{
+			Message: "run in background",
+		}, "trace-draft", sink, true)
+		done <- executeResult{message: message, sessionID: sessionID, err: err}
+	}()
+
+	started := sink.waitForType(t, streaming.EventRunStarted)
+	<-fake.turnStarted
+	time.Sleep(350 * time.Millisecond)
+	close(emitMore)
+	var lastDraft *session.TurnDraft
+	var lastAssistant string
+	var lastLoadErr error
+	if err := waitUntil(func() bool {
+		loaded, err := sessionStore.Load(started.SessionID)
+		if err != nil {
+			lastLoadErr = err
+			return false
+		}
+		lastLoadErr = nil
+		lastDraft = loaded.TurnDraft
+		if loaded.AssistantDraft != nil {
+			lastAssistant = loaded.AssistantDraft.Text
+		} else {
+			lastAssistant = ""
+		}
+		if loaded.TurnDraft == nil || loaded.AssistantDraft == nil {
+			return false
+		}
+		if loaded.TurnDraft.Status != session.TurnDraftStatusStreaming {
+			return false
+		}
+		if loaded.AssistantDraft.Text != "partialanswer" {
+			return false
+		}
+		return len(loaded.TurnDraft.AssistantSegments) == 1 &&
+			loaded.TurnDraft.AssistantSegments[0].Content == "partialanswer"
+	}); err != nil {
+		t.Fatalf(
+			"running turn draft was not persisted: %v loadErr=%v draft=%+v assistant=%q",
+			err,
+			lastLoadErr,
+			lastDraft,
+			lastAssistant,
+		)
+	}
+
+	close(finish)
+	result := waitExecuteResult(t, done)
+	if result.err != nil {
+		t.Fatalf("ExecuteStream: %v", result.err)
+	}
+	if result.message != "partialanswer" {
+		t.Fatalf("unexpected final message: got %q want %q", result.message, "partialanswer")
+	}
+	loaded, err := sessionStore.Load(result.sessionID)
+	if err != nil {
+		t.Fatalf("load session: %v", err)
+	}
+	if loaded.TurnDraft != nil || loaded.AssistantDraft != nil {
+		t.Fatalf("expected drafts to clear after completion: turn=%+v assistant=%+v", loaded.TurnDraft, loaded.AssistantDraft)
+	}
+}
+
+func TestManagerExecuteStreamUsesTaskCompleteLastAgentMessage(t *testing.T) {
+	manager, sessionStore, fake := newExternalAgentTestManager(t)
+	fake.startTurn = func(ctx context.Context, client *fakeCodexClient, opts TurnOptions) (string, error) {
+		client.emit(CodexEvent{Type: "task_started", Payload: map[string]any{"turn_id": "turn-final"}})
+		client.emit(CodexEvent{Type: "exec_command_begin", Payload: map[string]any{
+			"call_id": "exec-final",
+			"command": "pwd",
+		}})
+		client.emit(CodexEvent{Type: "exec_command_end", Payload: map[string]any{
+			"call_id": "exec-final",
+			"output":  "/repo",
+			"status":  "completed",
+		}})
+		client.emit(CodexEvent{Type: "task_complete", Payload: map[string]any{
+			"turn_id":            "turn-final",
+			"last_agent_message": "final answer",
+		}})
+		return "turn-final", nil
+	}
+	sink := &collectingSink{}
+
+	message, sessionID, err := manager.ExecuteStream(context.Background(), api.ExternalAgentRequest{
+		Message: "run pwd",
+	}, "trace-final", sink, true)
+	if err != nil {
+		t.Fatalf("ExecuteStream: %v", err)
+	}
+	if message != "final answer" {
+		t.Fatalf("unexpected final message: got %q want %q", message, "final answer")
+	}
+	assertEventTypes(t, sink.events(), []streaming.EventType{
+		streaming.EventRunStarted,
+		streaming.EventToolCallStarted,
+		streaming.EventToolCallFinished,
+		streaming.EventCompletionDelta,
+		streaming.EventMessage,
+		streaming.EventDone,
+	})
+
+	loaded, err := sessionStore.Load(sessionID)
+	if err != nil {
+		t.Fatalf("load session: %v", err)
+	}
+	assertCodexHistoryOrder(t, loaded.Messages, []historyMarker{
+		{kind: "tool_call", value: "exec-final"},
+		{kind: "tool_result", value: "exec-final"},
+		{kind: "assistant_text", value: "final answer"},
+	})
+}
+
+func TestManagerExecuteStreamReportsTaskCompleteError(t *testing.T) {
+	manager, sessionStore, fake := newExternalAgentTestManager(t)
+	fake.startTurn = func(ctx context.Context, client *fakeCodexClient, opts TurnOptions) (string, error) {
+		client.emit(CodexEvent{Type: "task_started", Payload: map[string]any{"turn_id": "turn-error"}})
+		client.emit(CodexEvent{Type: "agent_message", Payload: map[string]any{"message": "partial reply"}})
+		client.emit(CodexEvent{Type: "task_complete", Payload: map[string]any{
+			"turn_id":            "turn-error",
+			"status":             "failed",
+			"error":              "codex request failed",
+			"last_agent_message": "reply returned",
+		}})
+		return "turn-error", nil
+	}
+	sink := &collectingSink{}
+
+	message, sessionID, err := manager.ExecuteStream(context.Background(), api.ExternalAgentRequest{
+		Message: "run failing codex turn",
+	}, "trace-error", sink, true)
+	if err == nil || err.Error() != "codex request failed" {
+		t.Fatalf("expected codex error, got message=%q session=%q err=%v", message, sessionID, err)
+	}
+	if message != "" {
+		t.Fatalf("expected empty final message on error, got %q", message)
+	}
+	events := sink.events()
+	assertEventTypes(t, events, []streaming.EventType{
+		streaming.EventRunStarted,
+		streaming.EventCompletionDelta,
+		streaming.EventError,
+	})
+	payload, ok := events[2].Payload.(map[string]any)
+	if !ok || payload["message"] != "codex request failed" {
+		t.Fatalf("unexpected error payload: %#v", events[2].Payload)
+	}
+
+	loaded, err := sessionStore.Load(sessionID)
+	if err != nil {
+		t.Fatalf("load session: %v", err)
+	}
+	if loaded.ExternalRuntime == nil || loaded.ExternalRuntime.Status != StatusError {
+		t.Fatalf("expected external runtime status error, got %+v", loaded.ExternalRuntime)
 	}
 }
 
@@ -279,6 +600,130 @@ func TestManagerStopInterruptsCurrentTurn(t *testing.T) {
 	}
 }
 
+func TestManagerStopWaitsForTurnAbortBeforeReturning(t *testing.T) {
+	manager, _, fake := newExternalAgentTestManager(t)
+	fake.turnStarted = make(chan struct{})
+	fake.interrupted = make(chan struct{})
+	interruptObserved := make(chan struct{})
+	releaseAbort := make(chan struct{})
+	fake.startTurn = func(ctx context.Context, client *fakeCodexClient, opts TurnOptions) (string, error) {
+		client.emit(CodexEvent{Type: "task_started", Payload: map[string]any{"turn_id": "turn-wait"}})
+		close(client.turnStarted)
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-client.interrupted:
+			close(interruptObserved)
+		}
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-releaseAbort:
+		}
+		client.emit(CodexEvent{Type: "turn_aborted", Payload: map[string]any{"reason": "stopped"}})
+		return "turn-wait", nil
+	}
+	sink := newCollectingSink()
+	done := make(chan executeResult, 1)
+	go func() {
+		message, sessionID, err := manager.ExecuteStream(context.Background(), api.ExternalAgentRequest{
+			Message: "pause me",
+		}, "trace-stop-wait", sink, true)
+		done <- executeResult{message: message, sessionID: sessionID, err: err}
+	}()
+
+	<-fake.turnStarted
+	started := sink.waitForType(t, streaming.EventRunStarted)
+	if err := waitUntil(func() bool {
+		ext, err := manager.externalRuntime(started.SessionID)
+		return err == nil && ext != nil && ext.TurnID == "turn-wait"
+	}); err != nil {
+		t.Fatalf("runtime did not record turn id: %v", err)
+	}
+
+	stopDone := make(chan error, 1)
+	go func() {
+		_, err := manager.Stop(context.Background(), api.ExternalAgentStopParams{SessionID: started.SessionID})
+		stopDone <- err
+	}()
+	<-interruptObserved
+	select {
+	case err := <-stopDone:
+		t.Fatalf("Stop returned before turn_aborted: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(releaseAbort)
+	if err := <-stopDone; err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	if result := waitExecuteResult(t, done); result.err != nil {
+		t.Fatalf("ExecuteStream after stop: %v", result.err)
+	}
+}
+
+func TestManagerExecuteStreamResumesCodexThreadAfterStop(t *testing.T) {
+	manager, _, fake := newExternalAgentTestManager(t)
+	fake.turnStarted = make(chan struct{})
+	fake.interrupted = make(chan struct{})
+	fake.startTurn = func(ctx context.Context, client *fakeCodexClient, opts TurnOptions) (string, error) {
+		client.emit(CodexEvent{Type: "task_started", Payload: map[string]any{"turn_id": "turn-stop-resume"}})
+		close(client.turnStarted)
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-client.interrupted:
+			client.emit(CodexEvent{Type: "turn_aborted", Payload: map[string]any{"reason": "stopped"}})
+			return "turn-stop-resume", nil
+		}
+	}
+	sink := newCollectingSink()
+	done := make(chan executeResult, 1)
+	go func() {
+		message, sessionID, err := manager.ExecuteStream(context.Background(), api.ExternalAgentRequest{
+			Message: "pause before continuing",
+		}, "trace-stop-resume", sink, true)
+		done <- executeResult{message: message, sessionID: sessionID, err: err}
+	}()
+
+	<-fake.turnStarted
+	started := sink.waitForType(t, streaming.EventRunStarted)
+	if err := waitUntil(func() bool {
+		ext, err := manager.externalRuntime(started.SessionID)
+		return err == nil && ext != nil && ext.TurnID == "turn-stop-resume"
+	}); err != nil {
+		t.Fatalf("runtime did not record turn id: %v", err)
+	}
+	if _, err := manager.Stop(context.Background(), api.ExternalAgentStopParams{SessionID: started.SessionID}); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	if result := waitExecuteResult(t, done); result.err != nil {
+		t.Fatalf("ExecuteStream after stop: %v", result.err)
+	}
+
+	fake.startTurn = func(ctx context.Context, client *fakeCodexClient, opts TurnOptions) (string, error) {
+		client.emit(CodexEvent{Type: "task_started", Payload: map[string]any{"turn_id": "turn-continued"}})
+		client.emit(CodexEvent{Type: "agent_message", Payload: map[string]any{"message": "continued"}})
+		client.emit(CodexEvent{Type: "task_complete", Payload: map[string]any{"turn_id": "turn-continued"}})
+		return "turn-continued", nil
+	}
+	message, sessionID, err := manager.ExecuteStream(context.Background(), api.ExternalAgentRequest{
+		Message:   "continue",
+		SessionID: started.SessionID,
+	}, "trace-continued", newCollectingSink(), false)
+	if err != nil {
+		t.Fatalf("ExecuteStream resume: %v", err)
+	}
+	if sessionID != started.SessionID {
+		t.Fatalf("unexpected resumed session id: got %q want %q", sessionID, started.SessionID)
+	}
+	if message != "continued" {
+		t.Fatalf("unexpected resumed message: got %q want %q", message, "continued")
+	}
+	if fake.resumeThreadID() != "thread-1" {
+		t.Fatalf("expected resume thread-1, got %q", fake.resumeThreadID())
+	}
+}
+
 func TestManagerRuntimeForSessionPassesConfiguredExecutionPaths(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("GHOST_CONFIG_PATH", filepath.Join(tempDir, "config.toml"))
@@ -357,14 +802,16 @@ type fakeCodexClient struct {
 	approvalHandler func(context.Context, ApprovalRequest) (string, error)
 	startTurn       func(context.Context, *fakeCodexClient, TurnOptions) (string, error)
 
-	startThreadOpts  ThreadOptions
-	resumeThreadOpts ThreadOptions
-	turnOpts         TurnOptions
-	decision         string
+	startThreadOpts       ThreadOptions
+	resumeThreadOpts      ThreadOptions
+	collaborationModeOpts CollaborationModeOptions
+	turnOpts              TurnOptions
+	decision              string
 
 	turnStarted chan struct{}
 	interrupted chan struct{}
 	threadID    string
+	threadModel string
 	turnID      string
 }
 
@@ -375,22 +822,46 @@ func newFakeCodexClient() *fakeCodexClient {
 	}
 }
 
+func TestManagerListModelsUsesCodexCatalog(t *testing.T) {
+	manager, _, _ := newExternalAgentTestManager(t)
+	catalog, err := manager.ListModels(context.Background())
+	if err != nil {
+		t.Fatalf("list models failed: %v", err)
+	}
+	if catalog.DefaultModel != "codex-test" || len(catalog.Models) != 1 || catalog.Models[0] != "codex-test" {
+		t.Fatalf("unexpected catalog: %+v", catalog)
+	}
+}
+
 func (f *fakeCodexClient) Connect(context.Context) error { return nil }
+
+func (f *fakeCodexClient) ListModels(context.Context) (ModelCatalog, error) {
+	return ModelCatalog{Models: []string{"codex-test"}, DefaultModel: "codex-test"}, nil
+}
 
 func (f *fakeCodexClient) StartThread(_ context.Context, opts ThreadOptions) (ThreadResult, error) {
 	f.mu.Lock()
 	f.startThreadOpts = opts
 	threadID := f.threadID
+	model := defaultString(f.threadModel, opts.Model)
 	f.mu.Unlock()
-	return ThreadResult{ThreadID: threadID, Model: opts.Model}, nil
+	return ThreadResult{ThreadID: threadID, Model: model}, nil
 }
 
 func (f *fakeCodexClient) ResumeThread(_ context.Context, opts ThreadOptions) (ThreadResult, error) {
 	f.mu.Lock()
 	f.resumeThreadOpts = opts
 	threadID := opts.ThreadID
+	model := defaultString(f.threadModel, opts.Model)
 	f.mu.Unlock()
-	return ThreadResult{ThreadID: threadID, Model: opts.Model}, nil
+	return ThreadResult{ThreadID: threadID, Model: model}, nil
+}
+
+func (f *fakeCodexClient) SetCollaborationMode(_ context.Context, opts CollaborationModeOptions) error {
+	f.mu.Lock()
+	f.collaborationModeOpts = opts
+	f.mu.Unlock()
+	return nil
 }
 
 func (f *fakeCodexClient) StartTurn(ctx context.Context, opts TurnOptions) (string, error) {
@@ -473,6 +944,18 @@ func (f *fakeCodexClient) interruptTurnID() string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.turnID
+}
+
+func (f *fakeCodexClient) resumeThreadID() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.resumeThreadOpts.ThreadID
+}
+
+func (f *fakeCodexClient) collaborationMode() CollaborationModeOptions {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.collaborationModeOpts
 }
 
 type collectingSink struct {
@@ -567,6 +1050,65 @@ func assertEventTypes(t *testing.T, events []streaming.Event, want []streaming.E
 			t.Fatalf("unexpected event[%d]: got=%q want=%q events=%+v", index, events[index].Type, eventType, events)
 		}
 	}
+}
+
+type historyMarker struct {
+	kind  string
+	value string
+}
+
+func assertCodexHistoryOrder(t *testing.T, messages []llm.Message, markers []historyMarker) {
+	t.Helper()
+	previous := -1
+	for _, marker := range markers {
+		index := findHistoryMarker(messages, marker)
+		if index < 0 {
+			t.Fatalf("missing history marker %+v in messages: %+v", marker, messages)
+		}
+		if index <= previous {
+			t.Fatalf("history marker %+v is out of order: previous=%d current=%d messages=%+v", marker, previous, index, messages)
+		}
+		previous = index
+	}
+}
+
+func findHistoryMarker(messages []llm.Message, marker historyMarker) int {
+	for index, message := range messages {
+		switch marker.kind {
+		case "assistant_text":
+			if message.Role == llm.RoleAssistant && message.Text == marker.value {
+				return index
+			}
+		case "tool_call":
+			if hasMessageToolCall(message, marker.value) {
+				return index
+			}
+		case "tool_result":
+			if message.Role == llm.RoleTool && message.ToolCallID == marker.value {
+				return index
+			}
+		}
+	}
+	return -1
+}
+
+func hasMessageToolCall(message llm.Message, id string) bool {
+	for _, call := range message.ToolCalls {
+		if call.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func countAssistantText(messages []llm.Message, text string) int {
+	count := 0
+	for _, message := range messages {
+		if message.Role == llm.RoleAssistant && message.Text == text {
+			count++
+		}
+	}
+	return count
 }
 
 func hasToolCall(messages []llm.Message, name string, id string) bool {

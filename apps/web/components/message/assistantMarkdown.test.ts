@@ -13,6 +13,8 @@ describe('shouldRenderAssistantMarkdown', () => {
 
   it('returns true for fenced and inline code', () => {
     expect(shouldRenderAssistantMarkdown('```go\nfmt.Println("ok")\n```')).toBe(true);
+    expect(shouldRenderAssistantMarkdown('~~~go\nfmt.Println("ok")\n~~~')).toBe(true);
+    expect(shouldRenderAssistantMarkdown('    fmt.Println("ok")')).toBe(true);
     expect(shouldRenderAssistantMarkdown('Use `pnpm test` to run tests.')).toBe(true);
   });
 

@@ -5,6 +5,7 @@ type ExternalAgentRequest struct {
 	Message        string `json:"message,omitempty"`
 	SessionID      string `json:"session_id,omitempty"`
 	PermissionMode string `json:"permission_mode,omitempty"`
+	Mode           string `json:"mode,omitempty"`
 	Model          string `json:"model,omitempty"`
 	Effort         string `json:"effort,omitempty"`
 	ProjectRoot    string `json:"project_root,omitempty"`
@@ -34,4 +35,9 @@ type ExternalAgentApprovalResponse struct {
 	ApprovalID string `json:"approval_id"`
 	Decision   string `json:"decision"`
 	Accepted   bool   `json:"accepted"`
+}
+
+type CodexModelCatalog struct {
+	Models       []string `json:"models"`
+	DefaultModel string   `json:"default_model"`
 }

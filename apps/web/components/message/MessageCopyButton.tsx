@@ -2,9 +2,9 @@
 
 import type { FC } from 'react';
 import { useState } from 'react';
+import { COPY_FEEDBACK_RESET_DELAY_MS, copyTextToClipboard } from '../../../shared/browserClipboard';
 import { useWebLocale } from '@/lib/i18n/provider';
 
-const COPY_RESET_DELAY_MS = 2000;
 const CODE_BUTTON_VARIANT = 'code';
 
 interface MessageCopyButtonProps {
@@ -31,40 +31,6 @@ const CheckIcon: FC<{ className?: string }> = ({ className }) => (
   </svg>
 );
 
-async function copyWithClipboard(text: string): Promise<boolean> {
-  if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
-    return false;
-  }
-
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function copyWithTextArea(text: string): boolean {
-  if (typeof document === 'undefined') {
-    return false;
-  }
-
-  const textArea = document.createElement('textarea');
-  textArea.value = text;
-  textArea.style.position = 'fixed';
-  textArea.style.opacity = '0';
-  document.body.appendChild(textArea);
-  textArea.select();
-
-  try {
-    return document.execCommand('copy');
-  } catch {
-    return false;
-  } finally {
-    document.body.removeChild(textArea);
-  }
-}
-
 export const MessageCopyButton: FC<MessageCopyButtonProps> = ({
   text,
   variant = 'default',
@@ -86,13 +52,13 @@ export const MessageCopyButton: FC<MessageCopyButtonProps> = ({
       return;
     }
 
-    const didCopy = (await copyWithClipboard(text)) || copyWithTextArea(text);
+    const didCopy = await copyTextToClipboard(text);
     if (!didCopy) {
       return;
     }
 
     setCopied(true);
-    window.setTimeout(() => setCopied(false), COPY_RESET_DELAY_MS);
+    window.setTimeout(() => setCopied(false), COPY_FEEDBACK_RESET_DELAY_MS);
   };
 
   return (

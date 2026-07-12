@@ -3,6 +3,8 @@ package sessionturn
 import (
 	"fmt"
 	"strings"
+
+	"ghost-os/bridge/internal/stringutil"
 )
 
 type microcompactWebSearchArgs struct {
@@ -182,11 +184,11 @@ func summarizeCodexCLIResult(pair microcompactToolPair) (string, error) {
 		"status=" + strings.TrimSpace(result.Status),
 	}
 	appendCodexCLIField(&parts, "command_id", result.CommandID)
-	appendCodexCLIField(&parts, "session_id", firstNonEmpty(result.SessionID, args.SessionID))
+	appendCodexCLIField(&parts, "session_id", stringutil.FirstNonEmpty(result.SessionID, args.SessionID))
 	if result.ExitCode != nil {
 		parts = append(parts, fmt.Sprintf("exit_code=%d", *result.ExitCode))
 	}
-	if detail := firstNonEmpty(result.FinalMessage, result.Message, result.OutputTail); detail != "" {
+	if detail := stringutil.FirstNonEmpty(result.FinalMessage, result.Message, result.OutputTail); detail != "" {
 		parts = append(parts, fmt.Sprintf("result=%q", truncateMicrocompactText(detail, microcompactMaxTextPreview)))
 	}
 	return strings.Join(parts, " "), nil
@@ -196,13 +198,4 @@ func appendCodexCLIField(parts *[]string, key string, value string) {
 	if trimmed := strings.TrimSpace(value); trimmed != "" {
 		*parts = append(*parts, key+"="+trimmed)
 	}
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
 }

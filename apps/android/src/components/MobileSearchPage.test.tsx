@@ -54,6 +54,31 @@ describe("MobileSearchPage", () => {
     expect(screen.getByText("Recent task")).toBeTruthy();
   });
 
+  it("renders recent conversations in batches", () => {
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      callback(performance.now());
+      return 1;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+    const { container } = renderSearchPage({ historyItems: historyItems(45) });
+    const scrollElement = getSearchBodyElement(container);
+
+    expect(screen.getByText("Recent task 00")).toBeTruthy();
+    expect(screen.getByText("Recent task 29")).toBeTruthy();
+    expect(screen.queryByText("Recent task 30")).toBeNull();
+
+    setScrollMetrics(scrollElement, {
+      clientHeight: 600,
+      scrollHeight: 2000,
+      scrollTop: 1250,
+    });
+    act(() => {
+      fireEvent.scroll(scrollElement);
+    });
+
+    expect(screen.getByText("Recent task 44")).toBeTruthy();
+  });
+
   it("requires connection for non-empty search", async () => {
     const onSearchSessions = vi.fn(async () => [sessionMetadata("session-backend", "Backend result")]);
 
@@ -97,6 +122,46 @@ function historyItem(id: string, title: string): SidebarHistoryItem {
     title,
     updatedAt: "2026-01-02T00:00:00.000Z",
   };
+}
+
+function historyItems(count: number): SidebarHistoryItem[] {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `session-${index}`,
+    pinned: false,
+    title: `Recent task ${String(index).padStart(2, "0")}`,
+    updatedAt: `2026-01-02T00:${String(59 - index).padStart(2, "0")}:00.000Z`,
+  }));
+}
+
+function getSearchBodyElement(container: HTMLElement): HTMLDivElement {
+  const element = container.querySelector(".mobile-search-body");
+  if (!(element instanceof HTMLDivElement)) {
+    throw new Error("search body element not found");
+  }
+  return element;
+}
+
+function setScrollMetrics(
+  element: HTMLDivElement,
+  metrics: {
+    clientHeight: number;
+    scrollHeight: number;
+    scrollTop: number;
+  },
+): void {
+  Object.defineProperty(element, "clientHeight", {
+    configurable: true,
+    value: metrics.clientHeight,
+  });
+  Object.defineProperty(element, "scrollHeight", {
+    configurable: true,
+    value: metrics.scrollHeight,
+  });
+  Object.defineProperty(element, "scrollTop", {
+    configurable: true,
+    value: metrics.scrollTop,
+    writable: true,
+  });
 }
 
 function sessionMetadata(id: string, title: string): SessionMetadata {

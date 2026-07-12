@@ -1,13 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   appendStoredMobileMessages,
-  loadPersistedMobileConversations,
+  loadPersistedMobileConversation,
+  loadPersistedMobileConversationIndex,
+  loadStoredLastActiveMobileSessionId,
   loadStoredMobileConversations,
-  savePersistedMobileConversations,
+  saveStoredLastActiveMobileSessionId,
   saveStoredMobileConversations,
+  upsertPersistedMobileConversations,
   upsertStoredMobileConversation,
 } from "../lib/mobileSessionStorage";
 import { hasTauriRuntime } from "../lib/bridgeBus";
+import type { TrackedSessionRun } from "../lib/mobileSessionRunTracker";
+import {
+  MOBILE_PERSISTED_CONVERSATION_LIMIT,
+  recentMobileBridgeSessions,
+  trimMobileSessionViews,
+  trimStoredMobileConversations,
+} from "../lib/mobileSessionLimits";
 import {
   createAssistantConversationMessage,
   createClientRunId,
@@ -18,11 +28,14 @@ import {
   emptyStoredConversation,
   errorMessage,
   findStoredTitle,
+  isActiveSessionTurnDraft,
   isAgentRunCancellationMessage,
   mergeHistoryItems,
   normalizeConversationSessionIds,
   reconcileStoredConversationsWithBridge,
   runStateToStatus,
+  sessionTurnDraftToAgentPayload,
+  sessionTurnDraftToRunState,
   sessionDetailToConversationMessages,
   sessionFallbackTitle,
   statusToRunState,
@@ -36,7 +49,9 @@ import type {
   MobileSessionRunState,
   MobileSessionView,
   SessionDetail,
+  SessionGetOptions,
   SessionMetadata,
+  SessionRuntimeSelection,
   StatusMessage,
   StoredMobileConversation,
 } from "../mobileTypes";
@@ -52,6 +67,7 @@ interface SendAgentMessageOptions {
   requestId?: string;
   selectedSkill?: ChatSelectedSkill;
   sessionId?: string;
+  shouldStreamRealtime?: (sessionId: string) => boolean;
   traceId?: string;
 }
 
@@ -60,6 +76,7 @@ interface SendAgentMessageResult {
   ok: boolean;
   reply?: AgentPayload;
   sessionId?: string;
+  streamInterrupted?: boolean;
 }
 
 interface StopAgentRunInput {
@@ -91,7 +108,8 @@ interface UseMobileSessionsOptions {
   bridgeConnected: boolean;
   computerSessionSyncScope?: string;
   getFullSession: (sessionId: string) => Promise<SessionDetail>;
-  getSession: (sessionId: string) => Promise<SessionDetail>;
+  getSession: (sessionId: string, options?: SessionGetOptions) => Promise<SessionDetail>;
+  onSessionRuntimeSelection?: (selection: SessionRuntimeSelection | null | undefined) => Promise<void> | void;
   pinnedHistoryIds: string[];
   persistComputerSessionsEnabled: boolean;
   sendAvailable?: boolean;
@@ -108,9 +126,15 @@ interface PersistConversationInput {
   messages: MobileConversationMessage[];
   preserveExistingTitle?: boolean;
   sourceMessageCount?: number;
+  sourceSnapshotComplete?: boolean;
   syncedMessageCount?: number;
   title: string;
   updatedAt?: string;
+}
+
+interface SyncComputerSessionsResult {
+  syncedCount: number;
+  totalCount: number;
 }
 
 interface PostSendFocusRequest {
@@ -118,14 +142,25 @@ interface PostSendFocusRequest {
   token: number;
 }
 
+interface PendingReplyCommit {
+  reply: AgentPayload;
+  sessionId: string;
+}
+
 const HOME_IDLE_STATUS: StatusMessage = { tone: "idle", text: "首页" };
 const PERSIST_DISABLED_STATUS: StatusMessage = { tone: "idle", text: "未开启" };
+const EXTERNAL_RUNNING_SESSION_POLL_INTERVAL_MS = 1500;
+const STREAM_REPLY_COMMIT_INTERVAL_MS = 64;
+const SESSION_MESSAGES_LOADING_STATUS_TEXT = "正在加载历史会话";
+const SESSION_MESSAGES_LOADED_STATUS_TEXT = "历史会话已加载";
+const COMPUTER_SESSION_SYNC_BATCH_SIZE = 3;
 
 export function useMobileSessions(options: UseMobileSessionsOptions) {
   const [activeSessionId, setActiveSessionId] = useState<string>();
   const [homeMessages, setHomeMessages] = useState<MobileConversationMessage[]>([]);
   const [homeReply, setHomeReply] = useState<AgentPayload>();
   const [homeRun, setHomeRun] = useState<MobileSessionRunState>(() => createIdleRunState());
+  const [lastActiveSessionId, setLastActiveSessionId] = useState(() => loadStoredLastActiveMobileSessionId());
   const [sessionViews, setSessionViews] = useState<Record<string, MobileSessionView>>({});
   const [storedConversations, setStoredConversations] = useState<StoredMobileConversation[]>(() => initialStoredConversations());
   const [storageLoaded, setStorageLoaded] = useState(() => !hasTauriRuntime());
@@ -134,17 +169,39 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     useState<StatusMessage>(PERSIST_DISABLED_STATUS);
   const activeSessionIdRef = useRef<string | undefined>(undefined);
   const postSendFocusTokenRef = useRef(0);
+  const lastActiveSessionRestoreAttemptedRef = useRef(false);
+  const resumableRunningSessionIdsRef = useRef<Set<string>>(new Set());
   const stoppingRunKeysRef = useRef<Set<string>>(new Set());
+  const pendingReplyCommitRef = useRef<PendingReplyCommit | null>(null);
+  const pendingReplyCommitTimerRef = useRef<number | null>(null);
+  const sessionViewsRef = useRef<Record<string, MobileSessionView>>(sessionViews);
   const storedConversationsRef = useRef<StoredMobileConversation[]>(storedConversations);
   const syncRunIdRef = useRef(0);
+  const [resumePollVersion, setResumePollVersion] = useState(0);
+  const computerSessionSyncSignature = useMemo(
+    () => buildComputerSessionSyncSignature(options.sessions),
+    [options.sessions],
+  );
 
   useEffect(() => {
     activeSessionIdRef.current = activeSessionId;
   }, [activeSessionId]);
 
   useEffect(() => {
+    return () => {
+      if (pendingReplyCommitTimerRef.current !== null) {
+        window.clearTimeout(pendingReplyCommitTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     storedConversationsRef.current = storedConversations;
   }, [storedConversations]);
+
+  useEffect(() => {
+    sessionViewsRef.current = sessionViews;
+  }, [sessionViews]);
 
   useEffect(() => {
     if (!hasTauriRuntime()) {
@@ -152,12 +209,16 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     }
 
     let cancelled = false;
-    void loadPersistedMobileConversations()
+    void loadPersistedMobileConversationIndex()
       .then((conversations) => {
         if (cancelled) {
           return;
         }
-        setStoredConversations(conversations);
+        const next = trimStoredConversationsForState(conversations);
+        setStoredConversations(next);
+        if (!hasTauriRuntime() && next.length !== conversations.length) {
+          saveStoredMobileConversations(next);
+        }
         setStorageLoaded(true);
       })
       .catch((error: unknown) => {
@@ -175,22 +236,51 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       return;
     }
 
-    const keepIds = new Set(
-      Object.values(sessionViews)
-        .filter((view) => view.run.status === "running")
-        .map((view) => view.id),
-    );
+    const keepIds = new Set<string>();
     if (activeSessionId) {
       keepIds.add(activeSessionId);
     }
 
     setStoredConversations((current) => {
-      const next = reconcileStoredConversationsWithBridge(current, options.sessions, keepIds);
-      saveConversationsInBackground(next);
+      const next = trimStoredConversationsForState(
+        reconcileStoredConversationsWithBridge(current, options.sessions, keepIds),
+      );
+      if (!hasTauriRuntime()) {
+        saveStoredMobileConversations(next);
+      }
       return next;
     });
-    setSessionViews((current) => syncSessionViewTitles(current, options.sessions));
-  }, [activeSessionId, options.bridgeConnected, options.sessions, options.sessionsLoaded, sessionViews, storageLoaded]);
+    setSessionViews((current) => trimSessionViewsForState(syncSessionViewTitles(current, options.sessions)));
+  }, [
+    activeSessionId,
+    options.bridgeConnected,
+    options.pinnedHistoryIds,
+    options.sessions,
+    options.sessionsLoaded,
+    sessionViews,
+    storageLoaded,
+  ]);
+
+  useEffect(() => {
+    if (
+      lastActiveSessionRestoreAttemptedRef.current
+      || activeSessionIdRef.current
+      || !lastActiveSessionId
+      || !options.bridgeConnected
+      || !options.sessionsLoaded
+      || !storageLoaded
+    ) {
+      return;
+    }
+
+    lastActiveSessionRestoreAttemptedRef.current = true;
+    void selectSession(lastActiveSessionId);
+  }, [
+    lastActiveSessionId,
+    options.bridgeConnected,
+    options.sessionsLoaded,
+    storageLoaded,
+  ]);
 
   useEffect(() => {
     if (!options.persistComputerSessionsEnabled) {
@@ -210,9 +300,9 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     setComputerSessionPersistStatus({ tone: "loading", text: "同步中" });
 
     void syncComputerSessions(runId)
-      .then((syncedCount) => {
+      .then((syncResult) => {
         if (!cancelled && syncRunIdRef.current === runId) {
-          setComputerSessionPersistStatus({ tone: "success", text: `已同步 ${syncedCount} 个` });
+          setComputerSessionPersistStatus({ tone: "success", text: syncComputerSessionsStatusText(syncResult) });
         }
       })
       .catch((error: unknown) => {
@@ -228,9 +318,10 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
   }, [
     options.bridgeConnected,
     options.computerSessionSyncScope,
-    options.getFullSession,
+    options.getSession,
+    options.pinnedHistoryIds,
     options.persistComputerSessionsEnabled,
-    options.sessions,
+    computerSessionSyncSignature,
     options.sessionsLoaded,
     storageLoaded,
   ]);
@@ -239,6 +330,13 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
   const activeMessages = activeView?.messages ?? homeMessages;
   const activeReply = activeView?.reply ?? homeReply;
   const activeRun = activeView?.run ?? homeRun;
+  const hasOlderHistory = Boolean(activeView?.hasOlderHistory);
+  const loadingOlderHistory = Boolean(activeView?.loadingOlderHistory);
+  const loadingSessionMessages = Boolean(
+    activeSessionId
+      && activeView?.run.status === "running"
+      && activeView.run.statusText === SESSION_MESSAGES_LOADING_STATUS_TEXT,
+  );
   const activeStatus = runStateToStatus(activeRun, HOME_IDLE_STATUS);
   const sendAvailable = options.sendAvailable ?? options.bridgeConnected;
   const historyItems = useMemo(
@@ -260,6 +358,125 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       storedConversations,
     ],
   );
+  const liveSessionRuns = useMemo<TrackedSessionRun[]>(
+    () => Object.values(sessionViews).flatMap((view) => {
+      const traceId = view.run.traceId?.trim() || "";
+      if (view.run.status === "idle" || !traceId) {
+        return [];
+      }
+      return [{
+        sessionId: view.id,
+        status: view.run.status,
+        title: view.title,
+        traceId,
+        updatedAt: view.updatedAt,
+      }];
+    }),
+    [sessionViews],
+  );
+  const activeExternalRunningSessionId = useMemo(() => {
+    if (!activeSessionId) {
+      return "";
+    }
+    const view = sessionViews[activeSessionId];
+    return view && shouldPollExternalRunningSession(view, resumableRunningSessionIdsRef.current) ? view.id : "";
+  }, [activeSessionId, resumePollVersion, sessionViews]);
+  const activeSessionBridgeVersion = useMemo(() => {
+    if (!activeSessionId) {
+      return "";
+    }
+    const metadata = options.sessions.find((session) => session.id === activeSessionId);
+    return metadata ? `${metadata.id}:${metadata.updated_at}:${metadata.message_count}` : "";
+  }, [activeSessionId, options.sessions]);
+
+  useEffect(() => {
+    if (!options.bridgeConnected || !storageLoaded || !activeExternalRunningSessionId) {
+      return;
+    }
+
+    let cancelled = false;
+    const inFlight = new Set<string>();
+    const poll = () => {
+      void pollActiveRunningSession(activeExternalRunningSessionId, inFlight, () => cancelled);
+    };
+
+    poll();
+    const timer = window.setInterval(poll, EXTERNAL_RUNNING_SESSION_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [activeExternalRunningSessionId, options.bridgeConnected, options.getSession, storageLoaded]);
+
+  useEffect(() => {
+    if (options.bridgeConnected) {
+      return;
+    }
+    markRunningSessionsForResume();
+  }, [options.bridgeConnected]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    const markVisibleRunningSessionForResume = () => {
+      if (document.visibilityState === "visible") {
+        markRunningSessionsForResume();
+      }
+    };
+
+    document.addEventListener("visibilitychange", markVisibleRunningSessionForResume);
+    window.addEventListener("focus", markVisibleRunningSessionForResume);
+    return () => {
+      document.removeEventListener("visibilitychange", markVisibleRunningSessionForResume);
+      window.removeEventListener("focus", markVisibleRunningSessionForResume);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (
+      !activeSessionId
+      || !activeSessionBridgeVersion
+      || !options.bridgeConnected
+      || !options.sessionsLoaded
+      || !storageLoaded
+    ) {
+      return;
+    }
+
+    const metadata = options.sessions.find((session) => session.id === activeSessionId);
+    const view = sessionViewsRef.current[activeSessionId];
+    const stored = storedConversationsRef.current.find((conversation) => conversation.id === activeSessionId);
+    const metadataAlreadyLoaded = Boolean(
+      metadata
+        && view
+        && view.updatedAt >= metadata.updated_at
+        && stored?.source_message_count === metadata.message_count,
+    );
+    if (
+      !metadata
+      || !view?.bridgeOwned
+      || view.run.status === "running"
+      || metadataAlreadyLoaded
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    void syncActiveSessionUpdateFromBridge(metadata.id, () => cancelled);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeSessionBridgeVersion,
+    activeSessionId,
+    options.bridgeConnected,
+    options.getSession,
+    options.sessions,
+    options.sessionsLoaded,
+    storageLoaded,
+  ]);
 
   async function sendMessage(text: string, selectedSkill?: ChatSelectedSkill | null): Promise<boolean> {
     const trimmed = text.trim();
@@ -269,6 +486,9 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     }
 
     const initialSessionId = activeSessionId?.trim() || "";
+    if (initialSessionId) {
+      activeSessionIdRef.current = initialSessionId;
+    }
     let targetSessionId = initialSessionId;
     const requestId = createClientRunId("request");
     const traceId = createClientRunId("trace");
@@ -283,14 +503,16 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
 
     if (initialSessionId) {
       setSessionViews((current) =>
-        upsertSessionView(current, initialSessionId, {
-          messages: optimisticMessages,
-          reply: undefined,
-          run: createRunningRunState(requestId, traceId, "发送中"),
-          title: current[initialSessionId]?.title || findStoredTitle(storedConversations, initialSessionId) || displayTitle,
-          unread: false,
-          bridgeOwned: true,
-        }),
+        trimSessionViewsForState(
+          upsertSessionView(current, initialSessionId, {
+            messages: optimisticMessages,
+            reply: undefined,
+            run: createRunningRunState(requestId, traceId, "发送中"),
+            title: current[initialSessionId]?.title || findStoredTitle(storedConversations, initialSessionId) || displayTitle,
+            unread: false,
+            bridgeOwned: true,
+          }),
+        ),
       );
     } else {
       setHomeMessages(optimisticMessages);
@@ -304,7 +526,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
         message: trimmed,
         history: optimisticMessages,
         onReply: (reply) => {
-          applyReply(targetSessionId, reply);
+          scheduleReplyCommit(targetSessionId, reply);
         },
         onSessionId: (sessionId) => {
           const resolvedSessionId = sessionId.trim();
@@ -312,7 +534,10 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
             return;
           }
           targetSessionId = resolvedSessionId;
-          activateCreatedSession(resolvedSessionId, displayTitle, optimisticMessages);
+          commitCreatedSession(resolvedSessionId, displayTitle, optimisticMessages, {
+            activate: shouldActivateResolvedSession(initialSessionId),
+            run: createRunningRunState(requestId, traceId, "发送中"),
+          });
         },
         onStatus: (status) => {
           applyRunStatus(targetSessionId, normalizeRunStatus(status, targetSessionId, requestId, traceId), requestId, traceId);
@@ -320,6 +545,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
         requestId,
         selectedSkill: resolvedSelectedSkill,
         sessionId: initialSessionId || undefined,
+        shouldStreamRealtime: (sessionId) => shouldStreamRealtimeForRun(sessionId, initialSessionId),
         traceId,
       });
     } finally {
@@ -329,6 +555,20 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       }
     }
 
+    flushPendingReplyCommit();
+    if (result.streamInterrupted) {
+      const interruptedSessionId = result.sessionId?.trim() || targetSessionId;
+      if (interruptedSessionId) {
+        rememberResumableRunningSession(interruptedSessionId);
+        applyRunStatus(
+          interruptedSessionId,
+          { tone: "loading", text: "连接中断，后台任务仍在运行" },
+          requestId,
+          traceId,
+        );
+      }
+      return false;
+    }
     if (!result.ok) {
       return false;
     }
@@ -337,10 +577,16 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     if (!resolvedSessionId) {
       return true;
     }
+    if (!shouldHandleSessionUpdate(resolvedSessionId, initialSessionId)) {
+      return true;
+    }
 
     if (!targetSessionId) {
       targetSessionId = resolvedSessionId;
-      activateCreatedSession(resolvedSessionId, displayTitle, optimisticMessages);
+      commitCreatedSession(resolvedSessionId, displayTitle, optimisticMessages, {
+        activate: shouldActivateResolvedSession(initialSessionId),
+        run: createRunningRunState(requestId, traceId, "发送中"),
+      });
     }
     const finalMessages = resolveFinalConversationMessages(
       resolvedSessionId,
@@ -388,21 +634,50 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       return;
     }
 
+    const previousSessionId = activeSessionIdRef.current?.trim() || "";
+    if (previousSessionId && previousSessionId !== trimmedSessionId) {
+      deactivateSessionView(previousSessionId);
+    }
     setPostSendFocusRequest(null);
-    const stored = storedConversations.find((conversation) => conversation.id === trimmedSessionId);
+    let stored = storedConversations.find((conversation) => conversation.id === trimmedSessionId);
+    if (!options.bridgeConnected && (!stored || stored.messages.length === 0)) {
+      stored = await loadPersistedMobileConversation(trimmedSessionId);
+    }
     const existing = sessionViews[trimmedSessionId];
-    activeSessionIdRef.current = trimmedSessionId;
-    setActiveSessionId(trimmedSessionId);
+    const shouldLoadBridgeSnapshot = options.bridgeConnected;
+    const shouldPreserveRunningView = Boolean(shouldLoadBridgeSnapshot && existing?.run.status === "running");
+    const initialMessages = shouldLoadBridgeSnapshot
+      ? shouldPreserveRunningView
+        ? existing?.messages ?? []
+        : []
+      : existing?.messages ?? stored?.messages ?? [];
+    const initialReply = shouldLoadBridgeSnapshot
+      ? shouldPreserveRunningView
+        ? existing?.reply
+        : undefined
+      : existing?.reply;
+    const initialRun = shouldLoadBridgeSnapshot && shouldPreserveRunningView
+      ? existing?.run ?? createRunningRunState()
+      : shouldLoadBridgeSnapshot
+      ? createRunningRunState(undefined, undefined, SESSION_MESSAGES_LOADING_STATUS_TEXT)
+      : existing?.run ?? createIdleRunState(stored ? SESSION_MESSAGES_LOADED_STATUS_TEXT : SESSION_MESSAGES_LOADING_STATUS_TEXT);
+    setActiveSession(trimmedSessionId);
     setHomeReply(undefined);
     setHomeRun(createIdleRunState());
     setSessionViews((current) =>
-      upsertSessionView(current, trimmedSessionId, {
-        messages: existing?.messages ?? stored?.messages ?? [],
-        run: existing?.run ?? createIdleRunState(stored ? "历史会话已加载" : "正在加载历史会话"),
-        title: existing?.title || stored?.title || sessionFallbackTitle(trimmedSessionId),
-        unread: false,
-        bridgeOwned: existing?.bridgeOwned ?? false,
-      }),
+      trimSessionViewsForState(
+        upsertSessionView(current, trimmedSessionId, {
+          messages: initialMessages,
+          reply: initialReply,
+          run: initialRun,
+          title: existing?.title || stored?.title || sessionFallbackTitle(trimmedSessionId),
+          unread: false,
+          bridgeOwned: shouldLoadBridgeSnapshot || Boolean(existing?.bridgeOwned),
+          hasOlderHistory: shouldLoadBridgeSnapshot ? false : existing?.hasOlderHistory ?? false,
+          loadingOlderHistory: false,
+          nextHistoryBefore: shouldLoadBridgeSnapshot ? null : existing?.nextHistoryBefore ?? null,
+        }),
+      ),
     );
 
     if (!options.bridgeConnected) {
@@ -411,42 +686,109 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       }
       return;
     }
-    if (existing?.run.status === "running") {
+    if (!shouldPreserveRunningView) {
+      applyRunStatus(trimmedSessionId, { tone: "loading", text: SESSION_MESSAGES_LOADING_STATUS_TEXT });
+    }
+    try {
+      const detail = await options.getSession(trimmedSessionId);
+      if (!isActiveSession(trimmedSessionId)) {
+        return;
+      }
+      applySessionRuntimeSelection(detail.last_runtime_selection ?? null);
+      commitSessionDetail(detail, {
+        run: createSuccessRunState(SESSION_MESSAGES_LOADED_STATUS_TEXT),
+        unread: false,
+      });
+    } catch (error) {
+      if (!isActiveSession(trimmedSessionId)) {
+        return;
+      }
+      applyRunStatus(trimmedSessionId, { tone: "error", text: errorMessage(error) });
+    }
+  }
+
+  async function loadOlderHistory(): Promise<void> {
+    const sessionId = activeSessionIdRef.current?.trim() || "";
+    if (!sessionId || !options.bridgeConnected) {
       return;
     }
 
-    applyRunStatus(trimmedSessionId, { tone: "loading", text: "正在加载历史会话" });
-    try {
-      const detail = await options.getSession(trimmedSessionId);
-      const messages = sessionDetailToConversationMessages(detail);
-      const title = detail.title.trim() || stored?.title || sessionFallbackTitle(detail.id);
-      setSessionViews((current) =>
-        upsertSessionView(current, detail.id, {
-          messages,
-          run: createSuccessRunState("历史会话已加载"),
-          title,
-          unread: false,
-          bridgeOwned: true,
-          updatedAt: detail.updated_at,
+    const view = sessionViewsRef.current[sessionId];
+    const nextBefore = view?.nextHistoryBefore ?? null;
+    if (!view?.hasOlderHistory || view.loadingOlderHistory || nextBefore === null) {
+      return;
+    }
+
+    setSessionViews((current) =>
+      trimSessionViewsForState(
+        upsertSessionView(current, sessionId, {
+          loadingOlderHistory: true,
         }),
+      ),
+    );
+
+    try {
+      const detail = await options.getSession(sessionId, { before: nextBefore });
+      if (!isActiveSession(sessionId)) {
+        return;
+      }
+      const currentView = sessionViewsRef.current[detail.id] ?? sessionViewsRef.current[sessionId];
+      if (!currentView) {
+        setSessionViews((current) =>
+          trimSessionViewsForState(
+            upsertSessionView(current, sessionId, {
+              loadingOlderHistory: false,
+            }),
+          ),
+        );
+        return;
+      }
+      const messages = prependUniqueConversationMessages(
+        currentView.messages,
+        sessionDetailToConversationMessages(detail),
+      );
+      setSessionViews((current) =>
+        trimSessionViewsForState(
+          upsertSessionView(current, detail.id, {
+            bridgeOwned: true,
+            hasOlderHistory: detail.page.has_more_before,
+            loadingOlderHistory: false,
+            messages,
+            nextHistoryBefore: detail.page.next_before ?? null,
+            title: detail.title.trim() || currentView.title || sessionFallbackTitle(detail.id),
+            unread: activeSessionIdRef.current !== detail.id,
+            updatedAt: detail.updated_at,
+          }),
+        ),
       );
       persistConversation({
         createdAt: detail.created_at,
         id: detail.id,
         messages,
         sourceMessageCount: detail.message_count,
+        sourceSnapshotComplete: !detail.page.has_more_before,
         syncedMessageCount: messages.length,
-        title,
+        title: detail.title.trim() || currentView.title || sessionFallbackTitle(detail.id),
         updatedAt: detail.updated_at,
       });
     } catch (error) {
-      applyRunStatus(trimmedSessionId, { tone: "error", text: errorMessage(error) });
+      if (!isActiveSession(sessionId)) {
+        return;
+      }
+      setSessionViews((current) =>
+        trimSessionViewsForState(
+          upsertSessionView(current, sessionId, {
+            loadingOlderHistory: false,
+          }),
+        ),
+      );
+      applyRunStatus(sessionId, { tone: "error", text: `历史消息加载失败：${errorMessage(error)}` });
     }
   }
 
   function startNewSession(): void {
-    activeSessionIdRef.current = undefined;
-    setActiveSessionId(undefined);
+    deactivateSessionView(activeSessionIdRef.current);
+    setActiveSession(undefined);
     setHomeMessages([]);
     setHomeReply(undefined);
     setHomeRun(createIdleRunState("新会话"));
@@ -454,27 +796,62 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
   }
 
   function clearCurrentConversation(): void {
-    activeSessionIdRef.current = undefined;
-    setActiveSessionId(undefined);
+    deactivateSessionView(activeSessionIdRef.current);
+    setActiveSession(undefined);
     setHomeMessages([]);
     setHomeReply(undefined);
     setHomeRun(createIdleRunState("本地消息已清空"));
     setPostSendFocusRequest(null);
   }
 
+  function scheduleReplyCommit(sessionId: string, reply: AgentPayload): void {
+    if (pendingReplyCommitTimerRef.current !== null) {
+      pendingReplyCommitRef.current = { reply, sessionId };
+      return;
+    }
+
+    applyReply(sessionId, reply);
+    pendingReplyCommitTimerRef.current = window.setTimeout(() => {
+      pendingReplyCommitTimerRef.current = null;
+      flushPendingReplyCommit();
+    }, STREAM_REPLY_COMMIT_INTERVAL_MS);
+  }
+
+  function flushPendingReplyCommit(): void {
+    const pending = pendingReplyCommitRef.current;
+    if (!pending) {
+      return;
+    }
+
+    pendingReplyCommitRef.current = null;
+    if (pendingReplyCommitTimerRef.current !== null) {
+      window.clearTimeout(pendingReplyCommitTimerRef.current);
+      pendingReplyCommitTimerRef.current = null;
+    }
+    applyReply(pending.sessionId, pending.reply);
+  }
+
   function applyReply(sessionId: string, reply: AgentPayload): void {
     if (!sessionId) {
+      if (activeSessionIdRef.current) {
+        return;
+      }
       setHomeReply(reply);
+      return;
+    }
+    if (!isActiveSession(sessionId) && !sessionViewsRef.current[sessionId]) {
       return;
     }
 
     setSessionViews((current) =>
-      upsertSessionView(current, sessionId, {
-        reply,
-        run: current[sessionId]?.run ?? createRunningRunState(),
-        unread: activeSessionIdRef.current !== sessionId,
-        updatedAt: new Date().toISOString(),
-      }),
+      trimSessionViewsForState(
+        upsertSessionView(current, sessionId, {
+          reply,
+          run: current[sessionId]?.run ?? createRunningRunState(),
+          unread: activeSessionIdRef.current !== sessionId,
+          updatedAt: new Date().toISOString(),
+        }),
+      ),
     );
   }
 
@@ -484,17 +861,93 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       run.stopPending = true;
     }
     if (!sessionId) {
+      if (activeSessionIdRef.current) {
+        return;
+      }
       setHomeRun(run);
       return;
     }
+    if (!isActiveSession(sessionId) && !sessionViewsRef.current[sessionId]) {
+      return;
+    }
+    if (run.status !== "running") {
+      forgetResumableRunningSession(sessionId);
+    }
 
     setSessionViews((current) =>
-      upsertSessionView(current, sessionId, {
-        run,
-        unread: activeSessionIdRef.current !== sessionId && status.tone !== "loading",
-        updatedAt: new Date().toISOString(),
-      }),
+      trimSessionViewsForState(
+        upsertSessionView(current, sessionId, {
+          run,
+          unread: activeSessionIdRef.current === sessionId ? false : current[sessionId]?.unread ?? false,
+          updatedAt: new Date().toISOString(),
+        }),
+      ),
     );
+  }
+
+  function commitSessionDetail(
+    detail: SessionDetail,
+    input: {
+      run: MobileSessionRunState;
+      unread: boolean;
+    },
+  ): void {
+    const messages = sessionDetailToConversationMessages(detail);
+    const draftRun = detail.turn_draft ? sessionTurnDraftToRunState(detail.turn_draft) : undefined;
+    const draftReply = detail.turn_draft
+      ? sessionTurnDraftToAgentPayload(detail.turn_draft, detail.id, detail.last_runtime_selection)
+      : undefined;
+    const nextRun = draftRun ?? input.run;
+    if (nextRun.status !== "running") {
+      forgetResumableRunningSession(detail.id);
+    }
+    const title = detail.title.trim()
+      || findStoredTitle(storedConversationsRef.current, detail.id)
+      || sessionFallbackTitle(detail.id);
+    setSessionViews((current) =>
+      trimSessionViewsForState(
+        upsertSessionView(current, detail.id, {
+          bridgeOwned: true,
+          hasOlderHistory: detail.page.has_more_before,
+          loadingOlderHistory: false,
+          messages,
+          nextHistoryBefore: detail.page.next_before ?? null,
+          reply: draftReply,
+          run: nextRun,
+          title,
+          unread: input.unread,
+          updatedAt: detail.updated_at,
+        }),
+      ),
+    );
+    persistConversation({
+      createdAt: detail.created_at,
+      id: detail.id,
+      messages,
+      sourceMessageCount: detail.message_count,
+      sourceSnapshotComplete: !detail.page.has_more_before,
+      syncedMessageCount: messages.length,
+      title,
+      updatedAt: detail.updated_at,
+    });
+  }
+
+  function deactivateSessionView(sessionId: string | undefined): void {
+    const trimmedSessionId = sessionId?.trim() || "";
+    if (!trimmedSessionId) {
+      return;
+    }
+    setSessionViews((current) => {
+      const existing = current[trimmedSessionId];
+      if (!existing?.loadingOlderHistory) {
+        return current;
+      }
+      return trimSessionViewsForState(
+        upsertSessionView(current, trimmedSessionId, {
+          loadingOlderHistory: false,
+        }),
+      );
+    });
   }
 
   function setRunStopPending(sessionId: string, stopPending: boolean): void {
@@ -508,18 +961,22 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       if (!existing) {
         return current;
       }
-      return upsertSessionView(current, sessionId, {
-        run: {
-          ...existing.run,
-          stopPending,
-        },
-      });
+      return trimSessionViewsForState(
+        upsertSessionView(current, sessionId, {
+          run: {
+            ...existing.run,
+            stopPending,
+          },
+        }),
+      );
     });
   }
 
   function applyStoppedRun(fromSessionId: string, resolvedSessionId: string, statusText: string): void {
     if (resolvedSessionId && !fromSessionId) {
-      activateCreatedSession(resolvedSessionId, activeMessages[0]?.text ?? sessionFallbackTitle(resolvedSessionId), activeMessages);
+      commitCreatedSession(resolvedSessionId, activeMessages[0]?.text ?? sessionFallbackTitle(resolvedSessionId), activeMessages, {
+        activate: true,
+      });
     }
     applyRunStatus(resolvedSessionId || fromSessionId, { tone: "success", text: statusText });
   }
@@ -527,53 +984,69 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
   async function syncStoppedSession(sessionId: string, statusText: string): Promise<void> {
     try {
       const detail = await options.getSession(sessionId);
+      if (!isActiveSession(detail.id)) {
+        return;
+      }
       const messages = sessionDetailToConversationMessages(detail);
       const title = detail.title.trim() || findStoredTitle(storedConversationsRef.current, detail.id) || sessionFallbackTitle(detail.id);
       setSessionViews((current) =>
-        upsertSessionView(current, detail.id, {
-          bridgeOwned: true,
-          messages,
-          reply: undefined,
-          run: createSuccessRunState(statusText),
-          title,
-          unread: activeSessionIdRef.current !== detail.id,
-          updatedAt: detail.updated_at,
-        }),
+        trimSessionViewsForState(
+          upsertSessionView(current, detail.id, {
+            bridgeOwned: true,
+            messages,
+            reply: undefined,
+            run: createSuccessRunState(statusText),
+            title,
+            unread: activeSessionIdRef.current !== detail.id,
+            updatedAt: detail.updated_at,
+            hasOlderHistory: detail.page.has_more_before,
+            loadingOlderHistory: false,
+            nextHistoryBefore: detail.page.next_before ?? null,
+          }),
+        ),
       );
       persistConversation({
         createdAt: detail.created_at,
         id: detail.id,
         messages,
         sourceMessageCount: detail.message_count,
+        sourceSnapshotComplete: !detail.page.has_more_before,
         syncedMessageCount: messages.length,
         title,
         updatedAt: detail.updated_at,
       });
     } catch (error) {
+      if (!isActiveSession(sessionId)) {
+        return;
+      }
       applyRunStatus(sessionId, { tone: "error", text: `停止后同步失败：${errorMessage(error)}` });
     }
   }
 
-  function activateCreatedSession(
+  function commitCreatedSession(
     sessionId: string,
     title: string,
     messages: MobileConversationMessage[],
+    input: { activate: boolean; run?: MobileSessionRunState },
   ): void {
     const normalizedMessages = normalizeConversationSessionIds(messages, sessionId);
-    activeSessionIdRef.current = sessionId;
-    setActiveSessionId(sessionId);
-    setHomeMessages([]);
-    setHomeReply(undefined);
-    setHomeRun(createIdleRunState());
+    if (input.activate) {
+      setActiveSession(sessionId);
+      setHomeMessages([]);
+      setHomeReply(undefined);
+      setHomeRun(createIdleRunState());
+    }
     setSessionViews((current) =>
-      upsertSessionView(current, sessionId, {
-        messages: normalizedMessages,
-        reply: homeReply,
-        run: homeRun.status === "running" ? homeRun : createRunningRunState(),
-        title,
-        unread: false,
-        bridgeOwned: true,
-      }),
+      trimSessionViewsForState(
+        upsertSessionView(current, sessionId, {
+          messages: normalizedMessages,
+          reply: input.activate ? homeReply : undefined,
+          run: input.run ?? (homeRun.status === "running" ? homeRun : createRunningRunState()),
+          title,
+          unread: !input.activate,
+          bridgeOwned: true,
+        }),
+      ),
     );
     persistConversation({
       id: sessionId,
@@ -583,21 +1056,60 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     });
   }
 
+  function shouldActivateResolvedSession(initialSessionId: string): boolean {
+    const currentSessionId = activeSessionIdRef.current?.trim() || "";
+    if (!initialSessionId) {
+      return !currentSessionId;
+    }
+    return currentSessionId === initialSessionId;
+  }
+
+  function shouldHandleSessionUpdate(sessionId: string, initialSessionId: string): boolean {
+    const currentSessionId = activeSessionIdRef.current?.trim() || "";
+    if (currentSessionId) {
+      return currentSessionId === sessionId.trim();
+    }
+    return !initialSessionId.trim();
+  }
+
+  function shouldStreamRealtimeForRun(sessionId: string, initialSessionId: string): boolean {
+    const resolvedSessionId = sessionId.trim() || initialSessionId.trim();
+    const currentSessionId = activeSessionIdRef.current?.trim() || "";
+    if (!resolvedSessionId) {
+      return !currentSessionId;
+    }
+    if (!initialSessionId.trim() && !currentSessionId) {
+      return true;
+    }
+    return currentSessionId === resolvedSessionId;
+  }
+
+  function isActiveSession(sessionId: string): boolean {
+    const trimmedSessionId = sessionId.trim();
+    return Boolean(trimmedSessionId && activeSessionIdRef.current?.trim() === trimmedSessionId);
+  }
+
   function commitFinalReply(
     sessionId: string,
     reply: AgentPayload | undefined,
     title: string,
     finalMessages: MobileConversationMessage[],
   ): void {
+    forgetResumableRunningSession(sessionId);
     setSessionViews((current) => {
       const existing = current[sessionId];
       const next = upsertSessionView(current, sessionId, {
         messages: finalMessages,
         reply: undefined,
-        run: createSuccessRunState(reply?.session_ended ? "会话已结束" : "回复已返回", reply?.session_ended),
+        run: createSuccessRunState(
+          reply?.session_ended ? "会话已结束" : "回复已返回",
+          reply?.session_ended,
+          existing?.run.traceId,
+        ),
         title: existing?.title || findStoredTitle(storedConversations, sessionId) || title,
         unread: activeSessionIdRef.current !== sessionId,
         bridgeOwned: true,
+        updatedAt: new Date().toISOString(),
       });
       persistConversation({
         id: sessionId,
@@ -605,16 +1117,28 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
         preserveExistingTitle: true,
         title,
       });
-      return next;
+      return trimSessionViewsForState(next);
     });
   }
 
   function persistConversation(input: PersistConversationInput): void {
     setStoredConversations((current) => {
-      const next = upsertStoredMobileConversation(current, input);
-      saveConversationsInBackground(next);
-      return next;
+      const upserted = upsertStoredMobileConversation(current, input);
+      const conversation = upserted.find((item) => item.id === input.id.trim());
+      if (conversation) {
+        saveConversationBatchInBackground([conversation]);
+      }
+      return trimStoredConversationsForState(upserted);
     });
+  }
+
+  function setActiveSession(sessionId: string | undefined): void {
+    const trimmedSessionId = sessionId?.trim() || undefined;
+    activeSessionIdRef.current = trimmedSessionId;
+    setActiveSessionId(trimmedSessionId);
+    setLastActiveSessionId(trimmedSessionId || "");
+    saveStoredLastActiveMobileSessionId(trimmedSessionId);
+    setStoredConversations((current) => trimStoredConversationsForState(current));
   }
 
   async function syncLocalTurnToBridge(
@@ -654,18 +1178,26 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
 
   async function replaceConversationFromBridge(sessionId: string, statusText: string): Promise<void> {
     const detail = await options.getFullSession(sessionId);
+    if (!isActiveSession(detail.id)) {
+      return;
+    }
     const messages = sessionDetailToConversationMessages(detail);
     const title = detail.title.trim() || findStoredTitle(storedConversationsRef.current, detail.id) || sessionFallbackTitle(detail.id);
     setSessionViews((current) =>
-      upsertSessionView(current, detail.id, {
-        bridgeOwned: true,
-        messages,
-        reply: undefined,
-        run: createSuccessRunState(statusText),
-        title,
-        unread: activeSessionIdRef.current !== detail.id,
-        updatedAt: detail.updated_at,
-      }),
+      trimSessionViewsForState(
+        upsertSessionView(current, detail.id, {
+          bridgeOwned: true,
+          messages,
+          reply: undefined,
+          run: createSuccessRunState(statusText),
+          title,
+          unread: activeSessionIdRef.current !== detail.id,
+          updatedAt: detail.updated_at,
+          hasOlderHistory: false,
+          loadingOlderHistory: false,
+          nextHistoryBefore: null,
+        }),
+      ),
     );
     persistConversation({
       bridgeMessageCount: detail.message_count,
@@ -673,30 +1205,202 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       id: detail.id,
       messages,
       sourceMessageCount: detail.message_count,
+      sourceSnapshotComplete: true,
       syncedMessageCount: messages.length,
       title,
       updatedAt: detail.updated_at,
     });
   }
 
-  function saveConversationsInBackground(conversations: StoredMobileConversation[]): void {
-    if (!hasTauriRuntime()) {
-      saveStoredMobileConversations(conversations);
+  async function pollActiveRunningSession(
+    sessionId: string,
+    inFlight: Set<string>,
+    isCancelled: () => boolean,
+  ): Promise<void> {
+    if (inFlight.has(sessionId)) {
       return;
     }
-    void savePersistedMobileConversations(conversations).catch((error: unknown) => {
+    inFlight.add(sessionId);
+    try {
+      const detail = await options.getSession(sessionId);
+      if (isCancelled() || !isActiveSession(detail.id)) {
+        return;
+      }
+      applySessionRuntimeSelection(detail.last_runtime_selection ?? null);
+      commitSessionDetail(detail, {
+        run: isActiveSessionTurnDraft(detail.turn_draft)
+          ? sessionTurnDraftToRunState(detail.turn_draft)
+          : createSuccessRunState("回复已返回"),
+        unread: activeSessionIdRef.current !== detail.id,
+      });
+    } catch (error) {
+      if (!isCancelled() && isActiveSession(sessionId)) {
+        applyRunStatus(sessionId, { tone: "error", text: `运行会话同步失败：${errorMessage(error)}` });
+      }
+    } finally {
+      inFlight.delete(sessionId);
+    }
+  }
+
+  async function syncActiveSessionUpdateFromBridge(
+    sessionId: string,
+    isCancelled: () => boolean,
+  ): Promise<void> {
+    try {
+      const detail = await options.getSession(sessionId);
+      if (isCancelled()) {
+        return;
+      }
+      applySessionRuntimeSelection(detail.last_runtime_selection ?? null);
+      commitSessionDetail(detail, {
+        run: createSuccessRunState("历史会话已更新"),
+        unread: false,
+      });
+    } catch (error) {
+      if (!isCancelled()) {
+        applyRunStatus(sessionId, { tone: "error", text: `会话更新同步失败：${errorMessage(error)}` });
+      }
+    }
+  }
+
+  function trimSessionViewsForState(views: Record<string, MobileSessionView>): Record<string, MobileSessionView> {
+    return trimMobileSessionViews(views, {
+      activeSessionId: activeSessionIdRef.current,
+      pinnedSessionIds: new Set(options.pinnedHistoryIds),
+    });
+  }
+
+  function trimStoredConversationsForState(conversations: StoredMobileConversation[]): StoredMobileConversation[] {
+    return prepareStoredConversationsForState(trimStoredMobileConversations(conversations, {
+      activeSessionId: activeSessionIdRef.current,
+      bridgeSessionIds: new Set(options.sessions.map((session) => session.id)),
+      pinnedSessionIds: new Set(options.pinnedHistoryIds),
+      runningSessionIds: runningSessionIds(sessionViewsRef.current),
+    }));
+  }
+
+  function prepareStoredConversationsForState(
+    conversations: StoredMobileConversation[],
+  ): StoredMobileConversation[] {
+    if (!hasTauriRuntime()) {
+      return conversations;
+    }
+
+    const activeSessionIdForState = activeSessionIdRef.current?.trim() || "";
+    const bridgeSessionIds = new Set(options.sessions.map((session) => session.id));
+    const pinnedSessionIds = new Set(options.pinnedHistoryIds);
+    const runningIds = runningSessionIds(sessionViewsRef.current);
+    return conversations.map((conversation) =>
+      shouldKeepStoredMessagesInState(conversation, {
+        activeSessionId: activeSessionIdForState,
+        bridgeSessionIds,
+        pinnedSessionIds,
+        runningSessionIds: runningIds,
+      })
+        ? conversation
+        : compactStoredConversation(conversation),
+    );
+  }
+
+  function saveConversationBatchInBackground(conversations: StoredMobileConversation[]): void {
+    void upsertPersistedMobileConversations(conversations, {
+      limit: MOBILE_PERSISTED_CONVERSATION_LIMIT,
+    }).catch((error: unknown) => {
       console.error("[useMobileSessions] save conversations failed", error);
     });
   }
 
-  async function syncComputerSessions(runId: number): Promise<number> {
-    const changed: StoredMobileConversation[] = [];
+  function applySessionRuntimeSelection(selection: SessionRuntimeSelection | null | undefined): void {
+    if (!options.onSessionRuntimeSelection) {
+      return;
+    }
+    void Promise.resolve(options.onSessionRuntimeSelection(selection)).catch((error: unknown) => {
+      console.error("[useMobileSessions] session runtime selection failed", error);
+    });
+  }
+
+  function markRunningSessionsForResume(): void {
+    let changed = false;
+    for (const view of Object.values(sessionViewsRef.current)) {
+      if (!isResumableRunningSessionView(view)) {
+        continue;
+      }
+      if (resumableRunningSessionIdsRef.current.has(view.id)) {
+        continue;
+      }
+      resumableRunningSessionIdsRef.current.add(view.id);
+      changed = true;
+    }
+    if (changed) {
+      setResumePollVersion((current) => current + 1);
+    }
+  }
+
+  function rememberResumableRunningSession(sessionId: string): void {
+    const trimmedSessionId = sessionId.trim();
+    if (!trimmedSessionId || resumableRunningSessionIdsRef.current.has(trimmedSessionId)) {
+      return;
+    }
+    resumableRunningSessionIdsRef.current.add(trimmedSessionId);
+    setResumePollVersion((current) => current + 1);
+  }
+
+  function forgetResumableRunningSession(sessionId: string): void {
+    const trimmedSessionId = sessionId.trim();
+    if (!trimmedSessionId || !resumableRunningSessionIdsRef.current.delete(trimmedSessionId)) {
+      return;
+    }
+    setResumePollVersion((current) => current + 1);
+  }
+
+  async function syncComputerSessions(runId: number): Promise<SyncComputerSessionsResult> {
     const currentById = new Map(storedConversationsRef.current.map((conversation) => [conversation.id, conversation]));
+    const sessionsToSync = recentMobileBridgeSessions(options.sessions);
+    let batch: StoredMobileConversation[] = [];
+    let processedCount = 0;
+
+    const flushBatch = async (): Promise<void> => {
+      if (batch.length === 0) {
+        return;
+      }
+      if (syncRunIdRef.current !== runId) {
+        batch = [];
+        return;
+      }
+      const persistedIndex = await upsertPersistedMobileConversations(batch, {
+        limit: MOBILE_PERSISTED_CONVERSATION_LIMIT,
+      });
+      batch = [];
+      if (syncRunIdRef.current !== runId) {
+        return;
+      }
+      const nextState = trimStoredConversationsForState(persistedIndex);
+      setStoredConversations(nextState);
+      currentById.clear();
+      for (const conversation of nextState) {
+        currentById.set(conversation.id, conversation);
+      }
+      setComputerSessionPersistStatus({
+        tone: "loading",
+        text: `同步中 ${Math.min(processedCount, sessionsToSync.length)}/${sessionsToSync.length}`,
+      });
+    };
+
+    const queueSyncedConversation = async (conversation: StoredMobileConversation): Promise<void> => {
+      if (syncRunIdRef.current !== runId) {
+        return;
+      }
+      batch.push(conversation);
+      currentById.set(conversation.id, conversation);
+      if (batch.length >= COMPUTER_SESSION_SYNC_BATCH_SIZE) {
+        await flushBatch();
+      }
+    };
 
     if (options.appendSessionMessages) {
       for (const conversation of storedConversationsRef.current) {
         if (syncRunIdRef.current !== runId) {
-          return 0;
+          return { syncedCount: 0, totalCount: options.sessions.length };
         }
         const syncedMessageCount = conversation.synced_message_count ?? 0;
         const unsyncedMessages = conversation.messages.slice(syncedMessageCount);
@@ -710,19 +1414,16 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
           sessionId: conversation.id,
           title: conversation.title,
         });
+        if (syncRunIdRef.current !== runId) {
+          return { syncedCount: 0, totalCount: options.sessions.length };
+        }
         if (result.status === "conflict") {
           const detail = await options.getFullSession(conversation.id);
-          const messages = sessionDetailToConversationMessages(detail);
-          changed.push({
-            created_at: detail.created_at,
-            id: detail.id,
-            messages,
-            source_message_count: detail.message_count,
-            synced_message_count: messages.length,
-            title: detail.title.trim() || sessionFallbackTitle(detail.id),
-            updated_at: detail.updated_at,
-          });
-          currentById.set(detail.id, changed[changed.length - 1]);
+          if (syncRunIdRef.current !== runId) {
+            return { syncedCount: 0, totalCount: options.sessions.length };
+          }
+          const syncedConversation = storedConversationFromSessionDetail(detail);
+          await queueSyncedConversation(syncedConversation);
           continue;
         }
 
@@ -732,14 +1433,13 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
           synced_message_count: conversation.messages.length,
           updated_at: result.updatedAt,
         };
-        changed.push(syncedConversation);
-        currentById.set(conversation.id, syncedConversation);
+        await queueSyncedConversation(syncedConversation);
       }
     }
 
-    for (const session of options.sessions) {
+    for (const session of sessionsToSync) {
       if (syncRunIdRef.current !== runId) {
-        return 0;
+        return { syncedCount: 0, totalCount: options.sessions.length };
       }
       const cached = currentById.get(session.id);
       if (cached && isStoredConversationCurrent(cached, session)) {
@@ -747,27 +1447,20 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       }
 
       const detail = await options.getFullSession(session.id);
-      changed.push({
-        created_at: detail.created_at,
-        id: detail.id,
-        messages: sessionDetailToConversationMessages(detail),
-        source_message_count: detail.message_count,
-        synced_message_count: sessionDetailToConversationMessages(detail).length,
-        title: detail.title.trim() || sessionFallbackTitle(detail.id),
-        updated_at: detail.updated_at,
-      });
+      if (syncRunIdRef.current !== runId) {
+        return { syncedCount: 0, totalCount: options.sessions.length };
+      }
+      const syncedConversation = storedConversationFromSessionDetail(detail);
+      processedCount += 1;
+      await queueSyncedConversation(syncedConversation);
     }
 
     if (syncRunIdRef.current !== runId) {
-      return 0;
+      return { syncedCount: 0, totalCount: options.sessions.length };
     }
 
-    const next = mergeSyncedConversations(storedConversationsRef.current, changed);
-    await savePersistedMobileConversations(next);
-    if (syncRunIdRef.current === runId) {
-      setStoredConversations(next);
-    }
-    return options.sessions.length;
+    await flushBatch();
+    return { syncedCount: sessionsToSync.length, totalCount: options.sessions.length };
   }
 
   return {
@@ -780,7 +1473,12 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     clearCurrentConversation,
     computerSessionPersistStatus,
     hasConversation: activeMessages.length > 0 || Boolean(activeReply),
+    hasOlderHistory,
     historyItems,
+    loadOlderHistory,
+    loadingOlderHistory,
+    loadingSessionMessages,
+    liveSessionRuns,
     postSendFocusRequest,
     selectSession,
     sendMessage,
@@ -833,30 +1531,119 @@ function isCancellationStatus(status: StatusMessage): boolean {
 }
 
 function isStoredConversationCurrent(conversation: StoredMobileConversation, session: SessionMetadata): boolean {
-  return conversation.updated_at === session.updated_at && conversation.source_message_count === session.message_count;
+  return conversation.source_snapshot_complete === true
+    && conversation.updated_at === session.updated_at
+    && conversation.source_message_count === session.message_count;
 }
 
-function mergeSyncedConversations(
-  current: StoredMobileConversation[],
-  synced: StoredMobileConversation[],
-): StoredMobileConversation[] {
-  if (synced.length === 0) {
-    return current;
-  }
-
-  const nextById = new Map(current.map((conversation) => [conversation.id, conversation]));
-  for (const conversation of synced) {
-    nextById.set(conversation.id, conversation);
-  }
-  return [...nextById.values()].sort(compareStoredConversations);
+function buildComputerSessionSyncSignature(sessions: SessionMetadata[]): string {
+  return JSON.stringify(
+    recentMobileBridgeSessions(sessions).map((session) => ({
+      id: session.id,
+      message_count: session.message_count,
+      title: session.title,
+      updated_at: session.updated_at,
+    })),
+  );
 }
 
-function compareStoredConversations(left: StoredMobileConversation, right: StoredMobileConversation): number {
-  const updatedOrder = right.updated_at.localeCompare(left.updated_at);
-  if (updatedOrder !== 0) {
-    return updatedOrder;
+function shouldPollExternalRunningSession(
+  view: MobileSessionView,
+  resumableRunningSessionIds: Set<string>,
+): boolean {
+  if (!view.bridgeOwned || view.run.status !== "running") {
+    return false;
   }
-  return left.title.localeCompare(right.title, "zh-Hans");
+  if (resumableRunningSessionIds.has(view.id)) {
+    return true;
+  }
+  return !view.run.requestId && Boolean(view.run.traceId);
+}
+
+function isResumableRunningSessionView(view: MobileSessionView): boolean {
+  if (!view.bridgeOwned || view.run.status !== "running") {
+    return false;
+  }
+  if (view.run.statusText === SESSION_MESSAGES_LOADING_STATUS_TEXT) {
+    return false;
+  }
+  return Boolean(view.run.requestId || view.run.traceId);
+}
+
+function storedConversationFromSessionDetail(detail: SessionDetail): StoredMobileConversation {
+  const messages = sessionDetailToConversationMessages(detail);
+  return {
+    created_at: detail.created_at,
+    id: detail.id,
+    messages,
+    source_snapshot_complete: true,
+    source_message_count: detail.message_count,
+    synced_message_count: messages.length,
+    title: detail.title.trim() || sessionFallbackTitle(detail.id),
+    updated_at: detail.updated_at,
+  };
+}
+
+function syncComputerSessionsStatusText(result: SyncComputerSessionsResult): string {
+  if (result.syncedCount < result.totalCount) {
+    return `已同步 ${result.syncedCount}/${result.totalCount} 个最近会话`;
+  }
+  return `已同步 ${result.syncedCount} 个`;
+}
+
+function runningSessionIds(views: Record<string, MobileSessionView>): Set<string> {
+  return new Set(
+    Object.values(views)
+      .filter((view) => view.run.status === "running")
+      .map((view) => view.id),
+  );
+}
+
+interface StoredConversationStateRetention {
+  activeSessionId: string;
+  bridgeSessionIds: Set<string>;
+  pinnedSessionIds: Set<string>;
+  runningSessionIds: Set<string>;
+}
+
+function shouldKeepStoredMessagesInState(
+  conversation: StoredMobileConversation,
+  retention: StoredConversationStateRetention,
+): boolean {
+  const id = conversation.id.trim();
+  if (!id) {
+    return false;
+  }
+  if (id === retention.activeSessionId || retention.pinnedSessionIds.has(id) || retention.runningSessionIds.has(id)) {
+    return true;
+  }
+  if (hasUnsyncedStoredMessages(conversation)) {
+    return true;
+  }
+  return !retention.bridgeSessionIds.has(id) && conversation.messages.length > 0;
+}
+
+function compactStoredConversation(conversation: StoredMobileConversation): StoredMobileConversation {
+  if (conversation.messages.length === 0) {
+    return conversation;
+  }
+  return {
+    ...conversation,
+    messages: [],
+  };
+}
+
+function hasUnsyncedStoredMessages(conversation: StoredMobileConversation): boolean {
+  return typeof conversation.synced_message_count === "number"
+    && conversation.messages.length > conversation.synced_message_count;
+}
+
+function prependUniqueConversationMessages(
+  current: MobileConversationMessage[],
+  older: MobileConversationMessage[],
+): MobileConversationMessage[] {
+  const currentIds = new Set(current.map((message) => message.id));
+  return [...older.filter((message) => !currentIds.has(message.id)), ...current];
 }
 
 function initialStoredConversations(): StoredMobileConversation[] {

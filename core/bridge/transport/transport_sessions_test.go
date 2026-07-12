@@ -262,6 +262,20 @@ func TestBusSessionAppendAppendsMessages(t *testing.T) {
 	sess := session.NewSession("system")
 	sess.ID = "session-append"
 	sess.AddMessage(llm.Message{Role: llm.RoleUser, Text: "hello"})
+	sess.AssistantDraft = &session.AssistantDraft{
+		Text:    "world",
+		TraceID: "trace-session-append",
+		Turn:    1,
+	}
+	sess.TurnDraft = &session.TurnDraft{
+		TraceID: "trace-session-append",
+		Turn:    1,
+		Status:  session.TurnDraftStatusStreaming,
+		AssistantSegments: []session.TurnDraftSegment{
+			{ID: "stream-segment:assistant:1", Content: "world"},
+		},
+		ItemOrder: []string{"assistant:stream-segment:assistant:1"},
+	}
 	if err := sessionStore.Save(sess); err != nil {
 		t.Fatalf("save session: %v", err)
 	}
@@ -294,6 +308,12 @@ func TestBusSessionAppendAppendsMessages(t *testing.T) {
 	}
 	if loaded.Messages[2].Text != "world" {
 		t.Fatalf("unexpected appended message: %+v", loaded.Messages[2])
+	}
+	if loaded.AssistantDraft != nil {
+		t.Fatalf("expected assistant draft to clear after assistant append, got %+v", loaded.AssistantDraft)
+	}
+	if loaded.TurnDraft != nil {
+		t.Fatalf("expected turn draft to clear after assistant append, got %+v", loaded.TurnDraft)
 	}
 }
 

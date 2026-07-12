@@ -1,12 +1,27 @@
-import { forwardRef, useEffect, useRef, useState, type ReactNode } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import {
+  forwardRef,
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import type {
   AgentPayload,
   ChatSelectedSkill,
   ExternalAgentApprovalDecision,
   MobileAssistantPart,
+  MobileConversationMessage,
   MobileToolCard,
   StatusMessage,
 } from "../../mobileTypes";
+import { areMobileConversationMessagesEqual } from "../../lib/mobileConversationMessageEquality";
 import { buildMobileToolCardViewModel, type MobileToolTone } from "../../lib/mobileToolCardViewModel";
 import { EMPTY_STATE_SUGGESTIONS } from "./data";
 import { AssistantMarkdownContent } from "./AssistantMarkdownContent";
@@ -134,6 +149,191 @@ export function AssistantReply(props: AssistantReplyProps) {
   );
 }
 
+export const ConversationMessageList = memo(function ConversationMessageList(props: {
+  messages: MobileConversationMessage[];
+  onApproveExternalAgent?: (input: ExternalApprovalActionInput) => Promise<boolean>;
+  postSendFocusRequest?: { messageId: string; token: number } | null;
+  registerUserMessageRow: (messageId: string) => (node: HTMLDivElement | null) => void;
+  reply: AgentPayload | undefined;
+  scrollElementRef?: RefObject<HTMLElement | null>;
+  scrollToBottomRef?: MutableRefObject<(() => void) | null>;
+  status: StatusMessage;
+}) {
+  const hasActiveReply = Boolean(props.reply) || props.status.tone === "error";
+  const itemCount = props.messages.length + (hasActiveReply ? 1 : 0);
+  const getItemKey = useCallback((index: number) => {
+    const message = props.messages[index];
+    return message?.id ?? `active-reply:${props.reply?.session_id ?? "status"}`;
+  }, [props.messages, props.reply?.session_id]);
+  const virtualizer = useVirtualizer({
+    anchorTo: "start",
+    count: itemCount,
+    estimateSize: estimateConversationRowSize,
+    followOnAppend: false,
+    getItemKey,
+    getScrollElement: () => props.scrollElementRef?.current ?? null,
+    overscan: 8,
+    useAnimationFrameWithResizeObserver: true,
+  });
+  const virtualItems = virtualizer.getVirtualItems();
+  const postSendMessageIndex = useMemo(() => {
+    const messageId = props.postSendFocusRequest?.messageId;
+    return messageId ? props.messages.findIndex((message) => message.id === messageId) : -1;
+  }, [props.messages, props.postSendFocusRequest?.messageId]);
+  const scrollToVirtualBottom = useCallback(() => {
+    virtualizer.scrollToEnd({ behavior: "smooth" });
+  }, [virtualizer]);
+
+  useLayoutEffect(() => {
+    const scrollToBottomRef = props.scrollToBottomRef;
+    if (!scrollToBottomRef) {
+      return;
+    }
+    scrollToBottomRef.current = scrollToVirtualBottom;
+    return () => {
+      if (scrollToBottomRef.current === scrollToVirtualBottom) {
+        scrollToBottomRef.current = null;
+      }
+    };
+  }, [props.scrollToBottomRef, scrollToVirtualBottom]);
+
+  useLayoutEffect(() => {
+    if (!props.scrollElementRef || postSendMessageIndex < 0 || !props.postSendFocusRequest) {
+      return;
+    }
+    virtualizer.scrollToIndex(postSendMessageIndex, { align: "start", behavior: "auto" });
+  }, [postSendMessageIndex, props.postSendFocusRequest?.token, props.scrollElementRef, virtualizer]);
+
+  if (itemCount === 0) {
+    return null;
+  }
+
+  if (!props.scrollElementRef) {
+    return (
+      <div className="conversation-list" data-chat-feed-content="">
+        {props.messages.map((message) => (
+          <ConversationListItemRow
+            key={message.id}
+            item={{ kind: "message", message }}
+            onApproveExternalAgent={props.onApproveExternalAgent}
+            registerUserMessageRow={props.registerUserMessageRow}
+          />
+        ))}
+        {hasActiveReply ? (
+          <ConversationListItemRow
+            key={getItemKey(props.messages.length)}
+            item={{ kind: "reply", reply: props.reply, status: props.status }}
+            onApproveExternalAgent={props.onApproveExternalAgent}
+            registerUserMessageRow={props.registerUserMessageRow}
+          />
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="conversation-list"
+      data-chat-feed-content=""
+      style={{ height: virtualizer.getTotalSize() }}
+    >
+      {virtualItems.map((virtualItem) => {
+        const message = props.messages[virtualItem.index];
+        const item: ConversationListItem = message
+          ? { kind: "message", message }
+          : { kind: "reply", reply: props.reply, status: props.status };
+        return (
+          <div
+            key={virtualItem.key}
+            ref={virtualizer.measureElement}
+            className="conversation-virtual-row"
+            data-history-anchor-key={String(virtualItem.key)}
+            data-index={virtualItem.index}
+            style={{ transform: `translateY(${virtualItem.start}px)` }}
+          >
+            <ConversationListItemRow
+              item={item}
+              onApproveExternalAgent={props.onApproveExternalAgent}
+              registerUserMessageRow={props.registerUserMessageRow}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+});
+
+type ConversationListItem =
+  | { kind: "message"; message: MobileConversationMessage }
+  | { kind: "reply"; reply: AgentPayload | undefined; status: StatusMessage };
+
+function estimateConversationRowSize(index: number): number {
+  return index === 0 ? 96 : 132;
+}
+
+function ConversationListItemRow(props: {
+  item: ConversationListItem;
+  onApproveExternalAgent?: (input: ExternalApprovalActionInput) => Promise<boolean>;
+  registerUserMessageRow: (messageId: string) => (node: HTMLDivElement | null) => void;
+}) {
+  if (props.item.kind === "reply") {
+    return (
+      <AssistantReply
+        reply={props.item.reply}
+        status={props.item.status}
+        onApproveExternalAgent={props.onApproveExternalAgent}
+      />
+    );
+  }
+
+  return (
+    <ConversationMessageRow
+      message={props.item.message}
+      onApproveExternalAgent={props.onApproveExternalAgent}
+      registerUserMessageRow={props.registerUserMessageRow}
+    />
+  );
+}
+
+const ConversationMessageRow = memo(function ConversationMessageRow(props: {
+  message: MobileConversationMessage;
+  onApproveExternalAgent?: (input: ExternalApprovalActionInput) => Promise<boolean>;
+  registerUserMessageRow: (messageId: string) => (node: HTMLDivElement | null) => void;
+}) {
+  if (props.message.role === "user") {
+    return (
+      <ChatBubble ref={props.registerUserMessageRow(props.message.id)} selectedSkill={props.message.selectedSkill}>
+        {props.message.text}
+      </ChatBubble>
+    );
+  }
+
+  return (
+    <AssistantReply
+      reply={conversationMessageToAgentPayload(props.message)}
+      status={assistantMessageStatus()}
+      onApproveExternalAgent={props.onApproveExternalAgent}
+    />
+  );
+}, areConversationMessageRowPropsEqual);
+
+function areConversationMessageRowPropsEqual(
+  previous: {
+    message: MobileConversationMessage;
+    onApproveExternalAgent?: (input: ExternalApprovalActionInput) => Promise<boolean>;
+    registerUserMessageRow: (messageId: string) => (node: HTMLDivElement | null) => void;
+  },
+  next: {
+    message: MobileConversationMessage;
+    onApproveExternalAgent?: (input: ExternalApprovalActionInput) => Promise<boolean>;
+    registerUserMessageRow: (messageId: string) => (node: HTMLDivElement | null) => void;
+  },
+): boolean {
+  return previous.onApproveExternalAgent === next.onApproveExternalAgent
+    && previous.registerUserMessageRow === next.registerUserMessageRow
+    && areMobileConversationMessagesEqual(previous.message, next.message);
+}
+
 function AssistantReplyParts(props: {
   final: boolean;
   onApproveExternalAgent?: (input: ExternalApprovalActionInput) => Promise<boolean>;
@@ -151,7 +351,7 @@ function AssistantReplyParts(props: {
           key={part.id}
           content={part.text}
           final={props.final}
-          showCopyButton={false}
+          showCopyButton
         />
       ) : (
         <ToolCard
@@ -177,6 +377,9 @@ function ToolCard(props: {
     ? viewModel.title
     : buildToolStatusTitle(viewModel.tone, viewModel.title);
   const displayStatus = buildToolStatusLabel(viewModel.tone, viewModel.statusLabel);
+  const copyText = viewModel.details
+    ? `${viewModel.title}\n${viewModel.details}`
+    : viewModel.title;
   const approvalDisabled = Boolean(
     pendingDecision || props.tool.approvalDecision || !props.sessionId?.trim() || !props.onApproveExternalAgent,
   );
@@ -213,7 +416,10 @@ function ToolCard(props: {
       </button>
       {expanded ? (
         <div className={`tool-details is-${viewModel.tone}`}>
-          <span className="tool-details-kind">工具</span>
+          <div className="tool-details-header">
+            <span className="tool-details-kind">工具</span>
+            <MessageCopyButton text={copyText} variant="code" />
+          </div>
           <div className="tool-details-command">{viewModel.title}</div>
           {viewModel.details ? (
             <div className="tool-details-output">
@@ -221,11 +427,7 @@ function ToolCard(props: {
             </div>
           ) : null}
           <div className={`tool-card-status is-${viewModel.tone}`}>
-            {viewModel.tone === "running"
-              ? <span className="tool-spinner" />
-              : viewModel.tone === "error"
-                ? <UiIcon name="x" />
-                : <UiIcon name="check" />}
+            <ToolStatusMark tone={viewModel.tone} />
             <span className="tool-card-status-label">{displayStatus}</span>
           </div>
           {props.tool.approvalId ? (
@@ -239,6 +441,36 @@ function ToolCard(props: {
       ) : null}
     </section>
   );
+}
+
+function ToolStatusMark(props: { tone: MobileToolTone }) {
+  if (props.tone === "running") {
+    return (
+      <svg
+        className="tool-spinner"
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden={true}
+      >
+        <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+      </svg>
+    );
+  }
+
+  if (props.tone === "success") {
+    return <span className="tool-status-dot" aria-hidden={true} />;
+  }
+
+  if (props.tone === "error") {
+    return <UiIcon name="x" />;
+  }
+
+  return null;
 }
 
 function ApprovalActions(props: {
@@ -280,7 +512,7 @@ export const ChatBubble = forwardRef<HTMLDivElement, ChatBubbleProps>(function C
     : props.children !== null && props.children !== undefined;
 
   return (
-    <div ref={ref} className="message-row user-row">
+    <div ref={ref} className="message-row user-row" data-chat-feed-item="">
       <div className="user-bubble">
         {props.selectedSkill ? <div className="user-bubble-selected-skill">{props.selectedSkill.name}</div> : null}
         {hasText ? props.children : null}
@@ -291,7 +523,7 @@ export const ChatBubble = forwardRef<HTMLDivElement, ChatBubbleProps>(function C
 
 function AssistantPanel(props: { children: ReactNode; ariaLive?: "polite" }) {
   return (
-    <div className="message-row assistant-row">
+    <div className="message-row assistant-row" data-chat-feed-item="">
       <section className="assistant-panel" aria-live={props.ariaLive}>
         {props.children}
       </section>
@@ -487,4 +719,19 @@ function resolveAssistantParts(reply: AgentPayload | undefined): MobileAssistant
     });
   }
   return parts;
+}
+
+function assistantMessageStatus(): StatusMessage {
+  return { tone: "success", text: "回复已返回" };
+}
+
+function conversationMessageToAgentPayload(message: MobileConversationMessage): AgentPayload {
+  return {
+    message: message.text,
+    parts: message.parts,
+    session_ended: false,
+    session_id: message.sessionId ?? "",
+    thinking: message.thinking,
+    tools: message.tools,
+  };
 }

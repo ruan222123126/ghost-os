@@ -62,6 +62,7 @@ export function chatControllerState(chat: ChatController): Pick<
   | 'loading'
   | 'loadingOlderHistory'
   | 'pendingQuestions'
+  | 'postSendFocusRequest'
   | 'streamingAssistantSegments'
   | 'streamingItemOrder'
   | 'streamingThinkingSegments'
@@ -81,6 +82,7 @@ export function chatControllerState(chat: ChatController): Pick<
     chatError: chat.chatError,
     hasPendingQuestion: chat.hasPendingQuestion,
     hasOlderHistory: chat.hasOlderHistory,
+    postSendFocusRequest: chat.postSendFocusRequest,
     canStop: chat.canStop,
   };
 }

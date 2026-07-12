@@ -4,17 +4,13 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
 	bridgeconfig "ghost-os/bridge/config"
-	"ghost-os/bridge/llm"
-	bridgeorchestration "ghost-os/bridge/orchestration"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
-	"ghost-os/bridge/tools"
 )
 
 func TestHandleAgentStreamMethodNotAllowed(t *testing.T) {
@@ -241,33 +237,8 @@ func TestHandleAgentStreamTreatsProPrefixAsStandardMessage(t *testing.T) {
 	}
 }
 
-func TestHandleAgentStreamSupportsPlanMode(t *testing.T) {
-	handler, service, _ := newTestHandlerWithService(t, nil, nil)
-	completer := &proTestCompleter{
-		responses: []*llm.CompletionResponse{
-			{
-				Message: llm.Message{
-					Role: llm.RoleAssistant,
-					Text: "【用户意图】\n- 规划任务\n【任务编排】\n1. task_id=T1; objective=整理目标; inputs=用户消息; depends_on=none; executor=main_ai\n【执行顺序】\n1. 先分析后执行\n【完成判定】\n1. 主AI可直接执行",
-				},
-				FinishReason: llm.FinishStop,
-			},
-		},
-	}
-	service.SetRuntimeFactory(proTestRuntimeFactory{
-		deps: bridgeorchestration.NewRuntimeDependencies(
-			bridgeconfig.Config{
-				MaxTurns:   4,
-				PromptsDir: os.Getenv("GHOST_PROMPTS_DIR"),
-				Provider:   bridgeconfig.ProviderConfig{Model: "gpt-4o"},
-			},
-			completer,
-			tools.NewRegistry(),
-			"system prompt",
-			nil,
-		),
-	})
-
+func TestHandleAgentStreamRejectsPlanMode(t *testing.T) {
+	handler := newTestHandler(t, nil)
 	recorder := serveRequest(
 		handler,
 		http.MethodPost,
@@ -275,26 +246,15 @@ func TestHandleAgentStreamSupportsPlanMode(t *testing.T) {
 		`{"mode":"plan","message":"pro fix config","trace_id":"trace-plan-stream"}`,
 		map[string]string{"Content-Type": "application/json"},
 	)
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("unexpected status: got %d want %d", recorder.Code, http.StatusOK)
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("unexpected status: got %d want %d", recorder.Code, http.StatusBadRequest)
 	}
-	events := decodeSSEEvents(t, recorder)
-	if len(events) != 2 {
-		t.Fatalf("unexpected event count: got %d want %d", len(events), 2)
+	body := decodeResponseBody(t, recorder)
+	if body.Status != "error" {
+		t.Fatalf("unexpected response status: got %q want %q", body.Status, "error")
 	}
-	if events[0].Type != streaming.EventMessage || events[1].Type != streaming.EventDone {
-		t.Fatalf("unexpected event types: %+v", events)
-	}
-	payload, ok := events[0].Payload.(map[string]any)
-	if !ok {
-		t.Fatalf("unexpected message payload type: %T", events[0].Payload)
-	}
-	text, ok := payload["text"].(string)
-	if !ok {
-		t.Fatalf("unexpected text type: %T", payload["text"])
-	}
-	if !strings.Contains(text, "【任务编排】") {
-		t.Fatalf("unexpected text: %v", payload["text"])
+	if body.Error != `unsupported agent mode: "plan"` {
+		t.Fatalf("unexpected error message: got %q", body.Error)
 	}
 }
 
@@ -352,9 +312,10 @@ func TestHandleAgentStreamInflightSessionReturnsEnvelope(t *testing.T) {
 	}
 }
 
-func TestHandleAgentStreamClientDisconnectCancelsExecution(t *testing.T) {
+func TestHandleAgentStreamClientDisconnectKeepsExecutionRunning(t *testing.T) {
 	started := make(chan struct{})
 	done := make(chan struct{})
+	release := make(chan struct{})
 	streamExecutor := func(
 		ctx context.Context,
 		_ string,
@@ -365,11 +326,23 @@ func TestHandleAgentStreamClientDisconnectCancelsExecution(t *testing.T) {
 		_ streaming.Sink,
 	) (string, string, error) {
 		close(started)
-		<-ctx.Done()
-		close(done)
-		return "", "", ctx.Err()
+		select {
+		case <-ctx.Done():
+			close(done)
+			return "", "", ctx.Err()
+		case <-release:
+			close(done)
+			return "ok", "session-background", nil
+		}
 	}
-	handler, _ := newTestHandlerWithStreamExecutor(t, nil, streamExecutor)
+	_, service, _ := newTestHandlerWithService(t, nil, streamExecutor)
+	runCtx, stopRunContext := context.WithCancel(context.Background())
+	defer stopRunContext()
+	options, err := newServerOptionsFromEnv(8080)
+	if err != nil {
+		t.Fatalf("new server options: %v", err)
+	}
+	handler := newHTTPHandlerWithContext(runCtx, service, options)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	request := httptest.NewRequest(http.MethodPost, "/api/agent/stream", strings.NewReader(`{"message":"hello"}`)).WithContext(ctx)
@@ -391,13 +364,20 @@ func TestHandleAgentStreamClientDisconnectCancelsExecution(t *testing.T) {
 	cancel()
 
 	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("context cancellation did not reach executor")
-	}
-	select {
 	case <-handlerDone:
 	case <-time.After(time.Second):
 		t.Fatal("handler did not return after cancellation")
+	}
+	select {
+	case <-done:
+		t.Fatal("stream executor stopped after client disconnect")
+	default:
+	}
+
+	close(release)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("stream executor did not finish after release")
 	}
 }

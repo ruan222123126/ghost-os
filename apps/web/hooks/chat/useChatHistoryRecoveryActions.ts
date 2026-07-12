@@ -6,6 +6,7 @@ import {
   projectRecoveredTurnEventRunState,
   projectTurnDraftRunRecovery,
 } from '@/lib/chat-stream/historyRecovery';
+import { createChatRuntimeActionBuffer, type ChatRuntimeActionBuffer } from '@/lib/chatRuntime/actionBuffer';
 import { projectAgentEvent } from '@/lib/chatRuntime/eventProjector';
 import {
   createChatRuntimeStateFromDraft,
@@ -42,13 +43,18 @@ interface RecoveredTurnSyncOptions extends UseChatHistoryRecoveryActionsOptions 
 }
 
 interface RecoverTurnDraftOptions extends UseChatHistoryRecoveryActionsOptions {
-  applyRecoveredEvent: (runtime: ChatRuntimeState, event: SessionPushEvent) => ReturnType<typeof projectRecoveredTurnEventRunState>['historySync'];
+  applyRecoveredEvent: (
+    runtime: ChatRuntimeState,
+    event: SessionPushEvent,
+    actionBuffer: ChatRuntimeActionBuffer,
+  ) => ReturnType<typeof projectRecoveredTurnEventRunState>['historySync'];
   recoveryRunRef: MutableRefObject<Record<string, ActiveAgentRun>>;
   stopRecoveredRun: (sessionId: string) => void;
   syncRecoveredTurn: (sessionId: string, messageText?: string) => Promise<void>;
 }
 
 interface RecoveredStreamOptions extends Pick<RecoverTurnDraftOptions,
+  | 'applyRuntimeActions'
   | 'applyRecoveredEvent'
   | 'requestFailedText'
   | 'setActiveRun'
@@ -73,7 +79,7 @@ export function useChatHistoryRecoveryActions(options: UseChatHistoryRecoveryAct
     historyPageStateTarget,
     stopRecoveredRun,
   });
-  const applyRecoveredEvent = useRecoveredEventProjector(options.applyRuntimeActions);
+  const applyRecoveredEvent = useRecoveredEventProjector();
   const recoverTurnDraft = useRecoverTurnDraft({
     ...options,
     applyRecoveredEvent,
@@ -145,17 +151,24 @@ function useRecoveredTurnSync(options: RecoveredTurnSyncOptions) {
   ]);
 }
 
-function useRecoveredEventProjector(applyRuntimeActions: ChatStateControls['applyRuntimeActions']) {
-  return useCallback((runtime: ChatRuntimeState, event: SessionPushEvent) => {
+function useRecoveredEventProjector() {
+  return useCallback((
+    runtime: ChatRuntimeState,
+    event: SessionPushEvent,
+    actionBuffer: ChatRuntimeActionBuffer,
+  ) => {
     const eventRunState = projectRecoveredTurnEventRunState(event.type);
     if (eventRunState.projectRuntimeEvent) {
-      applyRuntimeActions(runtime.sessionId, projectAgentEvent({
+      actionBuffer.enqueue(runtime.sessionId, projectAgentEvent({
         event: toAgentStreamEvent(event),
         runtime,
       }));
+      if (isTerminalSessionStreamEvent(event)) {
+        actionBuffer.flush();
+      }
     }
     return eventRunState.historySync;
-  }, [applyRuntimeActions]);
+  }, []);
 }
 
 function useRecoverTurnDraft(options: RecoverTurnDraftOptions) {
@@ -208,29 +221,38 @@ function useRecoverTurnDraft(options: RecoverTurnDraftOptions) {
 }
 
 function startRecoveredSessionStream(options: RecoveredStreamOptions): void {
-  const { abortController, applyRecoveredEvent, runtime, sessionId, syncRecoveredTurn } = options;
+  const { abortController, applyRecoveredEvent, applyRuntimeActions, runtime, sessionId, syncRecoveredTurn } = options;
+  const actionBuffer = createChatRuntimeActionBuffer(applyRuntimeActions);
 
   void streamSessionEvents({
     onEvent: async (event) => {
-      const historySync = applyRecoveredEvent(runtime, event);
+      const historySync = applyRecoveredEvent(runtime, event, actionBuffer);
       if (historySync === 'sync_error') {
+        actionBuffer.flush();
         await syncRecoveredTurn(sessionId, parseAgentErrorPayload(event.payload).message);
         return;
       }
       if (historySync === 'sync') {
+        actionBuffer.flush();
         await syncRecoveredTurn(sessionId);
       }
     },
     sessionId,
     signal: abortController.signal,
-  }).catch((error) => {
-    if (abortController.signal.aborted) {
-      return;
-    }
-    options.setActiveRun(sessionId, null);
-    options.setLoading(sessionId, false);
-    options.setChatError(sessionId, toErrorMessage(error, options.requestFailedText));
-  });
+  })
+    .catch((error) => {
+      actionBuffer.flush();
+      if (abortController.signal.aborted) {
+        return;
+      }
+      options.setActiveRun(sessionId, null);
+      options.setLoading(sessionId, false);
+      options.setChatError(sessionId, toErrorMessage(error, options.requestFailedText));
+    })
+    .finally(() => {
+      actionBuffer.flush();
+      actionBuffer.cancel();
+    });
 }
 
 function resolveRecoveredTurnError(
@@ -238,4 +260,11 @@ function resolveRecoveredTurnError(
   messageText?: string,
 ): string {
   return messageText ?? (draft?.status === 'error' ? (draft.error ?? '') : '');
+}
+
+function isTerminalSessionStreamEvent(event: SessionPushEvent): boolean {
+  return event.type === 'awaiting_human'
+    || event.type === 'done'
+    || event.type === 'error'
+    || event.type === 'assistant_message';
 }

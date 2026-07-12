@@ -4,7 +4,7 @@ import type { FC, KeyboardEvent, ReactNode, RefObject } from 'react';
 import { ComposerSkillMenu } from '@/components/ComposerSkillMenu';
 import { ComposerToolbar } from '@/components/ComposerToolbar';
 import { ignorePromise } from '@/lib/errors';
-import type { AgentRuntimeType, ChatSelectedSkill, SkillPayload } from '@/lib/types';
+import type { AgentModeSelection, ChatSelectedSkill, SkillPayload } from '@/lib/types';
 
 export interface ComposerActionState {
   disabled: boolean;
@@ -15,10 +15,11 @@ export interface ComposerActionState {
 
 export interface ComposerInputRowProps {
   action: ComposerActionState;
-  agentRuntime: AgentRuntimeType;
+  agentMode: AgentModeSelection;
   attachmentMenuOpen: boolean;
   ariaLabel: string;
   codexModeDescription: string;
+  codexModeLabel: string;
   codexModeTitle: string;
   codexToggleEnabled: boolean;
   disabled: boolean;
@@ -32,7 +33,7 @@ export interface ComposerInputRowProps {
   onFeatureClick: () => void;
   onRefreshSkills?: () => Promise<void> | void;
   onSelectSkill?: (skill: SkillPayload) => void;
-  onSwitchAgentRuntime?: (runtime: AgentRuntimeType) => void;
+  onChangeAgentMode?: (mode: AgentModeSelection) => void;
   onSkillClick: () => void;
   onChange: (value: string) => void;
   onCompositionEnd: () => void;
@@ -58,8 +59,8 @@ export interface ComposerInputRowProps {
   fileDisabled: boolean;
   fileUnavailableLabel: string;
   attachmentTitle: string;
-  codexRuntimeLabel: string;
-  ghostRuntimeLabel: string;
+  normalModeLabel: string;
+  planModeLabel: string;
   menuFileLabel: string;
   menuFeatureLabel: string;
   menuSkillLabel: string;
@@ -70,10 +71,11 @@ export interface ComposerInputRowProps {
 
 export const ComposerInputRow: FC<ComposerInputRowProps> = ({
   action,
-  agentRuntime,
+  agentMode,
   attachmentMenuOpen,
   ariaLabel,
   codexModeDescription,
+  codexModeLabel,
   codexModeTitle,
   codexToggleEnabled,
   disabled,
@@ -87,7 +89,7 @@ export const ComposerInputRow: FC<ComposerInputRowProps> = ({
   onFeatureClick,
   onRefreshSkills,
   onSelectSkill,
-  onSwitchAgentRuntime,
+  onChangeAgentMode,
   onSkillClick,
   onChange,
   onCompositionEnd,
@@ -114,8 +116,8 @@ export const ComposerInputRow: FC<ComposerInputRowProps> = ({
   fileDisabled,
   fileUnavailableLabel,
   attachmentTitle,
-  codexRuntimeLabel,
-  ghostRuntimeLabel,
+  normalModeLabel,
+  planModeLabel,
   menuFileLabel,
   menuFeatureLabel,
   menuSkillLabel,
@@ -155,7 +157,7 @@ export const ComposerInputRow: FC<ComposerInputRowProps> = ({
         {attachmentMenuOpen ? (
           <AttachmentMenu
             onFileClick={fileDisabled ? undefined : onFileClick}
-            onFeatureClick={onSwitchAgentRuntime ? onFeatureClick : undefined}
+            onFeatureClick={onChangeAgentMode ? onFeatureClick : undefined}
             onSkillClick={onSelectSkill ? onSkillClick : undefined}
             fileLabel={menuFileLabel}
             featureLabel={menuFeatureLabel}
@@ -167,13 +169,14 @@ export const ComposerInputRow: FC<ComposerInputRowProps> = ({
 
         {featureMenuOpen ? (
           <ComposerFeatureMenu
-            agentRuntime={agentRuntime}
+            agentMode={agentMode}
             codexModeDescription={codexModeDescription}
+            codexModeLabel={codexModeLabel}
             codexModeTitle={codexModeTitle}
-            codexRuntimeLabel={codexRuntimeLabel}
             codexToggleEnabled={codexToggleEnabled}
-            ghostRuntimeLabel={ghostRuntimeLabel}
-            onSwitchAgentRuntime={onSwitchAgentRuntime}
+            normalModeLabel={normalModeLabel}
+            onChangeAgentMode={onChangeAgentMode}
+            planModeLabel={planModeLabel}
             title={featureMenuTitle}
           />
         ) : null}
@@ -306,25 +309,28 @@ function AttachmentMenuIcon({ kind }: { kind: 'feature' | 'file' | 'skill' }) {
 }
 
 function ComposerFeatureMenu({
-  agentRuntime,
+  agentMode,
   codexModeDescription,
+  codexModeLabel,
   codexModeTitle,
-  codexRuntimeLabel,
   codexToggleEnabled,
-  ghostRuntimeLabel,
-  onSwitchAgentRuntime,
+  normalModeLabel,
+  onChangeAgentMode,
+  planModeLabel,
   title,
 }: {
-  agentRuntime: AgentRuntimeType;
+  agentMode: AgentModeSelection;
   codexModeDescription: string;
+  codexModeLabel: string;
   codexModeTitle: string;
-  codexRuntimeLabel: string;
   codexToggleEnabled: boolean;
-  ghostRuntimeLabel: string;
-  onSwitchAgentRuntime?: (runtime: AgentRuntimeType) => void;
+  normalModeLabel: string;
+  onChangeAgentMode?: (mode: AgentModeSelection) => void;
+  planModeLabel: string;
   title: string;
 }) {
-  const codexModeEnabled = agentRuntime === 'codex';
+  const normalModeEnabled = agentMode === 'normal';
+  const planModeEnabled = agentMode === 'plan';
 
   return (
     <div className="composer-feature-menu" role="menu" aria-label={title}>
@@ -332,22 +338,24 @@ function ComposerFeatureMenu({
         <span>{title}</span>
       </div>
       <div className="composer-feature-mode-switch" role="group" aria-label={codexModeTitle}>
+        <span className="composer-feature-mode-label">{codexModeLabel}</span>
         <button
-          className={!codexModeEnabled ? 'is-active' : ''}
+          className={normalModeEnabled ? 'is-active' : ''}
           type="button"
-          aria-pressed={!codexModeEnabled}
-          onClick={() => onSwitchAgentRuntime?.('ghost')}
+          aria-pressed={normalModeEnabled}
+          disabled={!codexToggleEnabled && !normalModeEnabled}
+          onClick={() => onChangeAgentMode?.(normalModeEnabled ? null : 'normal')}
         >
-          {ghostRuntimeLabel}
+          {normalModeLabel}
         </button>
         <button
-          className={codexModeEnabled ? 'is-active' : ''}
+          className={planModeEnabled ? 'is-active' : ''}
           type="button"
-          aria-pressed={codexModeEnabled}
-          disabled={!codexToggleEnabled}
-          onClick={() => onSwitchAgentRuntime?.('codex')}
+          aria-pressed={planModeEnabled}
+          disabled={!codexToggleEnabled && !planModeEnabled}
+          onClick={() => onChangeAgentMode?.(planModeEnabled ? null : 'plan')}
         >
-          {codexRuntimeLabel}
+          {planModeLabel}
         </button>
       </div>
       <div className="composer-feature-status" role="status">{codexModeDescription}</div>

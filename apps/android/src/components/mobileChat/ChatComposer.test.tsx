@@ -2,10 +2,12 @@
 import { useState } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AgentRuntimeType, ChatSelectedSkill, SkillPayload } from "../../mobileTypes";
+import type { AgentModeSelection, ChatSelectedSkill, SkillPayload } from "../../mobileTypes";
 import { ChatComposer } from "./ChatComposer";
 
-let measuredScrollHeight = 52;
+let measuredSingleLineScrollHeight = 52;
+let measuredMultilineScrollHeight = 52;
+let measuredVisibleScrollHeight = 52;
 const originalInnerHeightDescriptor = Object.getOwnPropertyDescriptor(window, "innerHeight");
 const originalVisualViewportDescriptor = Object.getOwnPropertyDescriptor(window, "visualViewport");
 
@@ -18,13 +20,15 @@ describe("ChatComposer", () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
-    measuredScrollHeight = 52;
+    measuredSingleLineScrollHeight = 52;
+    measuredMultilineScrollHeight = 52;
+    measuredVisibleScrollHeight = 52;
     restoreWindowViewportProperties();
   });
 
   it("switches to multiline when single-line layout overflows", () => {
     mockTextareaScrollHeight();
-    measuredScrollHeight = 76;
+    measuredSingleLineScrollHeight = 76;
 
     renderComposerHarness({ initialValue: "这是十一位中文输入" });
 
@@ -33,11 +37,22 @@ describe("ChatComposer", () => {
 
   it("keeps long text single-line when measured layout still fits", () => {
     mockTextareaScrollHeight();
-    measuredScrollHeight = 52;
+    measuredSingleLineScrollHeight = 52;
 
     renderComposerHarness({ initialValue: "abcdefghijklmnopqrstuvwxyzabcdefghi" });
 
     expect(composerShell().classList.contains("is-multiline")).toBe(false);
+  });
+
+  it("sizes multiline input from the stable measure instead of the visible textarea", () => {
+    mockTextareaScrollHeight();
+    measuredSingleLineScrollHeight = 76;
+    measuredMultilineScrollHeight = 76;
+    measuredVisibleScrollHeight = 100;
+
+    renderComposerHarness({ initialValue: "这是刚刚换行的输入内容" });
+
+    expect(screen.getByRole<HTMLTextAreaElement>("textbox").style.height).toBe("76px");
   });
 
   it("shows a stop button while loading without input text", () => {
@@ -107,22 +122,30 @@ describe("ChatComposer", () => {
     expect(screen.getByText("暂无")).toBeTruthy();
   });
 
-  it("opens the feature menu from the plus menu and toggles codex mode", () => {
+  it("opens the feature menu from the plus menu and toggles plan mode off and on", () => {
     renderComposerHarness({ canEnableCodexMode: true });
 
     fireEvent.click(screen.getByRole("button", { name: "添加内容" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "功能" }));
 
-    expect(screen.getByRole("button", { name: "Ghost" }).getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByRole("button", { name: "Codex" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByText("codex模式")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "normal" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByRole("button", { name: "plan" }).getAttribute("aria-pressed")).toBe("false");
 
-    fireEvent.click(screen.getByRole("button", { name: "Codex" }));
+    fireEvent.click(screen.getByRole("button", { name: "plan" }));
 
     fireEvent.click(screen.getByRole("button", { name: "添加内容" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "功能" }));
 
-    expect(screen.getByRole("button", { name: "Ghost" }).getAttribute("aria-pressed")).toBe("false");
-    expect(screen.getByRole("button", { name: "Codex" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "normal" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByRole("button", { name: "plan" }).getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "添加内容" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "功能" }));
+
+    expect(screen.getByRole("button", { name: "normal" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByRole("button", { name: "plan" }).getAttribute("aria-pressed")).toBe("false");
   });
 
   it("disables codex mode in the feature menu when the bridge is unavailable", () => {
@@ -131,7 +154,7 @@ describe("ChatComposer", () => {
     fireEvent.click(screen.getByRole("button", { name: "添加内容" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "功能" }));
 
-    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Codex" }).disabled).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "plan" }).disabled).toBe(true);
     expect(screen.getByText("连接电脑后可用")).toBeTruthy();
   });
 
@@ -156,7 +179,7 @@ describe("ChatComposer", () => {
 
       return (
         <ChatComposer
-          agentRuntime="ghost"
+          agentMode={null}
           canSubmit={value.trim().length > 0}
           loading={false}
           onChange={setValue}
@@ -187,13 +210,19 @@ function mockTextareaScrollHeight(): void {
   vi.spyOn(HTMLTextAreaElement.prototype, "scrollHeight", "get").mockImplementation(function scrollHeight(
     this: HTMLTextAreaElement,
   ) {
-    return this.classList.contains("composer-single-line-measure") ? measuredScrollHeight : 52;
+    if (this.classList.contains("composer-single-line-measure")) {
+      return measuredSingleLineScrollHeight;
+    }
+    if (this.classList.contains("composer-height-measure")) {
+      return measuredMultilineScrollHeight;
+    }
+    return measuredVisibleScrollHeight;
   });
 }
 
 function renderComposerHarness(options: {
   canEnableCodexMode?: boolean;
-  initialAgentRuntime?: AgentRuntimeType;
+  initialAgentMode?: AgentModeSelection;
   canStop?: boolean;
   disabled?: boolean;
   initialSelectedSkill?: ChatSelectedSkill | null;
@@ -206,7 +235,7 @@ function renderComposerHarness(options: {
 } = {}) {
   const {
     canEnableCodexMode = false,
-    initialAgentRuntime = "ghost",
+    initialAgentMode = null,
     canStop = false,
     disabled = false,
     initialSelectedSkill = null,
@@ -219,13 +248,13 @@ function renderComposerHarness(options: {
   } = options;
 
   function Harness() {
-    const [agentRuntime, setAgentRuntime] = useState<AgentRuntimeType>(initialAgentRuntime);
+    const [agentMode, setAgentMode] = useState<AgentModeSelection>(initialAgentMode);
     const [value, setValue] = useState(initialValue);
     const [selectedSkill, setSelectedSkill] = useState<ChatSelectedSkill | null>(initialSelectedSkill);
 
     return (
       <ChatComposer
-        agentRuntime={agentRuntime}
+        agentMode={agentMode}
         canEnableCodexMode={canEnableCodexMode}
         canStop={canStop}
         disabled={disabled}
@@ -234,9 +263,9 @@ function renderComposerHarness(options: {
         skills={skills}
         onChange={setValue}
         onClearSelectedSkill={() => setSelectedSkill(null)}
+        onChangeAgentMode={setAgentMode}
         onRefreshSkills={onRefreshSkills}
         onSelectSkill={onSelectSkill ? (skill) => setSelectedSkill({ id: skill.id, name: skill.name }) : undefined}
-        onSwitchAgentRuntime={setAgentRuntime}
         onStop={onStop}
         onSubmit={vi.fn(async (event) => {
           event.preventDefault();

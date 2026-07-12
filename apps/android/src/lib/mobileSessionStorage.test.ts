@@ -2,9 +2,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  loadStoredLastActiveMobileSessionId,
   loadPersistedMobileConversations,
   loadStoredMobileConversations,
   MOBILE_CONVERSATIONS_STORAGE_KEY,
+  MOBILE_LAST_ACTIVE_SESSION_STORAGE_KEY,
+  saveStoredLastActiveMobileSessionId,
+  upsertStoredMobileConversation,
 } from "./mobileSessionStorage";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -22,6 +26,18 @@ describe("mobileSessionStorage", () => {
     window.localStorage.setItem(MOBILE_CONVERSATIONS_STORAGE_KEY, JSON.stringify([storedConversation()]));
 
     expect(loadStoredMobileConversations()).toEqual([storedConversation()]);
+  });
+
+  it("stores and clears the last active session id", () => {
+    saveStoredLastActiveMobileSessionId(" session-1 ");
+
+    expect(window.localStorage.getItem(MOBILE_LAST_ACTIVE_SESSION_STORAGE_KEY)).toBe("session-1");
+    expect(loadStoredLastActiveMobileSessionId()).toBe("session-1");
+
+    saveStoredLastActiveMobileSessionId(undefined);
+
+    expect(window.localStorage.getItem(MOBILE_LAST_ACTIVE_SESSION_STORAGE_KEY)).toBeNull();
+    expect(loadStoredLastActiveMobileSessionId()).toBe("");
   });
 
   it("migrates legacy localStorage conversations when the Tauri file is empty", async () => {
@@ -51,6 +67,28 @@ describe("mobileSessionStorage", () => {
     window.localStorage.setItem(MOBILE_CONVERSATIONS_STORAGE_KEY, JSON.stringify([storedConversationWithOrderedParts()]));
 
     expect(loadStoredMobileConversations()).toEqual([storedConversationWithOrderedParts()]);
+  });
+
+  it("keeps a complete snapshot when a matching recent page is persisted", () => {
+    const existing = {
+      ...storedConversation(),
+      messages: [storedMessage("complete-history")],
+      source_message_count: 150,
+      source_snapshot_complete: true,
+      synced_message_count: 1,
+    };
+
+    const conversations = upsertStoredMobileConversation([existing], {
+      id: existing.id,
+      messages: [storedMessage("recent-page")],
+      sourceMessageCount: 150,
+      sourceSnapshotComplete: false,
+      syncedMessageCount: 1,
+      title: existing.title,
+      updatedAt: existing.updated_at,
+    });
+
+    expect(conversations[0]).toEqual(existing);
   });
 });
 
@@ -131,5 +169,14 @@ function storedConversationWithOrderedParts() {
     ],
     title: "Session 2",
     updated_at: "2026-01-02T00:00:00.000Z",
+  };
+}
+
+function storedMessage(text: string) {
+  return {
+    id: `session-1:user:${text}`,
+    role: "user" as const,
+    sessionId: "session-1",
+    text,
   };
 }

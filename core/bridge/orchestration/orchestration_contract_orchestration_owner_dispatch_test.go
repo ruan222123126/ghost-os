@@ -120,6 +120,7 @@ func TestExternalAgentActionsAreRegisteredInDefaultDispatch(t *testing.T) {
 		BusActionExternalAgentSend,
 		BusActionExternalAgentStop,
 		BusActionExternalAgentApprove,
+		BusActionExternalAgentModelsGet,
 	} {
 		if !registered[action] {
 			t.Fatalf("expected action %s to be registered; got %v", action, service.registeredActionNames())

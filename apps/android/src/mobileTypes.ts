@@ -1,3 +1,22 @@
+import type {
+  AskHumanOption as SharedAskHumanOption,
+  SessionContentPart as SharedSessionContentPart,
+  SessionDetail as SharedSessionDetail,
+  SessionMessage as SharedSessionMessage,
+  SessionMessagePage as SharedSessionMessagePage,
+  SessionMetadata as SharedSessionMetadata,
+  SessionRunState as SharedSessionRunState,
+  SessionRunStatesGetRequest as SharedSessionRunStatesGetRequest,
+  SessionRuntimeSelection as SharedSessionRuntimeSelection,
+  SessionToolCall as SharedSessionToolCall,
+  SessionToolResult as SharedSessionToolResult,
+  SessionTurnDraft as SharedSessionTurnDraft,
+  SessionTurnDraftPendingQuestion as SharedSessionTurnDraftPendingQuestion,
+  SessionTurnDraftSegment as SharedSessionTurnDraftSegment,
+  SessionTurnDraftTool as SharedSessionTurnDraftTool,
+  TaskRuntimeOverrides as SharedTaskRuntimeOverrides,
+} from "./lib/envelope.generated";
+
 export interface HostProfile {
   productName: string;
   version: string;
@@ -7,8 +26,12 @@ export interface HostProfile {
 
 export type ConnectionMode = "webrtc" | "http";
 export type AgentRuntimeType = "ghost" | "codex";
+export type AgentModeSelection = "normal" | "plan" | null;
+export type AgentRequestMode = "plan";
 export type ExternalCodexPermissionMode = "read-only" | "default" | "safe-yolo" | "yolo";
 export type ExternalAgentApprovalDecision = "approved" | "approved_for_session" | "denied" | "abort";
+export type SessionRunState = SharedSessionRunState;
+export type SessionRunStatesGetRequest = SharedSessionRunStatesGetRequest;
 
 export interface MobilePairingInfo {
   deviceId: string;
@@ -52,6 +75,11 @@ export interface ConfigPayload {
   relay_default_execution_timeout_ms?: number;
 }
 
+export interface CodexModelCatalogPayload {
+  models: string[];
+  default_model: string;
+}
+
 export interface ProviderConfigPayload {
   name: string;
   type: ProviderType;
@@ -83,6 +111,11 @@ export interface ProviderConfigInputPayload {
   response_reserve_tokens?: number;
   model_context_window_tokens?: Record<string, number>;
   model_response_reserve_tokens?: Record<string, number>;
+}
+
+export interface ProviderExportRequestPayload extends Record<string, unknown> {
+  name?: string;
+  provider_id?: string;
 }
 
 export interface ProviderSyncRecordPayload {
@@ -137,6 +170,8 @@ export interface TaskRuntimeOverridesPayload {
   tool_allowlist_only?: boolean;
   max_turns?: number;
 }
+
+export type TaskRuntimeOverridesContract = SharedTaskRuntimeOverrides;
 
 export interface AgentMessageTaskPayload {
   id: string;
@@ -268,63 +303,30 @@ export interface AgentPayload {
   tools?: MobileToolCard[];
 }
 
-export type SessionMessageRole = "system" | "internal" | "user" | "assistant" | "tool";
+export type SessionMessageRole = SharedSessionMessage["role"];
+export type SessionContentPart = SharedSessionContentPart;
+export type SessionToolCall = SharedSessionToolCall;
+export type SessionToolResultStatus = SharedSessionToolResult["status"];
+export type SessionToolResult = SharedSessionToolResult;
+export type SessionMessage = SharedSessionMessage;
+export type SessionMessagePage = SharedSessionMessagePage;
 
-export interface SessionContentPart {
-  type: string;
-  text?: string;
+export interface SessionGetOptions {
+  before?: number;
+  limit?: number;
 }
 
-export interface SessionToolCall {
-  id: string;
-  name: string;
-  arguments: Record<string, unknown>;
-}
+export type SessionMetadata = SharedSessionMetadata;
+export type AskHumanOption = SharedAskHumanOption;
+export type SessionRuntimeSelection = SharedSessionRuntimeSelection;
 
-export type SessionToolResultStatus = "success" | "error";
+export type SessionTurnDraftStatus = "streaming" | "awaiting_human" | "error";
 
-export interface SessionToolResult {
-  status: SessionToolResultStatus;
-  tool: string;
-  trace_id?: string;
-  output?: string;
-  error?: string;
-}
-
-export interface SessionMessage {
-  index: number;
-  role: SessionMessageRole;
-  text?: string;
-  content?: SessionContentPart[];
-  tool_calls?: SessionToolCall[];
-  tool_result?: SessionToolResult | null;
-  tool_call_id?: string;
-  in_progress?: boolean;
-  thinking?: string;
-}
-
-export interface SessionMessagePage {
-  limit: number;
-  before?: number | null;
-  start_index?: number | null;
-  end_index?: number | null;
-  has_more_before: boolean;
-  next_before?: number | null;
-}
-
-export interface SessionMetadata {
-  id: string;
-  title: string;
-  created_at: string;
-  updated_at: string;
-  message_count: number;
-  token_count: number;
-}
-
-export interface SessionDetail extends SessionMetadata {
-  messages: SessionMessage[];
-  page: SessionMessagePage;
-}
+export type SessionTurnDraftSegment = SharedSessionTurnDraftSegment;
+export type SessionTurnDraftTool = SharedSessionTurnDraftTool;
+export type SessionTurnDraftPendingQuestion = SharedSessionTurnDraftPendingQuestion;
+export type SessionTurnDraft = SharedSessionTurnDraft;
+export type SessionDetail = SharedSessionDetail;
 
 export interface ChatSelectedSkill {
   id: string;
@@ -367,6 +369,7 @@ export interface StoredMobileConversation {
   created_at: string;
   updated_at: string;
   messages: MobileConversationMessage[];
+  source_snapshot_complete?: boolean;
   source_message_count?: number;
   synced_message_count?: number;
 }
@@ -389,8 +392,11 @@ export interface MobileSessionRunState {
 
 export interface MobileSessionView {
   bridgeOwned: boolean;
+  hasOlderHistory?: boolean;
   id: string;
+  loadingOlderHistory?: boolean;
   messages: MobileConversationMessage[];
+  nextHistoryBefore?: number | null;
   reply?: AgentPayload;
   run: MobileSessionRunState;
   title: string;

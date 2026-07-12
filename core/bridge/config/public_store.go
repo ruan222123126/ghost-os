@@ -6,6 +6,8 @@ type Store interface {
 	PublicSnapshot() (Snapshot, error)
 	ListProviders() ([]ProviderRecord, error)
 	ListProviderSyncRecords() ([]ProviderRecord, error)
+	GetProvider(name string) (ProviderRecord, error)
+	GetProviderByID(providerID string) (ProviderRecord, error)
 	AddProvider(ProviderRecord) error
 	UpdateProvider(name string, cfg ProviderRecord) error
 	DeleteProvider(name string) error

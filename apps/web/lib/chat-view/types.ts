@@ -51,10 +51,6 @@ export interface MessageListMessageRow {
 export type MessageListRow =
   | MessageListMessageRow
   | {
-    key: 'history-loading';
-    kind: 'history_loading';
-  }
-  | {
     key: 'thinking-indicator';
     kind: 'thinking_indicator';
   };
@@ -67,7 +63,6 @@ export interface ChatViewProjection {
   hasThinkingText: boolean;
   hasAssistantText: boolean;
   shouldAutoCollapseLatestThinkingPanel: boolean;
-  visibleMessagesForPostSendOverflow: ChatMessage[];
 }
 
 export interface MessageListProjectionInput extends ChatViewInput {
@@ -76,7 +71,6 @@ export interface MessageListProjectionInput extends ChatViewInput {
 }
 
 export interface MessageListProjection extends ChatViewProjection {
-  estimatedRowSize: number;
   rows: MessageListRow[];
   rowCount: number;
   loading: boolean;

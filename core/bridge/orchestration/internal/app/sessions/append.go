@@ -51,15 +51,22 @@ func AppendSession(store Store, req api.SessionAppendRequest) (api.SessionAppend
 	}
 	loaded.EndedAt = time.Time{}
 
+	assistantAppended := false
 	for _, message := range req.Messages {
 		normalized, err := normalizeAppendMessage(message)
 		if err != nil {
 			return api.SessionAppendResponse{}, err
 		}
 		loaded.AddMessage(normalized)
+		if normalized.Role == llm.RoleAssistant {
+			assistantAppended = true
+		}
 		if strings.TrimSpace(loaded.Title) == "" && normalized.Role == llm.RoleUser {
 			loaded.Title = strings.TrimSpace(normalized.Text)
 		}
+	}
+	if assistantAppended {
+		clearDraftsAfterAssistantAppend(loaded)
 	}
 
 	if err := store.Save(loaded); err != nil {
@@ -71,6 +78,12 @@ func AppendSession(store Store, req api.SessionAppendRequest) (api.SessionAppend
 		MessageCount: loaded.MessageCount,
 		UpdatedAt:    loaded.UpdatedAt.UTC().Format(time.RFC3339),
 	}, nil
+}
+
+func clearDraftsAfterAssistantAppend(sess *session.Session) {
+	now := time.Now().UTC()
+	sess.ClearAssistantDraft(now)
+	sess.ClearTurnDraft(now)
 }
 
 func normalizeAppendMessage(message api.SessionAppendMessage) (llm.Message, error) {

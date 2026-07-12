@@ -26,10 +26,6 @@ func (s *bridgeService) requireTaskMutationRunner() (apptasks.Mutation, int, err
 	return s.taskActions().RequireMutationRunner()
 }
 
-func legacyStatusFromServiceError(err error) int {
-	return bus.StatusFromError(err)
-}
-
 func (s *bridgeService) taskActions() taskservice.Actions {
 	return taskservice.New(taskservice.Config{
 		Store:             s.taskStore(),
@@ -148,7 +144,7 @@ func (s *bridgeService) executeHumanAnswerAndResumeAction(ctx context.Context, p
 	}
 	if params.Cancelled {
 		result := cancelledHumanTurn(sessionID)
-		payload, err := newAgentResponsePayload(result.message, result.sessionID, result.sessionEnd, agentResponseMeta{})
+		payload, err := newAgentResponsePayload(result.message, result.sessionID, result.sessionEnd)
 		if err != nil {
 			return ServiceResult{}, bus.WrapError(ServiceErrorInternal, err)
 		}

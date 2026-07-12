@@ -2,7 +2,8 @@ const BLOCK_MARKDOWN_PATTERNS = [
   /(^|\n)\s{0,3}#{1,6}[ \t]+\S/,
   /(^|\n)\s{0,3}>[ \t]?\S/,
   /(^|\n)\s{0,3}(?:[-+*][ \t]+\S|\d+\.[ \t]+\S)/,
-  /(^|\n)\s*```/,
+  /(^|\n)\s{0,3}(?:`{3,}|~{3,})/,
+  /(^|\n)(?: {4}|\t)\S/,
   /(^|\n)\s*\|.+\|/,
   /(^|\n)\s{0,3}(?:---|\*\*\*|___)\s*($|\n)/,
   /(^|\n)\s{0,3}\$\$[\s\S]+?\$\$/,
@@ -16,15 +17,15 @@ const INLINE_MARKDOWN_PATTERNS = [
   /\$\$[^$\n]+\$\$/,
 ] as const;
 
-const MARKDOWN_TOKENS = ['`', '[', '#', '*', '-', '+', '>', '|', '~', '$', '\n1.'] as const;
+const MARKDOWN_TOKENS = ['`', '[', '#', '*', '-', '+', '>', '|', '~', '$', '\n1.', '    ', '\t'] as const;
 
 export function shouldRenderAssistantMarkdown(content: string): boolean {
-  const trimmed = content.trim();
-  if (!trimmed || !containsMarkdownTokens(trimmed)) {
+  const source = content.trimEnd();
+  if (!source.trim() || !containsMarkdownTokens(source)) {
     return false;
   }
-  return matchesMarkdownPattern(trimmed, BLOCK_MARKDOWN_PATTERNS)
-    || matchesMarkdownPattern(trimmed, INLINE_MARKDOWN_PATTERNS);
+  return matchesMarkdownPattern(source, BLOCK_MARKDOWN_PATTERNS)
+    || matchesMarkdownPattern(source, INLINE_MARKDOWN_PATTERNS);
 }
 
 function containsMarkdownTokens(content: string): boolean {
@@ -43,4 +44,8 @@ function matchesMarkdownPattern(content: string, patterns: readonly RegExp[]): b
     }
   }
   return false;
+}
+
+export function isMarkdownFenceLine(line: string): boolean {
+  return /^\s{0,3}(?:`{3,}|~{3,})/.test(line);
 }

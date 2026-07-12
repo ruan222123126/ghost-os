@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MobileConnectionPanel } from "./MobileConnectionPanel";
 import type { StoredSettings } from "../mobileTypes";
@@ -66,6 +67,35 @@ describe("MobileConnectionPanel", () => {
     const saveToken = onSettingsChange.mock.calls[1]?.[0] as (current: StoredSettings) => StoredSettings;
     expect(saveUrl(settings)).toMatchObject({ bridgeUrl: "http://192.168.1.10:8080" });
     expect(saveToken(settings)).toMatchObject({ apiToken: "token-1" });
+  });
+
+  it("stays on connection detail while editing HTTP fields", () => {
+    function TestHost() {
+      const [settings, setSettings] = useState(baseSettings());
+
+      return (
+        <MobileConnectionPanel
+          open
+          settings={settings}
+          computerSessionPersistStatus={{ tone: "idle", text: "未开启" }}
+          connectionStatus={{ tone: "idle", text: "未连接" }}
+          onClose={vi.fn()}
+          onConnect={vi.fn()}
+          onSettingsChange={setSettings}
+        />
+      );
+    }
+
+    render(<TestHost />);
+
+    fireEvent.click(screen.getByRole("button", { name: /连接/ }));
+
+    const bridgeUrlInput = screen.getByDisplayValue("http://127.0.0.1:8080");
+    fireEvent.change(bridgeUrlInput, { target: { value: "http://192.168.1.10:8080" } });
+
+    expect(screen.getByRole("group", { name: "连接模式" })).toBeTruthy();
+    expect(screen.getByLabelText("API Token")).toBeTruthy();
+    expect(screen.getByDisplayValue("http://192.168.1.10:8080")).toBeTruthy();
   });
 
   it("keeps backspace inside the bridge url field instead of bubbling to the surrounding page", () => {

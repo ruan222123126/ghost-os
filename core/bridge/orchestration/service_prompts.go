@@ -250,6 +250,10 @@ func (s *bridgeService) configService() appconfig.Service {
 	}
 }
 
+func (s *Service) ExecuteConfigGetAction(traceID string) (ServiceResult, error) {
+	return s.inner.executeConfigGetAction(traceID)
+}
+
 func (s *bridgeService) afterRuntimeConfigUpdate() error {
 	s.syncTaskSchedulerExecutionTimeout()
 	return s.BootstrapSystemTasks()
@@ -257,6 +261,14 @@ func (s *bridgeService) afterRuntimeConfigUpdate() error {
 
 func (s *bridgeService) executeProvidersGetAction(traceID string) (ServiceResult, error) {
 	return bus.ResultFromStatus(s.configService().List(traceID))
+}
+
+func (s *bridgeService) handleConfigProviderExportAction(_ context.Context, params providerExportRequest, traceID string) (ServiceResult, error) {
+	return s.executeProviderExportAction(params, traceID)
+}
+
+func (s *bridgeService) executeProviderExportAction(req providerExportRequest, traceID string) (ServiceResult, error) {
+	return bus.ResultFromStatus(s.configService().Export(req, traceID))
 }
 
 func (s *bridgeService) executeProviderCreateAction(req providerCreateRequest, traceID string) (ServiceResult, error) {

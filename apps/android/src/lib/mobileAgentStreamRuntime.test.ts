@@ -156,6 +156,83 @@ describe("mobile agent stream runtime", () => {
     ]);
   });
 
+  it("ignores final snapshots that repeat the streamed text exactly", () => {
+    const { runtime } = projectEvents([
+      event("completion_delta", {
+        kind: "text",
+        text: "测试通过。",
+      }),
+      event("message", {
+        text: "测试通过。测试通过。",
+      }),
+    ]);
+
+    expect(createAgentPayloadFromRuntime(runtime)).toMatchObject({
+      message: "测试通过。",
+      parts: [
+        {
+          id: "text:1",
+          kind: "text",
+          text: "测试通过。",
+        },
+      ],
+    });
+  });
+
+  it("keeps tool part order when a final snapshot repeats visible text", () => {
+    const { runtime } = projectEvents([
+      event("completion_delta", {
+        kind: "text",
+        text: "先检查。",
+      }),
+      event("tool_call_started", {
+        arguments_json: "{\"cmd\":\"pwd\"}",
+        tool: "bash_exec",
+        tool_call_id: "call-pwd",
+      }),
+      event("tool_call_finished", {
+        output: "/repo",
+        status: "success",
+        tool: "bash_exec",
+        tool_call_id: "call-pwd",
+      }),
+      event("completion_delta", {
+        kind: "text",
+        text: "完成。",
+      }),
+      event("message", {
+        text: "先检查。完成。先检查。完成。",
+      }),
+    ]);
+
+    expect(createAgentPayloadFromRuntime(runtime).parts).toEqual([
+      {
+        id: "text:1",
+        kind: "text",
+        text: "先检查。",
+      },
+      {
+        id: "stream-tool:trace-1:call-pwd",
+        kind: "tool",
+        tool: {
+          id: "stream-tool:trace-1:call-pwd",
+          input: "{\"cmd\":\"pwd\"}",
+          output: "/repo",
+          status: "success",
+          toolCallId: "call-pwd",
+          toolName: "bash_exec",
+          traceId: "trace-1",
+        },
+      },
+      {
+        id: "text:2",
+        kind: "text",
+        text: "完成。",
+      },
+    ]);
+    expect(createAgentPayloadFromRuntime(runtime).message).toBe("先检查。完成。");
+  });
+
   it("stores finished tool errors explicitly", () => {
     const { runtime } = projectEvents([
       event("tool_call_started", {

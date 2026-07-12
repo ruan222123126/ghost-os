@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"ghost-os/bridge/internal/stringutil"
 )
 
 const secretBytes = 32
@@ -206,7 +208,7 @@ func newDeviceCredential(options PairingOptions) (DeviceCredential, error) {
 	}
 	return DeviceCredential{
 		DeviceID: id,
-		Label:    firstNonEmpty(options.Label, "mobile"),
+		Label:    stringutil.FirstNonEmpty(options.Label, "mobile"),
 		Secret:   secret,
 		PairedAt: now.UTC(),
 	}, nil
@@ -260,13 +262,4 @@ func DecodeSecret(value string) ([]byte, error) {
 		return nil, fmt.Errorf("secret must be at least %d bytes", secretBytes)
 	}
 	return secret, nil
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
 }

@@ -2,7 +2,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createTraceId, errorMessage, hasTauriRuntime } from "../lib/bridgeBus";
 import type { BridgeBusCommand, BridgeEnvelope } from "../lib/bridgeBus";
-import { streamAgentMessageHTTP } from "../lib/agentStream";
+import {
+  isReconnectableBridgeStreamError,
+  resolveSessionId,
+  streamAgentMessageHTTP,
+} from "../lib/agentStream";
 import type { AgentStreamEvent } from "../lib/agentStream";
 import {
   createAgentPayloadFromRuntime,
@@ -22,10 +26,20 @@ import {
 import { parseSessionDetail, parseSessionMetadataList } from "../lib/sessionPayloadParser";
 import { MobileWebRTCBridge } from "../lib/mobileWebRTC";
 import { loadSettings, normalizeBridgeUrl, saveSettings } from "../lib/settingsStorage";
+import { stringsEqualIgnoreCase } from "../lib/textCompare";
+import {
+  cancelAllStreamReplyCommitters,
+  cancelStreamReplyCommit,
+  enqueueStreamReplyCommit,
+  flushStreamReplyCommit,
+  type StreamReplyCommitter,
+} from "../lib/streamReplyCommitter";
 import type {
   AgentRuntimeType,
   AgentPayload,
+  AgentRequestMode,
   ChatSelectedSkill,
+  CodexModelCatalogPayload,
   ConfigPayload,
   ExternalAgentApprovalDecision,
   ExternalCodexPermissionMode,
@@ -34,9 +48,14 @@ import type {
   OrchestrationTaskPayload,
   ProviderConfigInputPayload,
   ProviderConfigPayload,
+  ProviderExportRequestPayload,
   ProviderListPayload,
   SessionDetail,
+  SessionGetOptions,
   SessionMetadata,
+  SessionRuntimeSelection,
+  SessionRunState,
+  SessionRunStatesGetRequest,
   SkillPayload,
   StatusMessage,
   StoredConnectionSnapshot,
@@ -46,8 +65,9 @@ import type {
 } from "../mobileTypes";
 import { buildAgentMessageWithSelectedSkill } from "../lib/selectedSkillMessage";
 
-const SESSION_DETAIL_PAGE_LIMIT = 100;
+const SESSION_DETAIL_PAGE_LIMIT = 20;
 const SESSION_FULL_PAGE_LIMIT = 200;
+const SESSION_LIST_REFRESH_INTERVAL_MS = 5000;
 const EXTERNAL_AGENT_STREAM_PATH = "api/external-agent/stream";
 const UNSUPPORTED_SKILL_MANAGEMENT_TEXT = "电脑端不支持技能管理";
 
@@ -55,6 +75,8 @@ type TaskRunScope = "user" | "orchestration";
 
 interface SendAgentMessageOptions {
   agentRuntime?: AgentRuntimeType;
+  codexModel?: string;
+  mode?: AgentRequestMode;
   message: string;
   history: MobileConversationMessage[];
   onReply: (reply: AgentPayload) => void;
@@ -63,6 +85,7 @@ interface SendAgentMessageOptions {
   requestId?: string;
   selectedSkill?: ChatSelectedSkill;
   sessionId?: string;
+  shouldStreamRealtime?: (sessionId: string) => boolean;
   traceId?: string;
 }
 
@@ -71,6 +94,7 @@ interface SendAgentMessageResult {
   ok: boolean;
   reply?: AgentPayload;
   sessionId?: string;
+  streamInterrupted?: boolean;
 }
 
 interface StopAgentRunInput {
@@ -198,10 +222,6 @@ function connectedStatusText(mode: StoredSettings["connectionMode"]): string {
   return mode === "webrtc" ? "WebRTC 已连接" : "HTTP fallback 已连接";
 }
 
-function stringsEqualIgnoreCase(left: string, right: string): boolean {
-  return left.trim().toLowerCase() === right.trim().toLowerCase();
-}
-
 function withLocalProviderSelection(
   providerList: ProviderListPayload | undefined,
   settings: StoredSettings,
@@ -223,6 +243,13 @@ function resolveProviderForSettings(
 ): ProviderConfigPayload | undefined {
   return providerList?.providers.find((provider) => provider.provider_id === settings.localProviderId)
     ?? providerList?.providers.find((provider) => !provider.deleted_at);
+}
+
+function providerExportRequestFromRecord(record: ProviderConfigPayload): ProviderExportRequestPayload {
+  return {
+    name: record.name,
+    provider_id: record.provider_id,
+  };
 }
 
 function mergeLocalProvidersWithRemote(
@@ -262,6 +289,37 @@ function escapeRegExp(value: string): string {
 function isUnsupportedActionError(error: unknown, action: string): boolean {
   const pattern = new RegExp(`unsupported action\\s*:?[\\s"']+${escapeRegExp(action)}(?:\\b|["'])`, "iu");
   return pattern.test(errorMessage(error));
+}
+
+function runtimeSelectionConfigUpdate(
+  selection: SessionRuntimeSelection,
+  config: ConfigPayload | undefined,
+): Record<string, string> {
+  const provider = selection.provider?.trim() || "";
+  const model = selection.model?.trim() || "";
+  const update: Record<string, string> = {};
+  if (provider && !stringsEqualIgnoreCase(config?.provider ?? "", provider)) {
+    update.provider = provider;
+  }
+  if (model && (config?.model ?? "").trim() !== model) {
+    update.model = model;
+  }
+  return update;
+}
+
+function hasRuntimeSelectionConfigUpdate(update: Record<string, string>): boolean {
+  return Object.keys(update).length > 0;
+}
+
+function providerForRuntimeSelection(
+  providers: ProviderListPayload | undefined,
+  selection: SessionRuntimeSelection,
+): ProviderConfigPayload | undefined {
+  const providerName = selection.provider?.trim() || "";
+  if (!providerName) {
+    return undefined;
+  }
+  return providers?.providers.find((provider) => stringsEqualIgnoreCase(provider.name, providerName));
 }
 
 function codexPermissionMode(config: ConfigPayload | undefined): ExternalCodexPermissionMode {
@@ -306,11 +364,41 @@ function upsertById<TItem extends { id: string }>(
   return [task, ...existing];
 }
 
+function shouldProjectStreamEvent(
+  event: AgentStreamEvent,
+  currentSessionId: string,
+  shouldStreamRealtime?: (sessionId: string) => boolean,
+): boolean {
+  if (!shouldStreamRealtime) {
+    return true;
+  }
+  const sessionId = resolveSessionId(event) || currentSessionId.trim();
+  return shouldStreamRealtime(sessionId);
+}
+
+function commitStreamEventSessionId(
+  event: AgentStreamEvent,
+  runtime: { sessionId: string },
+  projector: Pick<MobileAgentStreamProjector, "commitSessionId">,
+): void {
+  const sessionId = resolveSessionId(event);
+  if (!sessionId || sessionId === runtime.sessionId) {
+    return;
+  }
+  runtime.sessionId = sessionId;
+  projector.commitSessionId(sessionId);
+}
+
 export function useMobileBridge() {
   const [settings, setSettings] = useState<StoredSettings>(() => loadSettings());
   const [host, setHost] = useState<HostProfile>();
   const [config, setConfig] = useState<ConfigPayload>();
   const [providerList, setProviderList] = useState<ProviderListPayload>();
+  const [codexModelCatalog, setCodexModelCatalog] = useState<CodexModelCatalogPayload>({
+    models: [],
+    default_model: "",
+  });
+  const [codexModelCatalogError, setCodexModelCatalogError] = useState("");
   const [localProviderList, setLocalProviderList] = useState<ProviderListPayload>();
   const [skillList, setSkillList] = useState<SkillPayload[]>();
   const [skillListError, setSkillListError] = useState("");
@@ -333,6 +421,7 @@ export function useMobileBridge() {
   const connectedTargetRef = useRef<string | undefined>(undefined);
   const autoConnectAttemptedRef = useRef(false);
   const pendingAutoConnectTargetRef = useRef<string | undefined>(undefined);
+  const streamCommittersRef = useRef(new Map<string, StreamReplyCommitter>());
 
   const bridgeUrl = useMemo(() => normalizeBridgeUrl(settings.bridgeUrl), [settings.bridgeUrl]);
   const apiToken = useMemo(() => settings.apiToken?.trim() || "", [settings.apiToken]);
@@ -370,6 +459,7 @@ export function useMobileBridge() {
 
   useEffect(() => {
     return () => {
+      cancelAllStreamReplyCommitters(streamCommittersRef.current);
       webRTCClientRef.current?.close();
     };
   }, []);
@@ -384,6 +474,8 @@ export function useMobileBridge() {
     webRTCClientRef.current = undefined;
     setConfig(undefined);
     setProviderList(undefined);
+    setCodexModelCatalog({ models: [], default_model: "" });
+    setCodexModelCatalogError("");
     setSkillList(undefined);
     setSkillListError("");
     setTaskList(undefined);
@@ -444,6 +536,19 @@ export function useMobileBridge() {
     return payload;
   }, [requestBridge]);
 
+  const getSessionRunStates = useCallback(
+    (params: SessionRunStatesGetRequest): Promise<SessionRunState[]> =>
+      requestBridge<SessionRunState[]>("SESSION_RUN_STATES_GET", { ...params }),
+    [requestBridge],
+  );
+
+  const loadCodexModelCatalog = useCallback(async (): Promise<CodexModelCatalogPayload> => {
+    setCodexModelCatalogError("");
+    const payload = await requestBridge<CodexModelCatalogPayload>("EXTERNAL_AGENT_MODELS_GET", {});
+    setCodexModelCatalog(payload);
+    return payload;
+  }, [requestBridge]);
+
   const syncLocalProvidersToRemote = useCallback(
     async (remote: ProviderListPayload): Promise<void> => {
       const local = await loadLocalProviderList();
@@ -483,29 +588,51 @@ export function useMobileBridge() {
   const syncRemoteProvidersToLocal = useCallback(async (remote: ProviderListPayload): Promise<void> => {
     const local = await loadLocalProviderList();
     const localById = new Map(local.providers.map((provider) => [provider.provider_id, provider]));
+    const remoteById = new Map(remote.providers.map((provider) => [provider.provider_id, provider]));
 
     for (const record of remote.provider_sync_records ?? []) {
       const localProvider = localById.get(record.provider_id);
       if (localProvider && localProvider.updated_at > record.updated_at) {
         continue;
       }
+      if (record.deleted_at) {
+        await createOrUpdateLocalProvider({
+          base_url: record.base_url,
+          deleted_at: record.deleted_at,
+          model_context_window_tokens: record.model_context_window_tokens,
+          model_response_reserve_tokens: record.model_response_reserve_tokens,
+          models: record.models,
+          name: record.name || localProvider?.name || record.provider_id,
+          provider_id: record.provider_id,
+          response_reserve_tokens: record.response_reserve_tokens,
+          type: record.type ?? localProvider?.type ?? "openai",
+          updated_at: record.updated_at,
+        });
+        continue;
+      }
 
-      await createOrUpdateLocalProvider({
-        base_url: record.base_url,
-        deleted_at: record.deleted_at,
-        model_context_window_tokens: record.model_context_window_tokens,
-        model_response_reserve_tokens: record.model_response_reserve_tokens,
-        models: record.models,
-        name: record.name || localProvider?.name || record.provider_id,
-        provider_id: record.provider_id,
-        response_reserve_tokens: record.response_reserve_tokens,
-        type: record.type ?? localProvider?.type ?? "openai",
-        updated_at: record.updated_at,
-      });
+      const remoteProvider = remoteById.get(record.provider_id);
+      const exported = await requestBridge<ProviderConfigInputPayload>(
+        "CONFIG_PROVIDER_EXPORT",
+        providerExportRequestFromRecord(remoteProvider ?? {
+          api_key_set: Boolean(record.api_key_set),
+          base_url: record.base_url ?? "",
+          model_context_window_tokens: record.model_context_window_tokens,
+          model_response_reserve_tokens: record.model_response_reserve_tokens,
+          models: record.models,
+          name: record.name || localProvider?.name || record.provider_id,
+          provider_id: record.provider_id,
+          response_reserve_tokens: record.response_reserve_tokens,
+          sync_state: "synced",
+          type: record.type ?? localProvider?.type ?? "openai",
+          updated_at: record.updated_at,
+        }),
+      );
+      await createOrUpdateLocalProvider(exported);
     }
 
     setLocalProviderList(await loadLocalProviderList());
-  }, []);
+  }, [requestBridge]);
 
   const loadSkills = useCallback(async (): Promise<SkillPayload[]> => {
     setSkillListError("");
@@ -566,18 +693,27 @@ export function useMobileBridge() {
     }
   }, [connectionStatus.tone, loadProviders, refreshLocalProviders]);
 
-  const syncProvidersBidirectionally = useCallback(async (): Promise<void> => {
-    if (connectionStatus.tone !== "success") {
-      return;
-    }
+  const performProviderSync = useCallback(async (): Promise<void> => {
     const remote = await loadProviders();
     await syncLocalProvidersToRemote(remote);
     const refreshedRemote = await loadProviders();
     await syncRemoteProvidersToLocal(refreshedRemote);
-  }, [connectionStatus.tone, loadProviders, syncLocalProvidersToRemote, syncRemoteProvidersToLocal]);
+  }, [loadProviders, syncLocalProvidersToRemote, syncRemoteProvidersToLocal]);
+
+  const syncProvidersBidirectionally = useCallback(async (): Promise<void> => {
+    if (connectionStatus.tone !== "success") {
+      return;
+    }
+    await performProviderSync();
+  }, [connectionStatus.tone, performProviderSync]);
 
   useEffect(() => {
     if (connectionStatus.tone === "success") {
+      void loadCodexModelCatalog().catch((error: unknown) => {
+        const text = `Codex 模型列表加载失败：${errorMessage(error)}`;
+        console.error("[useMobileBridge] load Codex models failed", error);
+        setCodexModelCatalogError(text);
+      });
       void syncProvidersBidirectionally().catch((error: unknown) => {
         console.error("[useMobileBridge] provider sync failed", error);
       });
@@ -586,7 +722,7 @@ export function useMobileBridge() {
     setSettings((current) => (current.remoteExecutionEnabled
       ? { ...current, remoteExecutionEnabled: false }
       : current));
-  }, [connectionStatus.tone, syncProvidersBidirectionally]);
+  }, [connectionStatus.tone, loadCodexModelCatalog, syncProvidersBidirectionally]);
 
   const selectedLocalProviderList = useMemo(
     () => withLocalProviderSelection(localProviderList, settings),
@@ -905,10 +1041,25 @@ export function useMobileBridge() {
     });
   }, [refreshSessions]);
 
+  useEffect(() => {
+    if (connectionStatus.tone !== "success" || !config) {
+      return;
+    }
+
+    const timer = window.setInterval(refreshSessionsInBackground, SESSION_LIST_REFRESH_INTERVAL_MS);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [config, connectionStatus.tone, refreshSessionsInBackground]);
+
   const getSession = useCallback(
-    async (sessionId: string): Promise<SessionDetail> => {
+    async (sessionId: string, options: SessionGetOptions = {}): Promise<SessionDetail> => {
       return parseSessionDetail(
-        await requestBridge<unknown>("SESSION_GET", { id: sessionId.trim(), limit: SESSION_DETAIL_PAGE_LIMIT }),
+        await requestBridge<unknown>("SESSION_GET", {
+          id: sessionId.trim(),
+          limit: options.limit ?? SESSION_DETAIL_PAGE_LIMIT,
+          ...(options.before === undefined ? {} : { before: options.before }),
+        }),
       );
     },
     [requestBridge],
@@ -1005,6 +1156,7 @@ export function useMobileBridge() {
         webRTCClientRef.current = client;
       }
       await refreshRuntimeConfig();
+      await performProviderSync();
       connectedTargetRef.current = currentConnectionTarget;
       setSettings((current) => ({
         ...current,
@@ -1038,6 +1190,7 @@ export function useMobileBridge() {
     refreshSkillsAfterConnect,
     refreshTasksAfterConnect,
     refreshOrchestrationsAfterConnect,
+    performProviderSync,
     refreshRuntimeConfig,
     refreshSessionsAfterConnect,
     settings,
@@ -1103,6 +1256,48 @@ export function useMobileBridge() {
     [config?.model, loadProviders, requestBridge, settings.remoteExecutionEnabled],
   );
 
+  const switchRuntimeSelection = useCallback(
+    async (selection: SessionRuntimeSelection | null | undefined): Promise<boolean> => {
+      if (!selection || selection.runtime === "codex") {
+        return true;
+      }
+      const model = selection.model?.trim() || "";
+      const provider = providerForRuntimeSelection(mergedProviderList, selection);
+      if (!settings.remoteExecutionEnabled) {
+        setSettings((current) => ({
+          ...current,
+          localModel: model || current.localModel?.trim() || provider?.models?.[0]?.trim() || "",
+          localProviderId: provider?.provider_id ?? current.localProviderId,
+        }));
+        setStatus({ tone: "success", text: "会话模型已切换" });
+        return true;
+      }
+
+      const update = runtimeSelectionConfigUpdate(selection, config);
+      if (!hasRuntimeSelectionConfigUpdate(update)) {
+        return true;
+      }
+      setStatus({ tone: "loading", text: "会话模型切换中" });
+      try {
+        const payload = await requestBridge<ConfigPayload>("CONFIG_UPDATE", update);
+        setConfig(payload);
+        await loadProviders();
+        setStatus({ tone: "success", text: "会话模型已切换" });
+        return true;
+      } catch (error) {
+        setStatus({ tone: "error", text: errorMessage(error) });
+        return false;
+      }
+    },
+    [
+      config,
+      loadProviders,
+      mergedProviderList,
+      requestBridge,
+      settings.remoteExecutionEnabled,
+    ],
+  );
+
   const updateExternalCodexPermissionMode = useCallback(
     async (mode: ExternalCodexPermissionMode): Promise<boolean> => {
       setStatus({ tone: "loading", text: "Codex 权限更新中" });
@@ -1131,12 +1326,16 @@ export function useMobileBridge() {
         message: options.message,
         selectedSkill: options.selectedSkill,
       });
-      if (agentRuntime === "ghost" && !settings.remoteExecutionEnabled) {
+      if (options.mode === "plan" && !config) {
+        options.onStatus({ tone: "error", text: "请先连接电脑端" });
+        return { ok: false };
+      }
+      if (agentRuntime === "ghost" && !settings.remoteExecutionEnabled && options.mode !== "plan") {
         if (options.selectedSkill) {
           options.onStatus({ tone: "error", text: "本地运行不支持技能" });
           return { ok: false };
         }
-        const localProvider = resolveProviderForSettings(mergedProviderList, settings);
+        const localProvider = resolveProviderForSettings(selectedLocalProviderList, settings);
         const model = settings.localModel?.trim() || localProvider?.models?.[0]?.trim() || "";
         if (!localProvider || !model) {
           options.onStatus({ tone: "error", text: "请先配置 provider 和模型" });
@@ -1186,6 +1385,7 @@ export function useMobileBridge() {
       const params: Record<string, unknown> = agentRuntime === "codex"
         ? {
           message: agentMessage,
+          ...(options.codexModel?.trim() ? { model: options.codexModel.trim() } : {}),
           permission_mode: codexPermissionMode(config),
           project_root: config?.project_root?.trim() || undefined,
           provider: "codex",
@@ -1193,6 +1393,7 @@ export function useMobileBridge() {
         }
         : {
           message: agentMessage,
+          ...(options.mode ? { mode: options.mode } : {}),
           ...(initialSessionId ? { session_id: initialSessionId } : {}),
           ...((config?.provider && config?.model)
             ? {
@@ -1206,9 +1407,20 @@ export function useMobileBridge() {
       const streamAction = agentRuntime === "codex"
         ? initialSessionId ? "EXTERNAL_AGENT_SEND" : "EXTERNAL_AGENT_START"
         : "AGENT_SEND";
+      let pendingStreamStatus: StatusMessage | undefined;
+      const enqueueStreamProjectionCommit = () => {
+        enqueueStreamReplyCommit(streamCommittersRef.current, requestId, () => {
+          const status = pendingStreamStatus;
+          pendingStreamStatus = undefined;
+          if (status) {
+            options.onStatus(status);
+          }
+          options.onReply(createAgentPayloadFromRuntime(runtime));
+        });
+      };
       const projector: MobileAgentStreamProjector = {
-        commitReply: (nextRuntime) => {
-          options.onReply(createAgentPayloadFromRuntime(nextRuntime));
+        commitReply: () => {
+          enqueueStreamProjectionCommit();
         },
         commitSessionId: (sessionId) => {
           const trimmedSessionId = sessionId.trim();
@@ -1218,13 +1430,20 @@ export function useMobileBridge() {
           options.onSessionId(trimmedSessionId);
           refreshSessionsInBackground();
         },
-        setStatus: options.onStatus,
+        setStatus: (status) => {
+          pendingStreamStatus = status;
+          enqueueStreamProjectionCommit();
+        },
       };
 
       options.onReply(createAgentPayloadFromRuntime(runtime));
       options.onStatus({ tone: "loading", text: "发送中" });
       try {
         const applyEvent = (event: AgentStreamEvent) => {
+          if (!shouldProjectStreamEvent(event, runtime.sessionId, options.shouldStreamRealtime)) {
+            commitStreamEventSessionId(event, runtime, projector);
+            return;
+          }
           projectMobileAgentStreamEvent(event, runtime, projector);
         };
         const result = settings.connectionMode === "http"
@@ -1234,6 +1453,9 @@ export function useMobileBridge() {
             body: params,
             message: agentMessage,
             onEvent: applyEvent,
+            onReconnectAttempt: (attempt, maxAttempts) => {
+              projector.setStatus({ tone: "loading", text: `连接中断，正在重连（${attempt}/${maxAttempts}）` });
+            },
             path: agentRuntime === "codex" ? EXTERNAL_AGENT_STREAM_PATH : undefined,
             requestId,
             sessionId: initialSessionId,
@@ -1250,8 +1472,9 @@ export function useMobileBridge() {
         if (resolvedSessionId) {
           runtime.sessionId = resolvedSessionId;
           projector.commitSessionId(resolvedSessionId);
-          projector.commitReply(runtime);
         }
+        runtime.sessionEnded = result.sessionEnded;
+        flushStreamReplyCommit(streamCommittersRef.current, requestId);
         if (!result.awaitingHuman) {
           options.onStatus({ tone: "success", text: result.sessionEnded ? "会话已结束" : "回复已返回" });
         }
@@ -1262,7 +1485,16 @@ export function useMobileBridge() {
           sessionId: runtime.sessionId || resolvedSessionId,
         };
       } catch (error) {
-        options.onStatus({ tone: "error", text: errorMessage(error) });
+        cancelStreamReplyCommit(streamCommittersRef.current, requestId);
+        const resolvedError = error instanceof Error ? error : new Error(errorMessage(error));
+        if (isReconnectableBridgeStreamError(resolvedError) && runtime.sessionId) {
+          return {
+            ok: false,
+            sessionId: runtime.sessionId,
+            streamInterrupted: true,
+          };
+        }
+        options.onStatus({ tone: "error", text: resolvedError.message });
         return { ok: false };
       }
     },
@@ -1274,7 +1506,7 @@ export function useMobileBridge() {
       config?.provider,
       config?.project_root,
       config?.external_codex_permission_mode,
-      mergedProviderList,
+      selectedLocalProviderList,
       refreshSessionsInBackground,
       settings.connectionMode,
       settings.localModel,
@@ -1362,6 +1594,8 @@ export function useMobileBridge() {
     appendSessionMessages,
     bridgeUrl,
     config,
+    codexModelCatalog,
+    codexModelCatalogError,
     connectBridge,
     connectionStatus,
     createProvider,
@@ -1370,6 +1604,7 @@ export function useMobileBridge() {
     deleteTask,
     getFullSession,
     getSession,
+    getSessionRunStates,
     host,
     providerList: mergedProviderList,
     localProviderList: selectedLocalProviderList,
@@ -1395,6 +1630,7 @@ export function useMobileBridge() {
     skillListError,
     stopAgentRun,
     switchModel,
+    switchRuntimeSelection,
     taskList,
     taskListError,
     status,

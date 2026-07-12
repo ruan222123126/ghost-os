@@ -34,12 +34,6 @@ func (s *Store) withStoreLock(fn func() error) error {
 	return fn()
 }
 
-func (s *Store) withSessionLock(sessionID string, allowMissingLegacy bool, fn func() error) error {
-	_ = sessionID
-	_ = allowMissingLegacy
-	return s.withStoreLock(fn)
-}
-
 func (s *Store) withTx(action string, fn func(tx *sql.Tx) error) error {
 	tx, err := s.db.Begin()
 	if err != nil {

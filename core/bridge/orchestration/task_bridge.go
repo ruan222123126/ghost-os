@@ -230,6 +230,24 @@ func (s *bridgeService) executeExternalAgentSendAction(ctx context.Context, para
 	return s.executeExternalAgentStreamless(ctx, params, traceID, false)
 }
 
+func (s *bridgeService) executeExternalAgentModelsGetAction(ctx context.Context, traceID string) (ServiceResult, error) {
+	manager := s.externalAgentManager()
+	if manager == nil {
+		return ServiceResult{}, bus.WrapError(ServiceErrorInternal, errors.New("external agent manager is not configured"))
+	}
+	logAction(traceID, BusActionExternalAgentModelsGet, "running", nil)
+	catalog, err := manager.ListModels(ctx)
+	if err != nil {
+		logAction(traceID, BusActionExternalAgentModelsGet, "error", err)
+		return ServiceResult{}, bus.WrapError(mapExternalAgentError(err), err)
+	}
+	logAction(traceID, BusActionExternalAgentModelsGet, "success", nil)
+	return bus.ResultSuccess(codexModelCatalog{
+		Models:       catalog.Models,
+		DefaultModel: catalog.DefaultModel,
+	}), nil
+}
+
 func (s *bridgeService) executeExternalAgentStreamless(ctx context.Context, params externalAgentRequest, traceID string, forceStart bool) (ServiceResult, error) {
 	manager := s.externalAgentManager()
 	if manager == nil {

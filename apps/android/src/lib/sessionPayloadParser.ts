@@ -1,17 +1,39 @@
 import type {
+  AskHumanOption,
   SessionContentPart,
   SessionDetail,
   SessionMessage,
   SessionMessagePage,
   SessionMessageRole,
+  SessionRuntimeSelection,
   SessionMetadata,
+  ProviderType,
   SessionToolCall,
   SessionToolResult,
   SessionToolResultStatus,
+  SessionTurnDraft,
+  SessionTurnDraftPendingQuestion,
+  SessionTurnDraftSegment,
+  SessionTurnDraftStatus,
+  SessionTurnDraftTool,
 } from "../mobileTypes";
+import {
+  parseArray,
+  parseOptionalString,
+  requireArray,
+  requireBoolean,
+  requireInteger,
+  requireNullableInteger,
+  requireRecord,
+  requireString,
+} from "./payloadValidators";
 
 const SESSION_MESSAGE_ROLES = new Set<SessionMessageRole>(["system", "internal", "user", "assistant", "tool"]);
 const SESSION_TOOL_RESULT_STATUSES = new Set<SessionToolResultStatus>(["success", "error"]);
+const SESSION_RUNTIME_SELECTION_RUNTIMES = new Set<SessionRuntimeSelection["runtime"]>(["ghost", "codex"]);
+const SESSION_RUNTIME_SELECTION_PROVIDER_TYPES = new Set<ProviderType>(["openai", "anthropic", "custom", "codex"]);
+const SESSION_RUNTIME_SELECTION_MODES = new Set<NonNullable<SessionRuntimeSelection["mode"]>>(["default", "plan"]);
+const SESSION_TURN_DRAFT_STATUSES = new Set<SessionTurnDraftStatus>(["streaming", "awaiting_human", "error"]);
 
 export function parseSessionMetadataList(payload: unknown): SessionMetadata[] {
   if (!Array.isArray(payload)) {
@@ -29,6 +51,14 @@ export function parseSessionDetail(payload: unknown): SessionDetail {
       parseSessionMessage(item, `SESSION_GET payload.messages[${index}]`),
     ),
     page: parseSessionMessagePage(object.page, "SESSION_GET payload.page"),
+    turn_draft: parseOptionalSessionTurnDraft(
+      object.turn_draft,
+      "SESSION_GET payload.turn_draft",
+    ),
+    last_runtime_selection: parseOptionalSessionRuntimeSelection(
+      object.last_runtime_selection,
+      "SESSION_GET payload.last_runtime_selection",
+    ),
   };
 }
 
@@ -142,46 +172,111 @@ function parseSessionMessagePage(payload: unknown, path: string): SessionMessage
   return page;
 }
 
-function requireRecord(value: unknown, path: string): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${path} must be an object`);
+function parseOptionalSessionRuntimeSelection(
+  payload: unknown,
+  path: string,
+): SessionRuntimeSelection | null | undefined {
+  if (payload === undefined) {
+    return undefined;
   }
-  return value as Record<string, unknown>;
-}
-
-function requireArray(value: unknown, path: string): unknown[] {
-  if (!Array.isArray(value)) {
-    throw new Error(`${path} must be an array`);
-  }
-  return value;
-}
-
-function requireString(value: unknown, path: string): string {
-  if (typeof value !== "string") {
-    throw new Error(`${path} must be a string`);
-  }
-  return value;
-}
-
-function requireInteger(value: unknown, path: string): number {
-  if (typeof value !== "number" || !Number.isInteger(value)) {
-    throw new Error(`${path} must be an integer`);
-  }
-  return value;
-}
-
-function requireNullableInteger(value: unknown, path: string): number | null {
-  if (value === null) {
+  if (payload === null) {
     return null;
   }
-  return requireInteger(value, path);
+  const object = requireRecord(payload, path);
+  const selection: SessionRuntimeSelection = {
+    runtime: requireRuntimeSelectionRuntime(object.runtime, `${path}.runtime`),
+  };
+  if (object.provider !== undefined) {
+    selection.provider = requireString(object.provider, `${path}.provider`);
+  }
+  if (object.provider_type !== undefined) {
+    selection.provider_type = requireProviderType(object.provider_type, `${path}.provider_type`);
+  }
+  if (object.model !== undefined) {
+    selection.model = requireString(object.model, `${path}.model`);
+  }
+  if (object.mode !== undefined) {
+    selection.mode = requireRuntimeSelectionMode(object.mode, `${path}.mode`);
+  }
+  return selection;
 }
 
-function requireBoolean(value: unknown, path: string): boolean {
-  if (typeof value !== "boolean") {
-    throw new Error(`${path} must be a boolean`);
+function parseOptionalSessionTurnDraft(
+  payload: unknown,
+  path: string,
+): SessionTurnDraft | null | undefined {
+  if (payload === undefined) {
+    return undefined;
   }
-  return value;
+  if (payload === null) {
+    return null;
+  }
+
+  const object = requireRecord(payload, path);
+  const status = requireSessionTurnDraftStatus(object.status, `${path}.status`);
+  const error = parseOptionalString(object.error, `${path}.error`);
+  if (status === "error" && !error) {
+    throw new Error(`${path}.error must be a string when status=error`);
+  }
+
+  return {
+    trace_id: requireString(object.trace_id, `${path}.trace_id`),
+    turn: requireInteger(object.turn, `${path}.turn`),
+    status,
+    error,
+    pending_questions: parseArray(object.pending_questions, `${path}.pending_questions`, parseSessionTurnDraftPendingQuestion),
+    assistant_segments: parseArray(object.assistant_segments, `${path}.assistant_segments`, parseSessionTurnDraftSegment),
+    thinking_segments: parseArray(object.thinking_segments, `${path}.thinking_segments`, parseSessionTurnDraftSegment),
+    tools: parseArray(object.tools, `${path}.tools`, parseSessionTurnDraftTool),
+    item_order: parseArray(object.item_order, `${path}.item_order`, requireString),
+  };
+}
+
+function parseSessionTurnDraftSegment(payload: unknown, path: string): SessionTurnDraftSegment {
+  const object = requireRecord(payload, path);
+  return {
+    id: requireString(object.id, `${path}.id`),
+    content: requireString(object.content, `${path}.content`),
+  };
+}
+
+function parseSessionTurnDraftTool(payload: unknown, path: string): SessionTurnDraftTool {
+  const object = requireRecord(payload, path);
+  return {
+    id: requireString(object.id, `${path}.id`),
+    content: requireString(object.content, `${path}.content`),
+    tool_input: parseOptionalString(object.tool_input, `${path}.tool_input`),
+    tool_name: parseOptionalString(object.tool_name, `${path}.tool_name`),
+    tool_status: parseOptionalString(object.tool_status, `${path}.tool_status`),
+    tool_call_id: parseOptionalString(object.tool_call_id, `${path}.tool_call_id`),
+    trace_id: parseOptionalString(object.trace_id, `${path}.trace_id`),
+  };
+}
+
+function parseSessionTurnDraftPendingQuestion(
+  payload: unknown,
+  path: string,
+): SessionTurnDraftPendingQuestion {
+  const object = requireRecord(payload, path);
+  return {
+    question_id: requireString(object.question_id, `${path}.question_id`),
+    prompt: requireString(object.prompt, `${path}.prompt`),
+    selection_mode: parseOptionalSelectionMode(object.selection_mode, `${path}.selection_mode`),
+    options: object.options === undefined
+      ? undefined
+      : parseArray(object.options, `${path}.options`, parseAskHumanOption),
+  };
+}
+
+function parseAskHumanOption(payload: unknown, path: string): AskHumanOption {
+  const object = requireRecord(payload, path);
+  const option: AskHumanOption = {
+    label: requireString(object.label, `${path}.label`),
+  };
+  if (object.allow_custom !== undefined) {
+    option.allow_custom = requireBoolean(object.allow_custom, `${path}.allow_custom`);
+  }
+  return option;
 }
 
 function requireSessionMessageRole(value: unknown, path: string): SessionMessageRole {
@@ -196,4 +291,45 @@ function requireSessionToolResultStatus(value: unknown, path: string): SessionTo
     throw new Error(`${path} must be one of ${Array.from(SESSION_TOOL_RESULT_STATUSES).join(", ")}`);
   }
   return value as SessionToolResultStatus;
+}
+
+function requireRuntimeSelectionRuntime(value: unknown, path: string): SessionRuntimeSelection["runtime"] {
+  if (typeof value !== "string" || !SESSION_RUNTIME_SELECTION_RUNTIMES.has(value as SessionRuntimeSelection["runtime"])) {
+    throw new Error(`${path} must be one of ${Array.from(SESSION_RUNTIME_SELECTION_RUNTIMES).join(", ")}`);
+  }
+  return value as SessionRuntimeSelection["runtime"];
+}
+
+function requireProviderType(value: unknown, path: string): ProviderType {
+  if (typeof value !== "string" || !SESSION_RUNTIME_SELECTION_PROVIDER_TYPES.has(value as ProviderType)) {
+    throw new Error(`${path} must be one of ${Array.from(SESSION_RUNTIME_SELECTION_PROVIDER_TYPES).join(", ")}`);
+  }
+  return value as ProviderType;
+}
+
+function requireRuntimeSelectionMode(value: unknown, path: string): NonNullable<SessionRuntimeSelection["mode"]> {
+  if (typeof value !== "string" || !SESSION_RUNTIME_SELECTION_MODES.has(value as NonNullable<SessionRuntimeSelection["mode"]>)) {
+    throw new Error(`${path} must be one of ${Array.from(SESSION_RUNTIME_SELECTION_MODES).join(", ")}`);
+  }
+  return value as NonNullable<SessionRuntimeSelection["mode"]>;
+}
+
+function parseOptionalSelectionMode(
+  value: unknown,
+  path: string,
+): SessionTurnDraftPendingQuestion["selection_mode"] {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "string" || (value !== "single" && value !== "multiple")) {
+    throw new Error(`${path} must be "single" or "multiple"`);
+  }
+  return value;
+}
+
+function requireSessionTurnDraftStatus(value: unknown, path: string): SessionTurnDraftStatus {
+  if (typeof value !== "string" || !SESSION_TURN_DRAFT_STATUSES.has(value as SessionTurnDraftStatus)) {
+    throw new Error(`${path} must be one of ${Array.from(SESSION_TURN_DRAFT_STATUSES).join(", ")}`);
+  }
+  return value as SessionTurnDraftStatus;
 }

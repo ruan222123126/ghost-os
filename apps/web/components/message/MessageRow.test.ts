@@ -228,12 +228,14 @@ describe('components/message/MessageRow', () => {
     };
 
     withMockWindow(buildMessageMeasurementWindow('20px'), () => {
+      const onToggleUserMessage = jest.fn();
       const renderer = renderMessageRowClient({
         message,
         assistantMarkdownEnabled: true,
         loading: false,
         onAnswerQuestion: async () => undefined,
         onCancelQuestion: async () => undefined,
+        onToggleUserMessage,
       }, { userContentScrollHeight: 96 });
 
       expect(renderer.root.findByProps({
@@ -247,6 +249,20 @@ describe('components/message/MessageRow', () => {
         toggle.props.onClick();
       });
 
+      expect(onToggleUserMessage).toHaveBeenCalledWith(message.id);
+
+      act(() => {
+        renderer.update(React.createElement(MessageRow, withMessageRowDefaults({
+          message,
+          assistantMarkdownEnabled: true,
+          isUserMessageExpanded: true,
+          loading: false,
+          onAnswerQuestion: async () => undefined,
+          onCancelQuestion: async () => undefined,
+          onToggleUserMessage,
+        })));
+      });
+
       expect(renderer.root.findByProps({
         className: 'message-content message-user-content',
       }).children).toContain(message.content);
@@ -258,6 +274,20 @@ describe('components/message/MessageRow', () => {
 
       act(() => {
         collapseToggle.props.onClick();
+      });
+
+      expect(onToggleUserMessage).toHaveBeenLastCalledWith(message.id);
+
+      act(() => {
+        renderer.update(React.createElement(MessageRow, withMessageRowDefaults({
+          message,
+          assistantMarkdownEnabled: true,
+          isUserMessageExpanded: false,
+          loading: false,
+          onAnswerQuestion: async () => undefined,
+          onCancelQuestion: async () => undefined,
+          onToggleUserMessage,
+        })));
       });
 
       expect(renderer.root.findByProps({

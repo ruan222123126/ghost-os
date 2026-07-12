@@ -1,4 +1,7 @@
-use futures_util::StreamExt;
+use futures_util::{
+    future::{select, Either},
+    pin_mut, StreamExt,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -10,12 +13,17 @@ use tauri::{Emitter, Manager};
 const BRIDGE_AGENT_STREAM_PATH: &str = "api/agent/stream";
 const BRIDGE_EXTERNAL_AGENT_STREAM_PATH: &str = "api/external-agent/stream";
 const BRIDGE_AGENT_STREAM_CHUNK_EVENT: &str = "bridge-agent-stream-chunk";
+const BRIDGE_RUN_EVENTS_PATH: &str = "api/runs";
 const BRIDGE_BUS_PATH: &str = "api/bus";
 const MOBILE_CONVERSATIONS_FILE: &str = "mobile-conversations.v1.json";
 const MOBILE_LOCAL_PROVIDERS_FILE: &str = "mobile-local-providers.v1.json";
 const MOBILE_LOCAL_PROVIDER_SECRETS_FILE: &str = "mobile-local-provider-secrets.v1.json";
+const MOBILE_NOTIFICATION_KEYS_FILE: &str = "mobile-notification-keys.v1.json";
+const MOBILE_NOTIFICATION_KEY_LIMIT: usize = 100;
 const REQUEST_TIMEOUT_SECS: u64 = 60;
 const SSE_CONTENT_TYPE: &str = "text/event-stream";
+const STREAM_IPC_FLUSH_INTERVAL_MS: u64 = 50;
+const STREAM_IPC_MAX_BATCH_BYTES: usize = 16 * 1024;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -47,6 +55,16 @@ struct BridgeAgentStreamCommand {
     request_id: String,
     runtime_overrides: Option<Value>,
     session_id: Option<String>,
+    trace_id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BridgeAgentStreamReconnectCommand {
+    base_url: String,
+    api_token: Option<String>,
+    last_event_id: Option<String>,
+    request_id: String,
     trace_id: String,
 }
 
@@ -284,6 +302,41 @@ async fn bridge_agent_stream(
 }
 
 #[tauri::command]
+async fn bridge_agent_stream_reconnect(
+    app: tauri::AppHandle,
+    request: BridgeAgentStreamReconnectCommand,
+) -> Result<(), String> {
+    let trace_id = request.trace_id.trim();
+    if trace_id.is_empty() {
+        return Err("bridge stream trace ID is required".to_string());
+    }
+    if request.request_id.trim().is_empty() {
+        return Err("bridge stream request ID is required".to_string());
+    }
+
+    let url = bridge_run_events_url(&request.base_url, trace_id)?;
+    let client = reqwest::Client::builder()
+        .build()
+        .map_err(|err| format!("create bridge reconnect client failed: {err}"))?;
+    let mut builder = client
+        .get(url)
+        .header(reqwest::header::ACCEPT, SSE_CONTENT_TYPE)
+        .header("X-Trace-ID", trace_id);
+    if let Some(token) = normalized_token(request.api_token) {
+        builder = builder.header("X-API-Token", token);
+    }
+    if let Some(last_event_id) = normalized_token(request.last_event_id) {
+        builder = builder.header("Last-Event-ID", last_event_id);
+    }
+
+    let response = builder
+        .send()
+        .await
+        .map_err(|err| format!("bridge stream reconnect failed: {err}"))?;
+    ensure_stream_response(response, app, request.request_id).await
+}
+
+#[tauri::command]
 fn mobile_credential_save(
     app: tauri::AppHandle,
     device_id: String,
@@ -318,18 +371,108 @@ fn mobile_credential_delete(app: tauri::AppHandle, device_id: String) -> Result<
 }
 
 #[tauri::command]
-fn mobile_conversations_load(app: tauri::AppHandle) -> Result<Vec<Value>, String> {
+async fn mobile_conversations_load(app: tauri::AppHandle) -> Result<Vec<Value>, String> {
     let path = mobile_conversations_path(&app)?;
-    read_mobile_conversations(&path)
+    run_blocking_file_task("load mobile conversations", move || {
+        read_mobile_conversations(&path)
+    })
+    .await
 }
 
 #[tauri::command]
-fn mobile_conversations_save(
+async fn mobile_conversations_load_index(app: tauri::AppHandle) -> Result<Vec<Value>, String> {
+    let path = mobile_conversations_path(&app)?;
+    run_blocking_file_task("load mobile conversation index", move || {
+        Ok(compact_mobile_conversations(read_mobile_conversations(
+            &path,
+        )?))
+    })
+    .await
+}
+
+#[tauri::command]
+async fn mobile_conversation_get(
+    app: tauri::AppHandle,
+    session_id: String,
+) -> Result<Option<Value>, String> {
+    let path = mobile_conversations_path(&app)?;
+    run_blocking_file_task("load mobile conversation", move || {
+        let id = session_id.trim().to_string();
+        if id.is_empty() {
+            return Ok(None);
+        }
+        Ok(read_mobile_conversations(&path)?
+            .into_iter()
+            .find(|conversation| mobile_conversation_id(conversation) == Some(id.as_str())))
+    })
+    .await
+}
+
+#[tauri::command]
+async fn mobile_conversations_upsert(
+    app: tauri::AppHandle,
+    conversations: Vec<Value>,
+    limit: Option<usize>,
+) -> Result<Vec<Value>, String> {
+    let path = mobile_conversations_path(&app)?;
+    run_blocking_file_task("upsert mobile conversations", move || {
+        let mut current = read_mobile_conversations(&path)?;
+        upsert_mobile_conversations(&mut current, conversations);
+        sort_mobile_conversations(&mut current);
+        if let Some(limit) = limit.filter(|value| *value > 0) {
+            current.truncate(limit);
+        }
+        write_mobile_conversations(&path, &current)?;
+        Ok(compact_mobile_conversations(current))
+    })
+    .await
+}
+
+#[tauri::command]
+async fn mobile_conversations_save(
     app: tauri::AppHandle,
     conversations: Vec<Value>,
 ) -> Result<(), String> {
     let path = mobile_conversations_path(&app)?;
-    write_mobile_conversations(&path, &conversations)
+    run_blocking_file_task("save mobile conversations", move || {
+        write_mobile_conversations(&path, &conversations)
+    })
+    .await
+}
+
+#[tauri::command]
+fn mobile_notification_key_contains(
+    app: tauri::AppHandle,
+    notification_key: String,
+) -> Result<bool, String> {
+    let key = notification_key.trim();
+    if key.is_empty() {
+        return Err("notification_key is required".to_string());
+    }
+    Ok(
+        read_mobile_notification_keys(&mobile_notification_keys_path(&app)?)?
+            .iter()
+            .any(|stored| stored == key),
+    )
+}
+
+#[tauri::command]
+fn mobile_notification_key_record(
+    app: tauri::AppHandle,
+    notification_key: String,
+) -> Result<(), String> {
+    let key = notification_key.trim();
+    if key.is_empty() {
+        return Err("notification_key is required".to_string());
+    }
+    let path = mobile_notification_keys_path(&app)?;
+    let mut keys = read_mobile_notification_keys(&path)?;
+    keys.retain(|stored| stored != key);
+    keys.push(key.to_string());
+    if keys.len() > MOBILE_NOTIFICATION_KEY_LIMIT {
+        keys.drain(..keys.len() - MOBILE_NOTIFICATION_KEY_LIMIT);
+    }
+    write_mobile_notification_keys(&path, &keys)
 }
 
 #[tauri::command]
@@ -458,6 +601,15 @@ fn bridge_stream_url(base_url: &str, path: &str) -> Result<reqwest::Url, String>
     bridge_api_url(base_url, path)
 }
 
+fn bridge_run_events_url(base_url: &str, trace_id: &str) -> Result<reqwest::Url, String> {
+    let mut url = bridge_api_url(base_url, BRIDGE_RUN_EVENTS_PATH)?;
+    url.path_segments_mut()
+        .map_err(|_| "bridge URL cannot contain run event path segments".to_string())?
+        .push(trace_id)
+        .push("events");
+    Ok(url)
+}
+
 fn bridge_api_url(base_url: &str, path: &str) -> Result<reqwest::Url, String> {
     let trimmed = base_url.trim();
     if trimmed.is_empty() {
@@ -474,6 +626,16 @@ fn bridge_api_url(base_url: &str, path: &str) -> Result<reqwest::Url, String> {
     parsed
         .join(path)
         .map_err(|err| format!("build bridge URL failed: {err}"))
+}
+
+async fn run_blocking_file_task<T, F>(label: &'static str, task: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(task)
+        .await
+        .map_err(|err| format!("{label} task failed: {err}"))?
 }
 
 fn validate_envelope(envelope: &BridgeBusEnvelope<'_>) -> Result<(), String> {
@@ -599,18 +761,73 @@ async fn forward_stream_chunks(
     request_id: String,
 ) -> Result<(), String> {
     let mut stream = response.bytes_stream();
-    while let Some(item) = stream.next().await {
-        let bytes = item.map_err(|err| format!("read bridge stream failed: {err}"))?;
-        app.emit(
-            BRIDGE_AGENT_STREAM_CHUNK_EVENT,
-            BridgeAgentStreamChunk {
-                request_id: request_id.clone(),
-                chunk: bytes.to_vec(),
-            },
-        )
-        .map_err(|err| format!("emit bridge stream chunk failed: {err}"))?;
+    let flush_interval = Duration::from_millis(STREAM_IPC_FLUSH_INTERVAL_MS);
+    let flush_timer = tokio::time::sleep(flush_interval);
+    pin_mut!(flush_timer);
+    let mut pending = Vec::new();
+
+    loop {
+        if pending.is_empty() {
+            let Some(item) = stream.next().await else {
+                break;
+            };
+            let bytes = item.map_err(|err| format!("read bridge stream failed: {err}"))?;
+            append_stream_bytes(&mut pending, &bytes);
+            flush_timer
+                .as_mut()
+                .reset(tokio::time::Instant::now() + flush_interval);
+            if pending.len() >= STREAM_IPC_MAX_BATCH_BYTES {
+                emit_stream_chunk(&app, &request_id, std::mem::take(&mut pending))?;
+            }
+            continue;
+        }
+
+        let next_item = stream.next();
+        pin_mut!(next_item);
+        match select(next_item, flush_timer.as_mut()).await {
+            Either::Left((item, _timer)) => {
+                let Some(item) = item else {
+                    break;
+                };
+                let bytes = item.map_err(|err| format!("read bridge stream failed: {err}"))?;
+                append_stream_bytes(&mut pending, &bytes);
+                if pending.len() >= STREAM_IPC_MAX_BATCH_BYTES {
+                    emit_stream_chunk(&app, &request_id, std::mem::take(&mut pending))?;
+                    flush_timer
+                        .as_mut()
+                        .reset(tokio::time::Instant::now() + flush_interval);
+                }
+            }
+            Either::Right(((), _next_item)) => {
+                emit_stream_chunk(&app, &request_id, std::mem::take(&mut pending))?;
+            }
+        }
     }
+    emit_stream_chunk(&app, &request_id, pending)?;
     Ok(())
+}
+
+fn append_stream_bytes(pending: &mut Vec<u8>, bytes: &[u8]) {
+    pending.extend_from_slice(bytes);
+}
+
+fn emit_stream_chunk(
+    app: &tauri::AppHandle,
+    request_id: &str,
+    chunk: Vec<u8>,
+) -> Result<(), String> {
+    if chunk.is_empty() {
+        return Ok(());
+    }
+
+    app.emit(
+        BRIDGE_AGENT_STREAM_CHUNK_EVENT,
+        BridgeAgentStreamChunk {
+            request_id: request_id.to_string(),
+            chunk,
+        },
+    )
+    .map_err(|err| format!("emit bridge stream chunk failed: {err}"))
 }
 
 fn is_sse_content_type(content_type: &str) -> bool {
@@ -680,6 +897,36 @@ fn mobile_local_provider_secrets_path(app: &tauri::AppHandle) -> Result<PathBuf,
     Ok(dir.join(MOBILE_LOCAL_PROVIDER_SECRETS_FILE))
 }
 
+fn mobile_notification_keys_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|err| format!("resolve mobile notification key directory failed: {err}"))?;
+    Ok(dir.join(MOBILE_NOTIFICATION_KEYS_FILE))
+}
+
+fn read_mobile_notification_keys(path: &Path) -> Result<Vec<String>, String> {
+    match fs::read_to_string(path) {
+        Ok(raw) if raw.trim().is_empty() => Ok(Vec::new()),
+        Ok(raw) => serde_json::from_str(&raw)
+            .map_err(|err| format!("decode mobile notification keys failed: {err}")),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+        Err(err) => Err(format!("read mobile notification keys failed: {err}")),
+    }
+}
+
+fn write_mobile_notification_keys(path: &Path, keys: &[String]) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("create mobile notification key directory failed: {err}"))?;
+    }
+    let encoded = serde_json::to_vec_pretty(keys)
+        .map_err(|err| format!("encode mobile notification keys failed: {err}"))?;
+    fs::write(path, encoded)
+        .map_err(|err| format!("write mobile notification keys failed: {err}"))?;
+    set_private_file_permissions(path, "mobile notification keys")
+}
+
 fn read_mobile_conversations(path: &Path) -> Result<Vec<Value>, String> {
     match fs::read_to_string(path) {
         Ok(raw) => {
@@ -707,6 +954,69 @@ fn write_mobile_conversations(path: &Path, conversations: &[Value]) -> Result<()
         .map_err(|err| format!("encode mobile conversations failed: {err}"))?;
     fs::write(path, encoded).map_err(|err| format!("write mobile conversations failed: {err}"))?;
     set_private_file_permissions(path, "mobile conversations")
+}
+
+fn upsert_mobile_conversations(current: &mut Vec<Value>, incoming: Vec<Value>) {
+    for conversation in incoming {
+        let Some(id) = mobile_conversation_id(&conversation).map(str::to_string) else {
+            continue;
+        };
+        match current
+            .iter()
+            .position(|item| mobile_conversation_id(item) == Some(id.as_str()))
+        {
+            Some(index) => current[index] = conversation,
+            None => current.push(conversation),
+        }
+    }
+}
+
+fn compact_mobile_conversations(conversations: Vec<Value>) -> Vec<Value> {
+    conversations
+        .into_iter()
+        .map(|mut conversation| {
+            if let Value::Object(ref mut object) = conversation {
+                object.insert("messages".to_string(), Value::Array(Vec::new()));
+            }
+            conversation
+        })
+        .collect()
+}
+
+fn sort_mobile_conversations(conversations: &mut [Value]) {
+    conversations.sort_by(|left, right| {
+        let updated_order =
+            mobile_conversation_updated_at(right).cmp(mobile_conversation_updated_at(left));
+        if !updated_order.is_eq() {
+            return updated_order;
+        }
+        mobile_conversation_title(left).cmp(mobile_conversation_title(right))
+    });
+}
+
+fn mobile_conversation_id(conversation: &Value) -> Option<&str> {
+    conversation
+        .as_object()
+        .and_then(|object| object.get("id"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
+
+fn mobile_conversation_updated_at(conversation: &Value) -> &str {
+    conversation
+        .as_object()
+        .and_then(|object| object.get("updated_at"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+}
+
+fn mobile_conversation_title(conversation: &Value) -> &str {
+    conversation
+        .as_object()
+        .and_then(|object| object.get("title"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
 }
 
 fn read_mobile_local_provider_state(path: &Path) -> Result<MobileLocalProviderState, String> {
@@ -1042,6 +1352,17 @@ mod tests {
     }
 
     #[test]
+    fn bridge_run_events_url_encodes_trace_id() {
+        let url =
+            bridge_run_events_url("http://127.0.0.1:8711", "trace one").expect("run events URL");
+
+        assert_eq!(
+            url.as_str(),
+            "http://127.0.0.1:8711/api/runs/trace%20one/events"
+        );
+    }
+
+    #[test]
     fn parse_unexpected_stream_response_prefers_error_field() {
         let message = parse_unexpected_stream_response_body(
             reqwest::StatusCode::BAD_REQUEST,
@@ -1125,15 +1446,22 @@ mod tests {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             host_profile,
             bridge_agent_stream,
+            bridge_agent_stream_reconnect,
             bridge_bus_request,
             mobile_credential_save,
             mobile_credential_load,
             mobile_credential_delete,
             mobile_conversations_load,
+            mobile_conversations_load_index,
+            mobile_conversation_get,
+            mobile_conversations_upsert,
             mobile_conversations_save,
+            mobile_notification_key_contains,
+            mobile_notification_key_record,
             mobile_local_provider_list,
             mobile_local_provider_upsert,
             mobile_local_provider_delete,

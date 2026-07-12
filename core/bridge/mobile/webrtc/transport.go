@@ -12,6 +12,7 @@ import (
 	"github.com/pion/webrtc/v4"
 
 	bridgeconfig "ghost-os/bridge/config"
+	"ghost-os/bridge/internal/stringutil"
 	"ghost-os/bridge/mobile"
 	bridgeorchestration "ghost-os/bridge/orchestration"
 	"ghost-os/bridge/streaming"
@@ -83,8 +84,8 @@ func (t *Transport) handleSignal(msg signalMessage) {
 			t.sendSignal(signalMessage{
 				Type:     signalBusy,
 				PCID:     t.cfg.PCID,
-				MobileID: firstNonEmpty(msg.MobileID, msg.DeviceID),
-				DeviceID: firstNonEmpty(msg.DeviceID, msg.MobileID),
+				MobileID: stringutil.FirstNonEmpty(msg.MobileID, msg.DeviceID),
+				DeviceID: stringutil.FirstNonEmpty(msg.DeviceID, msg.MobileID),
 				Error:    err.Error(),
 			})
 		}
@@ -105,8 +106,8 @@ func (t *Transport) handleSignal(msg signalMessage) {
 }
 
 func (t *Transport) startPeer(msg signalMessage) error {
-	mobileID := firstNonEmpty(msg.MobileID, msg.DeviceID)
-	deviceID := firstNonEmpty(msg.DeviceID, msg.MobileID)
+	mobileID := stringutil.FirstNonEmpty(msg.MobileID, msg.DeviceID)
+	deviceID := stringutil.FirstNonEmpty(msg.DeviceID, msg.MobileID)
 	if strings.TrimSpace(mobileID) == "" {
 		return fmt.Errorf("mobile_id is required")
 	}
@@ -134,13 +135,14 @@ func (t *Transport) newPeerSession(mobileID string, deviceID string) (*peerSessi
 	}
 	ctx, cancel := context.WithCancel(t.ctx)
 	peer := &peerSession{
-		transport: t,
-		pc:        pc,
-		mobileID:  strings.TrimSpace(mobileID),
-		deviceID:  strings.TrimSpace(deviceID),
-		ctx:       ctx,
-		cancel:    cancel,
-		requests:  make(map[string]context.CancelFunc),
+		transport:      t,
+		pc:             pc,
+		mobileID:       strings.TrimSpace(mobileID),
+		deviceID:       strings.TrimSpace(deviceID),
+		ctx:            ctx,
+		cancel:         cancel,
+		requests:       make(map[string]context.CancelFunc),
+		streamRequests: make(map[string]context.CancelFunc),
 	}
 	pc.OnICECandidate(func(candidate *webrtc.ICECandidate) {
 		peer.sendICE(candidate)
@@ -181,7 +183,7 @@ func (p *peerSession) createOffer() error {
 }
 
 func (t *Transport) applyAnswer(msg signalMessage) error {
-	peer := t.peer(firstNonEmpty(msg.MobileID, msg.DeviceID))
+	peer := t.peer(stringutil.FirstNonEmpty(msg.MobileID, msg.DeviceID))
 	if peer == nil {
 		return fmt.Errorf("peer not found")
 	}
@@ -192,7 +194,7 @@ func (t *Transport) applyAnswer(msg signalMessage) error {
 }
 
 func (t *Transport) addRemoteICE(msg signalMessage) error {
-	peer := t.peer(firstNonEmpty(msg.MobileID, msg.DeviceID))
+	peer := t.peer(stringutil.FirstNonEmpty(msg.MobileID, msg.DeviceID))
 	if peer == nil {
 		return fmt.Errorf("peer not found")
 	}
@@ -272,13 +274,14 @@ type peerSession struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	mu            sync.Mutex
-	authenticated bool
-	challenge     string
-	requests      map[string]context.CancelFunc
-	answerSet     bool
-	remoteICE     []webrtc.ICECandidateInit
-	closed        bool
+	mu             sync.Mutex
+	authenticated  bool
+	challenge      string
+	requests       map[string]context.CancelFunc
+	streamRequests map[string]context.CancelFunc
+	answerSet      bool
+	remoteICE      []webrtc.ICECandidateInit
+	closed         bool
 }
 
 func (p *peerSession) attachDataChannel(dc *webrtc.DataChannel) {
@@ -452,9 +455,10 @@ func (p *peerSession) handleRequest(frame mobile.Frame) {
 }
 
 func (p *peerSession) handleStream(frame mobile.Frame) {
-	ctx, cancel := context.WithCancel(p.ctx)
-	p.trackRequest(frame.RequestID, cancel)
-	defer p.finishRequest(frame.RequestID)
+	ctx, cancel := context.WithCancel(p.transport.ctx)
+	p.trackStreamRequest(frame.RequestID, cancel)
+	defer cancel()
+	defer p.finishStreamRequest(frame.RequestID)
 
 	action := strings.ToUpper(strings.TrimSpace(frame.Action))
 	switch action {
@@ -504,7 +508,7 @@ func (p *peerSession) runPreparedStream(
 	sink := dataChannelStreamSink{peer: p, requestID: frame.RequestID}
 	_, sessionID, err := prepared.Run(ctx, sink)
 	if err != nil {
-		p.sendStreamEnd(frame.RequestID, "error", err.Error(), map[string]any{"session_id": firstNonEmpty(sessionID, inputSessionID)})
+		p.sendStreamEnd(frame.RequestID, "error", err.Error(), map[string]any{"session_id": stringutil.FirstNonEmpty(sessionID, inputSessionID)})
 		return
 	}
 	p.sendStreamEnd(frame.RequestID, "success", "", map[string]any{"session_id": sessionID})
@@ -526,14 +530,36 @@ func (p *peerSession) finishRequest(requestID string) {
 	}
 }
 
-func (p *peerSession) cancelRequest(requestID string) {
+func (p *peerSession) trackStreamRequest(requestID string, cancel context.CancelFunc) {
 	p.mu.Lock()
-	cancel := p.requests[strings.TrimSpace(requestID)]
-	delete(p.requests, strings.TrimSpace(requestID))
-	p.mu.Unlock()
+	defer p.mu.Unlock()
+	p.streamRequests[strings.TrimSpace(requestID)] = cancel
+}
+
+func (p *peerSession) finishStreamRequest(requestID string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	delete(p.streamRequests, strings.TrimSpace(requestID))
+}
+
+func (p *peerSession) cancelRequest(requestID string) {
+	cancel := p.takeRequestCancel(requestID)
 	if cancel != nil {
 		cancel()
 	}
+}
+
+func (p *peerSession) takeRequestCancel(requestID string) context.CancelFunc {
+	key := strings.TrimSpace(requestID)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if cancel := p.requests[key]; cancel != nil {
+		delete(p.requests, key)
+		return cancel
+	}
+	cancel := p.streamRequests[key]
+	delete(p.streamRequests, key)
+	return cancel
 }
 
 func (p *peerSession) sendStreamEnd(requestID string, status string, errText string, payload any) {
@@ -579,6 +605,7 @@ func (p *peerSession) close() {
 	p.closed = true
 	requests := p.requests
 	p.requests = make(map[string]context.CancelFunc)
+	p.streamRequests = make(map[string]context.CancelFunc)
 	authenticated := p.authenticated
 	deviceID := p.deviceID
 	p.mu.Unlock()
@@ -617,13 +644,4 @@ func (s dataChannelStreamSink) Emit(ctx context.Context, event streaming.Event) 
 		Payload:   event,
 	})
 	return event, nil
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
 }

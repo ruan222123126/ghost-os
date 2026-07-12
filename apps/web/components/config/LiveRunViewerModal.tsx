@@ -268,7 +268,6 @@ function RunCardOutput(props: {
   const [openMessageRows, setOpenMessageRows] = useState<Record<string, boolean>>({});
   const rows = buildMessageListRows({
     committedMessages: output.committedMessages,
-    loadingOlderHistory: false,
     showThinkingIndicator: false,
     streamingRows: output.streamingRows,
     toolCard: {

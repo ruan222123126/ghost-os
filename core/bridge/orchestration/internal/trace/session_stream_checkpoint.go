@@ -58,6 +58,9 @@ func (s *sessionDraftCheckpointSink) persistDraftBeforeEvent(ctx context.Context
 }
 
 func (s *sessionDraftCheckpointSink) persistTurnDraftEvent(ctx context.Context, event streaming.Event) error {
+	if ProjectSessionRunState(s.sess, event, s.nowUTC()) {
+		s.dirty = true
+	}
 	draftChanged := ProjectTurnDraft(s.sess, event, s.nowUTC())
 	if draftChanged {
 		s.dirty = true
@@ -71,6 +74,9 @@ func (s *sessionDraftCheckpointSink) persistTurnDraftEvent(ctx context.Context, 
 }
 
 func (s *sessionDraftCheckpointSink) persistTerminalTurnDraftEvent(ctx context.Context, event streaming.Event) error {
+	if ProjectSessionRunState(s.sess, event, s.nowUTC()) {
+		s.dirty = true
+	}
 	if ProjectTurnDraft(s.sess, event, s.nowUTC()) {
 		s.dirty = true
 	}

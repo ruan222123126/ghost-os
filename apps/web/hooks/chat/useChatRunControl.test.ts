@@ -135,15 +135,19 @@ describe('hooks/chat/useChatRunControl', () => {
     await act(async () => {
       await latestState!.sendChatMessage({
         agentRuntime: 'codex',
+        codexMode: 'plan',
         images: [],
         message: 'ship release',
+        model: 'gpt-5.5',
       });
     });
 
     expect(streamedRuns).toEqual([
       expect.objectContaining({
         agentRuntime: 'codex',
+        codexMode: 'plan',
         message: 'ship release',
+        model: 'gpt-5.5',
         permissionMode: 'safe-yolo',
         projectRoot: '/workspace/project',
       }),
@@ -401,6 +405,7 @@ function HookProbe(props: {
       }
     },
     onSessionResolved: props.onSessionResolved,
+    requestPostSendFocus: () => undefined,
     runAgentStream: props.runAgentStream ?? (async () => ({ sessionId: props.currentSessionId, terminalType: 'done' })),
     resolveActiveRunSessionId: () => props.activeRunRef.current?.sessionId ?? props.currentSessionId,
     setActiveRun: props.setActiveRun,

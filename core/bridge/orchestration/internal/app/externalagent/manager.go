@@ -2,11 +2,13 @@ package externalagent
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/orchestration/internal/contracts/api"
+	internaltrace "ghost-os/bridge/orchestration/internal/trace"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
 )
@@ -28,12 +30,15 @@ type runtimeSession struct {
 }
 
 type activeTurn struct {
-	sessionID string
-	traceID   string
-	turn      int
-	sink      streaming.Sink
-	done      chan turnDone
-	text      strings.Builder
+	sessionID   string
+	traceID     string
+	turn        int
+	sink        streaming.Sink
+	done        chan struct{}
+	result      turnDone
+	finished    bool
+	text        strings.Builder
+	pendingText strings.Builder
 }
 
 type turnDone struct {
@@ -74,7 +79,8 @@ func (m *Manager) ExecuteStream(
 	if err != nil {
 		return "", sessionID, err
 	}
-	if err := runtime.beginTurn(sessionID, traceID, prepared.session.TurnIndex, sink); err != nil {
+	runSink := internaltrace.NewSessionDraftStoreCheckpointSink(sink, m.SessionStore, sessionID)
+	if err := runtime.beginTurn(sessionID, traceID, prepared.session.TurnIndex, runSink); err != nil {
 		return "", sessionID, err
 	}
 	defer runtime.clearActive()
@@ -87,12 +93,22 @@ func (m *Manager) ExecuteStream(
 	})
 
 	if err := runtime.client.Connect(ctx); err != nil {
-		_ = m.finishWithError(ctx, prepared.session.ID, traceID, prepared.session.TurnIndex, sink, err)
+		_ = m.finishWithError(ctx, prepared.session.ID, traceID, prepared.session.TurnIndex, runSink, err)
 		return "", sessionID, err
 	}
-	threadID, err := m.ensureThread(ctx, runtime.client, prepared)
+	threadResult, err := m.ensureThread(ctx, runtime.client, prepared)
 	if err != nil {
-		_ = m.finishWithError(ctx, sessionID, traceID, prepared.session.TurnIndex, sink, err)
+		_ = m.finishWithError(ctx, sessionID, traceID, prepared.session.TurnIndex, runSink, err)
+		return "", sessionID, err
+	}
+	threadID := strings.TrimSpace(threadResult.ThreadID)
+	if err := runtime.client.SetCollaborationMode(ctx, CollaborationModeOptions{
+		ThreadID: threadID,
+		Mode:     prepared.request.Mode,
+		Model:    resolveCollaborationModeModel(prepared.request.Model, threadResult.Model),
+		Effort:   prepared.request.Effort,
+	}); err != nil {
+		_ = m.finishWithError(ctx, sessionID, traceID, prepared.session.TurnIndex, runSink, err)
 		return "", sessionID, err
 	}
 	if err := m.updateRuntimeState(sessionID, func(ext *session.ExternalRuntime) {
@@ -101,7 +117,7 @@ func (m *Manager) ExecuteStream(
 	}); err != nil {
 		return "", sessionID, err
 	}
-	if err := emit(ctx, sink, traceID, sessionID, prepared.session.TurnIndex, "", streaming.EventRunStarted, map[string]any{
+	if err := emit(ctx, runSink, traceID, sessionID, prepared.session.TurnIndex, "", streaming.EventRunStarted, map[string]any{
 		"session_id": sessionID,
 		"provider":   ProviderCodex,
 		"thread_id":  threadID,
@@ -118,20 +134,27 @@ func (m *Manager) ExecuteStream(
 		Effort:         prepared.request.Effort,
 	})
 	if err != nil {
-		_ = m.finishWithError(ctx, sessionID, traceID, prepared.session.TurnIndex, sink, err)
+		_ = m.finishWithError(ctx, sessionID, traceID, prepared.session.TurnIndex, runSink, err)
 		return "", sessionID, err
 	}
-	if strings.TrimSpace(turnID) != "" {
+	if strings.TrimSpace(turnID) != "" && runtime.activeTurnRunning() {
 		_ = m.updateRuntimeState(sessionID, func(ext *session.ExternalRuntime) {
 			ext.TurnID = turnID
 			ext.Status = StatusRunning
 		})
 	}
+	active, activeDone := runtime.activeDoneState()
 	select {
 	case <-ctx.Done():
 		_ = runtime.client.InterruptTurn(context.Background(), threadID, turnID)
+		_ = m.updateRuntimeState(sessionID, func(ext *session.ExternalRuntime) {
+			ext.Status = StatusIdle
+			ext.TurnID = ""
+			ext.PendingApprovals = nil
+		})
 		return "", sessionID, ctx.Err()
-	case done := <-runtime.activeDone():
+	case <-activeDone:
+		done := runtime.activeResult(active)
 		if done.err != nil {
 			return "", sessionID, done.err
 		}
@@ -143,6 +166,40 @@ func (m *Manager) ExecuteStream(
 		final := runtime.finalText()
 		return final, sessionID, nil
 	}
+}
+
+func (m *Manager) ensureThread(ctx context.Context, client CodexClient, prepared preparedRun) (ThreadResult, error) {
+	ext := prepared.session.ExternalRuntime
+	opts := ThreadOptions{
+		Model:          prepared.request.Model,
+		CWD:            prepared.cwd,
+		ApprovalPolicy: prepared.policy.ApprovalPolicy,
+		Sandbox:        prepared.policy.Sandbox,
+	}
+	if ext != nil && strings.TrimSpace(ext.ThreadID) != "" {
+		opts.ThreadID = ext.ThreadID
+		return client.ResumeThread(ctx, opts)
+	}
+	return client.StartThread(ctx, opts)
+}
+
+func normalizeCodexMode(raw string) (string, error) {
+	mode := strings.ToLower(strings.TrimSpace(raw))
+	switch mode {
+	case "":
+		return "", nil
+	case CodexModeDefault, CodexModePlan:
+		return mode, nil
+	default:
+		return "", fmt.Errorf("unsupported external codex mode: %q", mode)
+	}
+}
+
+func resolveCollaborationModeModel(requestModel string, threadModel string) string {
+	if model := strings.TrimSpace(requestModel); model != "" {
+		return model
+	}
+	return strings.TrimSpace(threadModel)
 }
 
 func (m *Manager) Stop(ctx context.Context, req api.ExternalAgentStopParams) (api.ExternalAgentResponse, error) {
@@ -161,13 +218,31 @@ func (m *Manager) Stop(ctx context.Context, req api.ExternalAgentStopParams) (ap
 	if ext == nil || strings.TrimSpace(ext.ThreadID) == "" {
 		return api.ExternalAgentResponse{}, ErrExternalRunMissing
 	}
-	if err := runtime.client.InterruptTurn(ctx, ext.ThreadID, ext.TurnID); err != nil {
+	turnID := strings.TrimSpace(ext.TurnID)
+	if turnID == "" {
+		return api.ExternalAgentResponse{}, ErrExternalRunMissing
+	}
+	active, done := runtime.activeDoneState()
+	if err := runtime.client.InterruptTurn(ctx, ext.ThreadID, turnID); err != nil {
 		return api.ExternalAgentResponse{}, err
+	}
+	select {
+	case <-ctx.Done():
+		return api.ExternalAgentResponse{}, ctx.Err()
+	case <-done:
+		result := runtime.activeResult(active)
+		if result.err != nil {
+			return api.ExternalAgentResponse{}, result.err
+		}
 	}
 	_ = m.updateRuntimeState(sessionID, func(ext *session.ExternalRuntime) {
 		ext.Status = StatusIdle
 		ext.TurnID = ""
+		ext.PendingApprovals = nil
 	})
+	if err := m.persistCancelledRun(sessionID, active.traceID); err != nil {
+		return api.ExternalAgentResponse{}, err
+	}
 	return api.ExternalAgentResponse{
 		Status:    StatusIdle,
 		Provider:  ProviderCodex,

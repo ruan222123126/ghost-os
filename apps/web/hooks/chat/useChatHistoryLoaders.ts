@@ -9,6 +9,7 @@ import {
 } from './chatHistoryMerge';
 import type { ChatStateControls } from './types';
 import type { useChatHistoryRecovery } from './useChatHistoryRecovery';
+import type { SessionDetail } from '@/lib/types';
 
 const HISTORY_PAGE_LIMIT = 100;
 
@@ -38,7 +39,7 @@ interface UseChatHistoryLoadersOptions extends Pick<ChatStateControls,
 }
 
 interface UseLoadSessionHistoryOptions extends UseChatHistoryLoadersOptions {
-  hydrateSessionHistory: (sessionId: string) => Promise<void>;
+  hydrateSessionHistory: (sessionId: string) => Promise<SessionDetail>;
   resetEmptySessionHistory: () => void;
 }
 
@@ -81,7 +82,7 @@ function useHydrateSessionHistory(options: UseChatHistoryLoadersOptions) {
     setCommittedMessages(detail.id, mapSessionMessagesToChat(detail.id, detail.messages));
     if (detail.turn_draft) {
       recovery.recoverTurnDraft(detail.id, detail.turn_draft);
-      return;
+      return detail;
     }
     recovery.stopRecoveredRun(detail.id);
     clearStreamingState(detail.id);
@@ -89,6 +90,7 @@ function useHydrateSessionHistory(options: UseChatHistoryLoadersOptions) {
     setActiveRun(detail.id, null);
     setLoading(detail.id, false);
     setStopPending(detail.id, false);
+    return detail;
   }, [
     clearPendingQuestions,
     clearStreamingState,
@@ -167,22 +169,23 @@ function useLoadSessionHistory(options: UseLoadSessionHistoryOptions) {
     setHistoryLoading,
   } = options;
 
-  return useCallback(async (sessionId: string) => {
+  return useCallback(async (sessionId: string): Promise<SessionDetail | null> => {
     const id = sessionId.trim();
     if (!id) {
       resetEmptySessionHistory();
-      return;
+      return null;
     }
 
     clearChatError(id);
     recovery.stopRecoveredRun(id);
     setHistoryLoading(id, true);
     try {
-      await hydrateSessionHistory(id);
+      return await hydrateSessionHistory(id);
     } catch (error) {
       const messageText = toErrorMessage(error, requestFailedText);
       setChatError(id, messageText);
       replaceWithErrorMessage(id, messageText);
+      return null;
     } finally {
       setHistoryLoading(id, false);
     }

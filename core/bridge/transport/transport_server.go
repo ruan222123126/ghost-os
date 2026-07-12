@@ -187,7 +187,7 @@ func runServeListen(ctx context.Context, preflight servePreflightState) (string,
 
 	server := &http.Server{
 		Addr:              preflight.options.bindAddr,
-		Handler:           newHTTPHandler(preflight.service, preflight.options),
+		Handler:           newHTTPHandlerWithContext(ctx, preflight.service, preflight.options),
 		ReadHeaderTimeout: serverReadHeaderTimeout,
 	}
 
@@ -228,13 +228,22 @@ func logStartupCheckpoint(stage string, status string, detail string) {
 type transport struct {
 	usecases     transportUsecases
 	maxBodyBytes int64
+	runContext   context.Context
 }
 
 // newHTTPHandler 注册所有 HTTP 路由并挂载认证/CORS 中间件链。
 func newHTTPHandler(service *bridgeorchestration.Service, options serverOptions) http.Handler {
+	return newHTTPHandlerWithContext(context.Background(), service, options)
+}
+
+func newHTTPHandlerWithContext(ctx context.Context, service *bridgeorchestration.Service, options serverOptions) http.Handler {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	transport := &transport{
 		usecases:     newTransportUsecases(service),
 		maxBodyBytes: options.maxBodyBytes,
+		runContext:   ctx,
 	}
 
 	mux := http.NewServeMux()

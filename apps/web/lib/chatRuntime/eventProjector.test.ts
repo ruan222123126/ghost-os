@@ -59,6 +59,212 @@ describe('lib/chatRuntime/eventProjector', () => {
     ]);
   });
 
+  it('normalizes cumulative text chunks to only append unseen assistant text', () => {
+    const runtime = createChatRuntimeState('trace-cumulative', 'session-cumulative');
+    const first = projectAgentEvent({
+      runtime,
+      event: buildEvent(
+        'completion_delta',
+        {
+          kind: 'text',
+          text: 'hello',
+        },
+        { traceId: 'trace-cumulative' },
+      ),
+    });
+    const second = projectAgentEvent({
+      runtime,
+      event: buildEvent(
+        'completion_delta',
+        {
+          kind: 'text',
+          text: 'hello world',
+        },
+        { traceId: 'trace-cumulative' },
+      ),
+    });
+
+    expect(first).toEqual([
+      {
+        type: 'append_streaming_assistant_text',
+        text: 'hello',
+      },
+    ]);
+    expect(second).toEqual([
+      {
+        type: 'append_streaming_assistant_text',
+        text: ' world',
+      },
+    ]);
+  });
+
+  it('normalizes cumulative raw chunks that contain tool tags', () => {
+    const runtime = createChatRuntimeState('trace-cumulative-tool', 'session-cumulative-tool');
+    const first = projectAgentEvent({
+      runtime,
+      event: buildEvent(
+        'completion_delta',
+        {
+          kind: 'text',
+          text: 'alpha<t:1>{"q":"x"}</t>omega',
+        },
+        { traceId: 'trace-cumulative-tool' },
+      ),
+    });
+    const second = projectAgentEvent({
+      runtime,
+      event: buildEvent(
+        'completion_delta',
+        {
+          kind: 'text',
+          text: 'alpha<t:1>{"q":"x"}</t>omega done',
+        },
+        { traceId: 'trace-cumulative-tool' },
+      ),
+    });
+
+    expect(first).toEqual([
+      {
+        type: 'append_streaming_assistant_text',
+        text: 'alpha',
+      },
+      {
+        type: 'upsert_streaming_tool',
+        tool: {
+          id: 'stream-tag-tool:trace-cumulative-tool:1',
+          content: '',
+          toolName: 'tool#1',
+          toolStatus: 'pending',
+          traceId: 'trace-cumulative-tool',
+        },
+      },
+      {
+        type: 'upsert_streaming_tool',
+        tool: {
+          id: 'stream-tag-tool:trace-cumulative-tool:1',
+          content: '{"q":"x"}',
+          toolName: 'tool#1',
+          toolStatus: 'pending',
+          traceId: 'trace-cumulative-tool',
+        },
+      },
+      {
+        type: 'upsert_streaming_tool',
+        tool: {
+          id: 'stream-tag-tool:trace-cumulative-tool:1',
+          content: '{"q":"x"}',
+          toolName: 'tool#1',
+          toolStatus: 'pending',
+          traceId: 'trace-cumulative-tool',
+        },
+      },
+      {
+        type: 'append_streaming_assistant_text',
+        text: 'omega',
+      },
+    ]);
+    expect(second).toEqual([
+      {
+        type: 'append_streaming_assistant_text',
+        text: ' done',
+      },
+    ]);
+  });
+
+  it('trims long overlap between adjacent text chunks', () => {
+    const runtime = createChatRuntimeState('trace-overlap', 'session-overlap');
+    projectAgentEvent({
+      runtime,
+      event: buildEvent(
+        'completion_delta',
+        {
+          kind: 'text',
+          text: 'The result is partially repeated',
+        },
+        { traceId: 'trace-overlap' },
+      ),
+    });
+    const overlap = projectAgentEvent({
+      runtime,
+      event: buildEvent(
+        'completion_delta',
+        {
+          kind: 'text',
+          text: 'repeated only once.',
+        },
+        { traceId: 'trace-overlap' },
+      ),
+    });
+
+    expect(overlap).toEqual([
+      {
+        type: 'append_streaming_assistant_text',
+        text: ' only once.',
+      },
+    ]);
+  });
+
+  it('keeps short suffix-prefix overlaps in normal text deltas', () => {
+    const runtime = createChatRuntimeState('trace-short-prefix', 'session-short-prefix');
+    projectAgentEvent({
+      runtime,
+      event: buildEvent(
+        'completion_delta',
+        {
+          kind: 'text',
+          text: 'prefix the ',
+        },
+        { traceId: 'trace-short-prefix' },
+      ),
+    });
+    const next = projectAgentEvent({
+      runtime,
+      event: buildEvent(
+        'completion_delta',
+        {
+          kind: 'text',
+          text: 'the answer',
+        },
+        { traceId: 'trace-short-prefix' },
+      ),
+    });
+
+    expect(next).toEqual([
+      {
+        type: 'append_streaming_assistant_text',
+        text: 'the answer',
+      },
+    ]);
+  });
+
+  it('ignores exact duplicate text chunks that are already visible', () => {
+    const runtime = createChatRuntimeState('trace-duplicate', 'session-duplicate');
+    projectAgentEvent({
+      runtime,
+      event: buildEvent(
+        'completion_delta',
+        {
+          kind: 'text',
+          text: 'same text',
+        },
+        { traceId: 'trace-duplicate' },
+      ),
+    });
+    const duplicate = projectAgentEvent({
+      runtime,
+      event: buildEvent(
+        'completion_delta',
+        {
+          kind: 'text',
+          text: 'same text',
+        },
+        { traceId: 'trace-duplicate' },
+      ),
+    });
+
+    expect(duplicate).toEqual([]);
+  });
+
   it('maps preview tool message id to tool_call_id lifecycle', () => {
     const runtime = createChatRuntimeState('trace-2', 'session-2');
     projectAgentEvent({

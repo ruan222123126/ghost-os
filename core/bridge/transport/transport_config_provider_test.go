@@ -89,3 +89,32 @@ func TestProviderCRUDRoutes(t *testing.T) {
 		t.Fatalf("unexpected final active provider: got %v want %q", finalPayload["active_provider"], "openai")
 	}
 }
+
+func TestProviderExportRoute(t *testing.T) {
+	handler := newTestHandler(t, nil)
+
+	create := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/config/providers",
+		`{"name":"crs","type":"custom","base_url":"https://lldai.online/openai","api_key":"sk-xxx","models":["gpt-5.4"]}`,
+		nil,
+	)
+	if create.Code != http.StatusOK {
+		t.Fatalf("unexpected create status: got %d want %d", create.Code, http.StatusOK)
+	}
+
+	exportResp := serveRequest(handler, http.MethodPost, "/api/config/providers/export", `{"name":"crs"}`, nil)
+	if exportResp.Code != http.StatusOK {
+		t.Fatalf("unexpected export status: got %d want %d body=%s", exportResp.Code, http.StatusOK, exportResp.Body.String())
+	}
+
+	exportBody := decodeResponseBody(t, exportResp)
+	exportPayload, ok := exportBody.Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected export payload type: %T", exportBody.Payload)
+	}
+	if exportPayload["name"] != "crs" || exportPayload["api_key"] != "sk-xxx" {
+		t.Fatalf("unexpected export payload: %#v", exportPayload)
+	}
+}

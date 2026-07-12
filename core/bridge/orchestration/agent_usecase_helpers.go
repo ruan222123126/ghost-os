@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"ghost-os/bridge/agent"
-	bridgeconfig "ghost-os/bridge/config"
 	agentturnadapter "ghost-os/bridge/orchestration/internal/adapters/agentturnservice"
 	"ghost-os/bridge/orchestration/internal/app/agentturn"
 	"ghost-os/bridge/orchestration/internal/contracts/api"
@@ -18,10 +18,7 @@ import (
 	bridgeTasks "ghost-os/bridge/tasks"
 )
 
-const (
-	agentModeDefault = agentturn.ModeDefault
-	agentModePlan    = agentturn.ModePlan
-)
+var errSessionEnded = errors.New("session has already ended")
 
 type preparedAgentTurnRequest = agentturn.PreparedRequest
 
@@ -98,12 +95,6 @@ func (s *bridgeService) agentTurnService() agentturn.Service {
 		EnsureSessionActive:      s.ensureSessionActive,
 		RunTurn:                  s.runPreparedAgentTurn,
 		RunTurnStream:            s.runPreparedAgentTurnStream,
-		Plan: agentturnadapter.PlanConfig{
-			RuntimeBuilder: s.agentTurnRuntimeBuilder(),
-			ConfigStore:    s.configStore,
-			SessionStore:   s.sessionStore,
-			RunRegistry:    s.runRegistry,
-		},
 		Finalize: func(response string, sessionID string) (agentturn.FinalizedTurn, error) {
 			result, err := s.finalizeAgentTurn(response, sessionID)
 			if err != nil {
@@ -113,13 +104,11 @@ func (s *bridgeService) agentTurnService() agentturn.Service {
 		},
 		NewResponsePayload: func(
 			turn agentturn.FinalizedTurn,
-			meta agentturn.ResponseMeta,
 		) (api.AgentResponse, error) {
 			return newAgentResponsePayload(
 				turn.Message,
 				turn.SessionID,
 				turn.SessionEnd,
-				agentResponseMeta{Mode: meta.Mode},
 			)
 		},
 		PublishAssistant: func(traceID string, turn agentturn.FinalizedTurn) {
@@ -130,23 +119,6 @@ func (s *bridgeService) agentTurnService() agentturn.Service {
 		Log:                  logAction,
 		Stop:                 s.agentTurnStopConfig(),
 	})
-}
-
-func (s *bridgeService) agentTurnRuntimeBuilder() agentturnadapter.RuntimeBuilder {
-	factory := AgentRuntimeFactory(nil)
-	if s != nil {
-		factory = s.runtimeFactory
-	}
-	if factory == nil {
-		factory = newAgentRuntimeFactory()
-	}
-	return func(store bridgeconfig.Store) (agentturnadapter.RuntimeDependencies, error) {
-		deps, err := factory.Build(store)
-		if err != nil {
-			return nil, err
-		}
-		return deps, nil
-	}
 }
 
 func (s *bridgeService) agentTurnStopConfig() agentturnadapter.StopConfig {
@@ -277,7 +249,39 @@ func (s *bridgeService) executeAgentStopAction(
 	params agentStopParams,
 	traceID string,
 ) (ServiceResult, error) {
-	return s.agentTurnService().Stop(ctx, params, traceID)
+	handle := s.runHandleForStop(params)
+	result, err := s.agentTurnService().Stop(ctx, params, traceID)
+	if err != nil || handle == nil {
+		return result, err
+	}
+	if persistErr := s.persistCancelledRun(handle.SessionID, handle.TraceID); persistErr != nil {
+		return ServiceResult{}, bus.WrapError(ServiceErrorInternal, persistErr)
+	}
+	return result, nil
+}
+
+func (s *bridgeService) runHandleForStop(params agentStopParams) *RunHandle {
+	if s == nil || s.runRegistry == nil {
+		return nil
+	}
+	if sessionID := strings.TrimSpace(params.SessionID); sessionID != "" {
+		return s.runRegistry.GetBySessionID(sessionID)
+	}
+	return s.runRegistry.GetByTraceID(params.TraceID)
+}
+
+func (s *bridgeService) persistCancelledRun(sessionID string, traceID string) error {
+	if s == nil || s.sessionStore == nil {
+		return errors.New("session store is not configured")
+	}
+	sess, err := s.sessionStore.Load(sessionID)
+	if err != nil {
+		return err
+	}
+	if !sess.SetLastRunState(session.RunStatusCancelled, traceID, time.Now().UTC()) {
+		return nil
+	}
+	return s.sessionStore.Save(sess)
 }
 
 func (s *bridgeService) executeAgentStreamAction(

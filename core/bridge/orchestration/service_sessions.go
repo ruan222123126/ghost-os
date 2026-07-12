@@ -12,8 +12,6 @@ import (
 	"ghost-os/bridge/session"
 )
 
-var errSessionEnded = errors.New("session has already ended")
-
 type BinaryDownload = appdownloads.BinaryDownload
 
 func (s *bridgeService) executeSessionsListAction(traceID string) (ServiceResult, error) {
@@ -199,6 +197,8 @@ func mapSessionAppErrorKind(err error) ServiceErrorKind {
 	switch {
 	case errors.Is(err, appsessions.ErrSessionIDRequired),
 		errors.Is(err, appsessions.ErrInvalidSessionSearchQuery),
+		errors.Is(err, appsessions.ErrInvalidSessionRunStateLimit),
+		errors.Is(err, appsessions.ErrTooManySessionRunStateIDs),
 		errors.Is(err, appsessions.ErrUnsupportedSidebarPartitionVersion),
 		errors.Is(err, appsessions.ErrInvalidSessionPageQuery),
 		errors.Is(err, appsessions.ErrSessionAppendRoleInvalid),

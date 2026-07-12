@@ -18,16 +18,17 @@ func BuildMetadataInput(summary session.SessionMetadata) sessionturn.SessionMeta
 
 func BuildDetailInput(sess *session.Session, page session.MessagePage) sessionturn.SessionDetailInput {
 	return sessionturn.SessionDetailInput{
-		ID:             sess.ID,
-		Title:          sess.Title,
-		Messages:       buildIndexedMessages(page.Messages),
-		CreatedAt:      sess.CreatedAt,
-		UpdatedAt:      sess.UpdatedAt,
-		MessageCount:   sess.MessageCount,
-		Page:           BuildMessagePageInput(page),
-		TokenCount:     sess.TokenCount,
-		AssistantDraft: buildAssistantDraftInput(sess.AssistantDraft),
-		TurnDraft:      BuildTurnDraftInput(sess.TurnDraft),
+		ID:                   sess.ID,
+		Title:                sess.Title,
+		Messages:             buildIndexedMessages(page.Messages),
+		CreatedAt:            sess.CreatedAt,
+		UpdatedAt:            sess.UpdatedAt,
+		MessageCount:         sess.MessageCount,
+		Page:                 BuildMessagePageInput(page),
+		TokenCount:           sess.TokenCount,
+		AssistantDraft:       buildAssistantDraftInput(sess.AssistantDraft),
+		TurnDraft:            BuildTurnDraftInput(sess.TurnDraft),
+		LastRuntimeSelection: buildRuntimeSelectionInput(sess.LastRuntimeSelection),
 	}
 }
 
@@ -78,6 +79,20 @@ func buildAssistantDraftInput(draft *session.AssistantDraft) *sessionturn.Assist
 		return nil
 	}
 	return &sessionturn.AssistantDraftInput{Text: draft.Text}
+}
+
+func buildRuntimeSelectionInput(selection *session.RuntimeSelection) *sessionturn.SessionRuntimeSelectionInput {
+	normalized := session.CloneRuntimeSelection(selection)
+	if normalized == nil {
+		return nil
+	}
+	return &sessionturn.SessionRuntimeSelectionInput{
+		Runtime:      normalized.Runtime,
+		Provider:     normalized.Provider,
+		ProviderType: normalized.ProviderType,
+		Model:        normalized.Model,
+		Mode:         normalized.Mode,
+	}
 }
 
 func buildTurnDraftSegments(raw []session.TurnDraftSegment) []sessionturn.TurnDraftSegmentInput {

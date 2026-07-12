@@ -4,9 +4,34 @@ import (
 	"testing"
 	"time"
 
+	"ghost-os/bridge/orchestration/internal/contracts/api"
 	"ghost-os/bridge/session"
 	bridgeTasks "ghost-os/bridge/tasks"
 )
+
+func TestResolveRunStateQueryDefaultsToRecentThirty(t *testing.T) {
+	query, err := resolveRunStateQuery(api.SessionRunStatesGetRequest{})
+	if err != nil || query.Limit != RecentSessionRunStateLimit || len(query.SessionIDs) != 0 {
+		t.Fatalf("unexpected default query: query=%+v err=%v", query, err)
+	}
+}
+
+func TestResolveRunStateQueryUsesDeduplicatedSessionIDs(t *testing.T) {
+	limit := 1
+	query, err := resolveRunStateQuery(api.SessionRunStatesGetRequest{
+		Limit: &limit, SessionIDs: []string{" session-1 ", "session-1", "session-2"},
+	})
+	if err != nil || len(query.SessionIDs) != 2 || query.SessionIDs[0] != "session-1" || query.SessionIDs[1] != "session-2" {
+		t.Fatalf("unexpected session ids: query=%+v err=%v", query, err)
+	}
+}
+
+func TestResolveRunStateQueryRejectsLimitAboveProductRequirement(t *testing.T) {
+	limit := RecentSessionRunStateLimit + 1
+	if _, err := resolveRunStateQuery(api.SessionRunStatesGetRequest{Limit: &limit}); err != ErrInvalidSessionRunStateLimit {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
 
 func TestBuildSessionSourceResolutionHidesUnfinishedRunSessions(t *testing.T) {
 	resolution, err := BuildSessionSourceResolution([]SessionSourceTask{{

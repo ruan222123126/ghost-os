@@ -49,6 +49,20 @@ func (t *transport) handleConfigProviders(w http.ResponseWriter, r *http.Request
 	}
 }
 
+func (t *transport) handleConfigProviderExport(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodPost) {
+		return
+	}
+
+	var req bridgeorchestration.ProviderExportRequest
+	if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &req) {
+		return
+	}
+	traceID := resolveTraceID(req.TraceID, r)
+	result, err := t.usecases.config.ExportProvider(req, traceID)
+	respondServiceContractResult(w, traceID, result, err)
+}
+
 func (t *transport) handleConfigProviderByName(w http.ResponseWriter, r *http.Request) {
 	name, ok := providerNameFromPath(r.URL.Path)
 	if !ok {

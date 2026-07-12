@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	bridgeconfig "ghost-os/bridge/config"
+	"ghost-os/bridge/internal/runtimeutil"
 	"ghost-os/bridge/orchestration/internal/app/agentturn/turnstate"
 	appsessions "ghost-os/bridge/orchestration/internal/app/sessions"
 	apptasks "ghost-os/bridge/orchestration/internal/app/tasks"
@@ -41,7 +42,8 @@ func BuildDependencies(cmd DependencyCommand) (PreparedDependencies, error) {
 	if err != nil {
 		return PreparedDependencies{}, err
 	}
-	deps, err := cmd.RuntimeFactory.Build(apptasks.NewRuntimeOverrideStore(cmd.ConfigStore, normalized))
+	runtimeStore := apptasks.NewRuntimeOverrideStore(cmd.ConfigStore, normalized)
+	deps, err := cmd.RuntimeFactory.Build(runtimeStore)
 	if err != nil {
 		return PreparedDependencies{}, err
 	}
@@ -52,6 +54,11 @@ func BuildDependencies(cmd DependencyCommand) (PreparedDependencies, error) {
 	}
 	deps = depsWithPreset
 	deps = applyTaskRuntimePromptOverride(deps, normalized)
+	deps.RuntimeSelection = runtimeutil.BuildGhostRuntimeSelection(
+		runtimeStore,
+		deps.Config,
+		session.RuntimeSelectionModeDefault,
+	)
 	return PreparedDependencies{
 		Deps: deps,
 		HistoryBuilder: appsessions.NewHistoryBuilderFromConfig(

@@ -388,6 +388,37 @@ describe('chatMessages', () => {
     ]);
   });
 
+  it('keeps Codex text and standalone tool-call history in model order', () => {
+    const messages = withSessionIndices([
+      { role: 'user', text: 'run tests' },
+      { role: 'assistant', text: '先检查项目。' },
+      { role: 'assistant', tool_calls: [{ id: 'exec-1', name: 'codex_exec', arguments: { command: 'go test ./...' } }] },
+      {
+        role: 'tool',
+        text: 'ok',
+        tool_call_id: 'exec-1',
+        tool_result: {
+          status: 'success',
+          tool: 'codex_exec',
+          output: 'ok',
+        },
+      },
+      { role: 'assistant', text: '测试通过。' },
+    ]);
+
+    const mapped = mapSessionMessagesToChat(SESSION_ID, messages);
+
+    expect(mapped.map((message) => message.kind)).toEqual([
+      'user',
+      'assistant',
+      'tool',
+      'assistant',
+    ]);
+    expect(mapped[1]).toMatchObject({ kind: 'assistant', content: '先检查项目。' });
+    expect(mapped[2]).toMatchObject({ kind: 'tool', toolName: 'codex_exec', toolCallId: 'exec-1' });
+    expect(mapped[3]).toMatchObject({ kind: 'assistant', content: '测试通过。' });
+  });
+
   it('does not render pure tool-tag assistant messages as raw text', () => {
     const messages = withSessionIndices([
       { role: 'assistant', text: '<t:1>{"provider":"tavily","query":"OpenAI"}</t>' },

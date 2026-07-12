@@ -77,6 +77,40 @@ describe("mobileSessionProjection", () => {
       parts: reply.parts,
     });
   });
+
+  it("keeps Codex text and standalone tool-call history in message order", () => {
+    const messages = sessionDetailToConversationMessages(codexStructuredSessionDetail("session-1"));
+
+    expect(messages).toEqual([
+      expect.objectContaining({ role: "user", text: "run tests" }),
+      expect.objectContaining({
+        role: "assistant",
+        text: "先检查项目。",
+      }),
+      expect.objectContaining({
+        role: "assistant",
+        parts: [
+          {
+            id: "session-1:2:tool-call:exec-1",
+            kind: "tool",
+            tool: {
+              id: "session-1:2:tool-call:exec-1",
+              input: "{\n  \"command\": \"go test ./...\"\n}",
+              output: "ok",
+              status: "success",
+              toolCallId: "exec-1",
+              toolName: "codex_exec",
+              traceId: "trace-1",
+            },
+          },
+        ],
+      }),
+      expect.objectContaining({
+        role: "assistant",
+        text: "测试通过。",
+      }),
+    ]);
+  });
 });
 
 function toolTagSessionDetail(id: string): SessionDetail {
@@ -106,6 +140,61 @@ function toolTagSessionDetail(id: string): SessionDetail {
           tool: "screen_action",
           trace_id: "trace-draw",
         },
+      },
+    ],
+    page: {
+      has_more_before: false,
+      limit: 100,
+    },
+    title: "Bridge session-1",
+    token_count: 10,
+    updated_at: "2026-01-02T00:00:00.000Z",
+  };
+}
+
+function codexStructuredSessionDetail(id: string): SessionDetail {
+  return {
+    created_at: "2026-01-01T00:00:00.000Z",
+    id,
+    message_count: 5,
+    messages: [
+      {
+        index: 0,
+        role: "user",
+        text: "run tests",
+      },
+      {
+        index: 1,
+        role: "assistant",
+        text: "先检查项目。",
+      },
+      {
+        index: 2,
+        role: "assistant",
+        tool_calls: [
+          {
+            arguments: { command: "go test ./..." },
+            id: "exec-1",
+            name: "codex_exec",
+          },
+        ],
+      },
+      {
+        index: 3,
+        role: "tool",
+        text: "ok",
+        tool_call_id: "exec-1",
+        tool_result: {
+          output: "ok",
+          status: "success",
+          tool: "codex_exec",
+          trace_id: "trace-1",
+        },
+      },
+      {
+        index: 4,
+        role: "assistant",
+        text: "测试通过。",
       },
     ],
     page: {

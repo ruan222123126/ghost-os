@@ -99,7 +99,6 @@ func newBridgeServiceWithStreamExecutor(
 	registerDefaultActions(service)
 	return service
 }
-
 func newBridgeServiceState(store bridgeconfig.Store, sessionStore *session.Store) *bridgeService {
 	runtimeState := serviceruntime.NewState()
 	sessionPush := internaltrace.NewSessionPushHub()
@@ -205,10 +204,6 @@ func (s *bridgeService) registeredActionNames() []string {
 
 func validateBusRequest(req apiRequest) error { return dispatch.ValidateBusRequest(req) }
 
-func (s *Service) ExecuteConfigGetAction(traceID string) (ServiceResult, error) {
-	return s.inner.executeConfigGetAction(traceID)
-}
-
 func (s *Service) ExecuteConfigUpdateAction(req ConfigUpdateRequest, traceID string) (ServiceResult, error) {
 	return s.inner.executeConfigUpdateAction(req, traceID)
 }
@@ -226,12 +221,13 @@ func registerDefaultActions(service *bridgeService) {
 
 func defaultActionHandlers(service *bridgeService) dispatch.DefaultHandlers {
 	return dispatch.DefaultHandlers{
-		AgentSend:            service.executeAgentAction,
-		AgentStop:            service.executeAgentStopAction,
-		ExternalAgentStart:   service.executeExternalAgentStartAction,
-		ExternalAgentSend:    service.executeExternalAgentSendAction,
-		ExternalAgentStop:    service.executeExternalAgentStopAction,
-		ExternalAgentApprove: service.executeExternalAgentApproveAction,
+		AgentSend:              service.executeAgentAction,
+		AgentStop:              service.executeAgentStopAction,
+		ExternalAgentStart:     service.executeExternalAgentStartAction,
+		ExternalAgentSend:      service.executeExternalAgentSendAction,
+		ExternalAgentStop:      service.executeExternalAgentStopAction,
+		ExternalAgentApprove:   service.executeExternalAgentApproveAction,
+		ExternalAgentModelsGet: service.executeExternalAgentModelsGetAction,
 		ConfigGet: func(_ context.Context, traceID string) (ServiceResult, error) {
 			return service.executeConfigGetAction(traceID)
 		},
@@ -241,6 +237,7 @@ func defaultActionHandlers(service *bridgeService) dispatch.DefaultHandlers {
 		ConfigProvidersGet: func(_ context.Context, traceID string) (ServiceResult, error) {
 			return service.executeProvidersGetAction(traceID)
 		},
+		ConfigProviderExport: service.handleConfigProviderExportAction,
 		ConfigProviderCreate: func(_ context.Context, params providerCreateRequest, traceID string) (ServiceResult, error) {
 			return service.executeProviderCreateAction(params, traceID)
 		},
@@ -256,6 +253,9 @@ func defaultActionHandlers(service *bridgeService) dispatch.DefaultHandlers {
 		},
 		SessionsSearch: func(_ context.Context, params sessionSearchParams, traceID string) (ServiceResult, error) {
 			return service.executeSessionsSearchAction(params, traceID)
+		},
+		SessionRunStatesGet: func(_ context.Context, params sessionRunStatesGetRequest, traceID string) (ServiceResult, error) {
+			return service.executeSessionRunStatesGetAction(params, traceID)
 		},
 		SessionGet: func(_ context.Context, params sessionGetParams, traceID string) (ServiceResult, error) {
 			return service.executeSessionGetAction(params, traceID)

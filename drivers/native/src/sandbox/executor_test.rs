@@ -146,7 +146,8 @@ fn test_tool_call_bash_exec_with_positional_arg() {
 
 #[test]
 fn test_tool_call_list_files() {
-    let sandbox = PythonSandbox::new(SandboxConfig::default());
+    let root = std::env::current_dir().expect("resolve current dir");
+    let sandbox = sandbox_for(&root);
 
     let script = r#"
 files = list_files(path='.')

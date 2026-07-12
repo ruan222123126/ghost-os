@@ -1,7 +1,6 @@
 package externalagent
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -43,6 +42,10 @@ func (m *Manager) prepareRun(req api.ExternalAgentRequest, forceStart bool) (pre
 	if err != nil {
 		return preparedRun{}, err
 	}
+	req.Mode, err = normalizeCodexMode(req.Mode)
+	if err != nil {
+		return preparedRun{}, err
+	}
 	cwd := resolveCWD(req.ProjectRoot, cfg.ProjectRoot)
 	sess, err := m.prepareSession(req, forceStart, cfg, policy, cwd)
 	if err != nil {
@@ -81,6 +84,7 @@ func (m *Manager) prepareSession(
 	ext.Provider = ProviderCodex
 	ext.Status = StatusRunning
 	ext.PermissionMode = policy.PermissionMode
+	ext.Mode = strings.TrimSpace(req.Mode)
 	ext.Model = strings.TrimSpace(req.Model)
 	ext.Effort = strings.TrimSpace(req.Effort)
 	ext.CWD = cwd
@@ -94,6 +98,17 @@ func (m *Manager) prepareSession(
 	ext.UpdatedAt = now
 	ext.PendingApprovals = nil
 	sess.SetExternalRuntime(ext)
+	selectionMode := session.RuntimeSelectionModeDefault
+	if strings.TrimSpace(req.Mode) == CodexModePlan {
+		selectionMode = session.RuntimeSelectionModePlan
+	}
+	sess.SetLastRuntimeSelection(session.RuntimeSelection{
+		Runtime:      session.RuntimeSelectionCodex,
+		Provider:     ProviderCodex,
+		ProviderType: string(llm.ProviderCodex),
+		Model:        strings.TrimSpace(req.Model),
+		Mode:         selectionMode,
+	})
 	if strings.TrimSpace(sess.Title) == "" {
 		sess.Title = externalSessionTitle(req.Message)
 	}
@@ -101,29 +116,6 @@ func (m *Manager) prepareSession(
 		return nil, err
 	}
 	return sess, nil
-}
-
-func (m *Manager) ensureThread(ctx context.Context, client CodexClient, prepared preparedRun) (string, error) {
-	ext := prepared.session.ExternalRuntime
-	opts := ThreadOptions{
-		Model:          prepared.request.Model,
-		CWD:            prepared.cwd,
-		ApprovalPolicy: prepared.policy.ApprovalPolicy,
-		Sandbox:        prepared.policy.Sandbox,
-	}
-	if ext != nil && strings.TrimSpace(ext.ThreadID) != "" {
-		opts.ThreadID = ext.ThreadID
-		result, err := client.ResumeThread(ctx, opts)
-		if err != nil {
-			return "", err
-		}
-		return result.ThreadID, nil
-	}
-	result, err := client.StartThread(ctx, opts)
-	if err != nil {
-		return "", err
-	}
-	return result.ThreadID, nil
 }
 
 func (m *Manager) runtimeForSession(sessionID string, cfg bridgeconfig.Config, cwd string) (*runtimeSession, error) {
@@ -168,7 +160,7 @@ func (r *runtimeSession) beginTurn(sessionID string, traceID string, turn int, s
 		traceID:   traceID,
 		turn:      turn,
 		sink:      ensureSink(sink),
-		done:      make(chan turnDone, 1),
+		done:      make(chan struct{}),
 	}
 	return nil
 }
@@ -179,15 +171,33 @@ func (r *runtimeSession) activeSnapshot() *activeTurn {
 	return r.active
 }
 
-func (r *runtimeSession) activeDone() <-chan turnDone {
+func (r *runtimeSession) activeDoneState() (*activeTurn, <-chan struct{}) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.active == nil {
-		ch := make(chan turnDone)
+		ch := make(chan struct{})
 		close(ch)
-		return ch
+		return nil, ch
 	}
-	return r.active.done
+	return r.active, r.active.done
+}
+
+func (r *runtimeSession) activeResult(active *activeTurn) turnDone {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if active != nil {
+		return active.result
+	}
+	if r.active == nil {
+		return turnDone{}
+	}
+	return r.active.result
+}
+
+func (r *runtimeSession) activeTurnRunning() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.active != nil && !r.active.finished
 }
 
 func (r *runtimeSession) clearActive() {
@@ -210,20 +220,41 @@ func (r *runtimeSession) appendText(text string) {
 	defer r.mu.Unlock()
 	if r.active != nil {
 		r.active.text.WriteString(text)
+		r.active.pendingText.WriteString(text)
 	}
+}
+
+func (r *runtimeSession) pendingText() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.active == nil {
+		return ""
+	}
+	return r.active.pendingText.String()
+}
+
+func (r *runtimeSession) clearPendingText() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.active == nil {
+		return
+	}
+	r.active.pendingText.Reset()
 }
 
 func (r *runtimeSession) finish(done turnDone) {
 	r.mu.Lock()
 	active := r.active
-	r.mu.Unlock()
 	if active == nil {
+		r.mu.Unlock()
 		return
 	}
-	select {
-	case active.done <- done:
-	default:
+	if !active.finished {
+		active.result = done
+		active.finished = true
+		close(active.done)
 	}
+	r.mu.Unlock()
 }
 
 func resolveCWD(requestRoot string, configRoot string) string {

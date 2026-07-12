@@ -43,7 +43,6 @@ describe('components/config/runtimeSettingsForm', () => {
     expect(form.llmCompletionRetryIntervalMS).toBe('200');
     expect(form.sessionSystemPromptVisibleEnabled).toBe(true);
     expect(form.assistantMarkdownEnabled).toBe(true);
-    expect(form.toolCallCompactOutputEnabled).toBe(false);
     expect(form.memoryModeEnabled).toBe(false);
     expect(form.microcompactEnabled).toBe(false);
     expect(form.sessionTitleMode).toBe('session_id');
@@ -53,7 +52,6 @@ describe('components/config/runtimeSettingsForm', () => {
     const form = createRuntimeFormState(buildBridgeConfig({
       session_system_prompt_visible_enabled: false,
       assistant_markdown_enabled: false,
-      tool_call_compact_output_enabled: true,
       memory_mode_enabled: true,
       microcompact_enabled: true,
       session_title_mode: 'ai_generated',
@@ -64,7 +62,6 @@ describe('components/config/runtimeSettingsForm', () => {
     expect(form.llmCompletionRetryIntervalMS).toBe('0');
     expect(form.sessionSystemPromptVisibleEnabled).toBe(false);
     expect(form.assistantMarkdownEnabled).toBe(false);
-    expect(form.toolCallCompactOutputEnabled).toBe(true);
     expect(form.memoryModeEnabled).toBe(true);
     expect(form.microcompactEnabled).toBe(true);
     expect(form.sessionTitleMode).toBe('ai_generated');
@@ -82,7 +79,6 @@ describe('components/config/runtimeSettingsForm', () => {
       sessionHumanLogFullEnabled: false,
       sessionSystemPromptVisibleEnabled: false,
       assistantMarkdownEnabled: false,
-      toolCallCompactOutputEnabled: true,
       memoryModeEnabled: true,
       microcompactEnabled: true,
       sessionTitleMode: 'first_message',
@@ -99,7 +95,7 @@ describe('components/config/runtimeSettingsForm', () => {
     expect(update.task_execution_timeout_ms).toBe(600000);
     expect(update.llm_completion_retry_count).toBe(0);
     expect(update.llm_completion_retry_interval_ms).toBe(250);
-    expect(update.tool_call_compact_output_enabled).toBe(true);
+    expect(update).not.toHaveProperty('tool_call_compact_output_enabled');
     expect(update.memory_mode_enabled).toBe(true);
     expect(update.microcompact_enabled).toBe(true);
     expect(update.session_title_mode).toBe('first_message');

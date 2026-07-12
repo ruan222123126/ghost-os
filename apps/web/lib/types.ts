@@ -1,6 +1,7 @@
 // Web UI types plus API contracts generated from core/shared/schema.json.
 
 import type {
+  AgentRequest as SharedAgentRequest,
   AgentMessageTaskCreateRequest as SharedAgentMessageTaskCreateRequest,
   AgentMessageTaskPayload as SharedAgentMessageTaskPayload,
   OrchestrationAgentNode as SharedOrchestrationAgentNode,
@@ -60,6 +61,7 @@ export type {
   AgentRunStartedPayload,
   BridgeConfig,
   ConfigUpdate,
+  CodexModelCatalog,
   HumanResponseAck,
   HumanResponseRequest,
   ProviderConfig,
@@ -74,6 +76,7 @@ export type {
   SessionMetadata,
   SessionPushAssistantMessagePayload,
   SessionPushAwaitingHumanPayload,
+  SessionRuntimeSelection,
   TaskRunCardEventPayload,
   TaskRunCardFinishedPayload,
   TaskRunCardStartedPayload,
@@ -97,6 +100,8 @@ export type {
 export type { TaskRunCard } from '@/lib/taskRunCards';
 export type SessionTurnDraft = SharedSessionTurnDraft;
 export type AgentRuntimeType = 'ghost' | 'codex';
+export type AgentModeSelection = 'normal' | 'plan' | null;
+export type ExternalAgentMode = 'default' | 'plan';
 export type ExternalCodexPermissionMode = 'read-only' | 'default' | 'safe-yolo' | 'yolo';
 
 export interface UserChatMessage {
@@ -202,7 +207,10 @@ export interface ChatImageDraft {
 
 export interface ChatSendInput {
   agentRuntime?: AgentRuntimeType;
+  codexMode?: ExternalAgentMode;
   message: string;
+  mode?: SharedAgentRequest['mode'];
+  model?: string;
   images: ChatImageDraft[];
   selectedSkill?: ChatSelectedSkill;
 }

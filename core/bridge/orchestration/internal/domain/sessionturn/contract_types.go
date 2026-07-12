@@ -10,6 +10,7 @@ type sessionImageContent = api.SessionImageContent
 type sessionMessage = api.SessionMessage
 type sessionMessagePage = api.SessionMessagePage
 type sessionMetadata = api.SessionMetadata
+type sessionRuntimeSelection = api.SessionRuntimeSelection
 type sessionToolCall = api.SessionToolCall
 type sessionToolResult = api.SessionToolResult
 type sessionTurnDraft = api.SessionTurnDraft

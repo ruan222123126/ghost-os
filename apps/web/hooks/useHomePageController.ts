@@ -1,7 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { getSession } from '@/lib/api/sessions/api';
+import { getCodexModelCatalog } from '@/lib/api/agent/models';
 import { useBridgeChat } from '@/hooks/chat/useBridgeChat';
 import { useBridgeConfig } from '@/hooks/useBridgeConfig';
 import { useSessions } from '@/hooks/useSessions';
@@ -11,9 +13,17 @@ import {
   configControllerState,
   sessionControllerState,
 } from '@/hooks/homePageControllerState';
-import { ignorePromise } from '@/lib/errors';
+import { EMPTY_CODEX_MODEL_CATALOG, normalizeCodexModel } from '@/lib/codexModels';
+import { ignorePromise, toErrorMessage } from '@/lib/errors';
 import { parseSettingsQuery, stripSettingsQuery, type SettingsQueryTab } from '@/lib/settingsQuery';
-import type { ChatSendInput, ProviderModelOption, WorkflowTaskPayload } from '@/lib/types';
+import type {
+  AgentModeSelection,
+  ChatSendInput,
+  ProviderModelOption,
+  SessionRuntimeSelection,
+  WorkflowTaskPayload,
+  CodexModelCatalog,
+} from '@/lib/types';
 
 export interface HomePageController {
   sessions: ReturnType<typeof useSessions>['sessions'];
@@ -34,12 +44,14 @@ export interface HomePageController {
   chatError: string;
   hasPendingQuestion: boolean;
   hasOlderHistory: boolean;
+  postSendFocusRequest: ReturnType<typeof useBridgeChat>['postSendFocusRequest'];
   canStop: boolean;
   config: ReturnType<typeof useBridgeConfig>['config'];
   configLoading: boolean;
   savingConfig: boolean;
   configError: string;
   modelOptionsLoading: boolean;
+  agentMode: AgentModeSelection;
   activeModelOption: ProviderModelOption | null;
   modelOptions: ProviderModelOption[];
   showEmptyHomeState: boolean;
@@ -53,6 +65,7 @@ export interface HomePageController {
   stopCurrentRun: ReturnType<typeof useBridgeChat>['stopCurrentRun'];
   saveConfig: ReturnType<typeof useBridgeConfig>['saveConfig'];
   selectActiveModel: ReturnType<typeof useBridgeConfig>['selectActiveModel'];
+  setAgentMode: (mode: AgentModeSelection) => void;
   refreshConfig: ReturnType<typeof useBridgeConfig>['refreshConfig'];
   openConfig: () => void;
   closeConfig: () => void;
@@ -88,6 +101,15 @@ interface HomePageActions {
   newChat: HomePageController['newChat'];
   selectSession: HomePageController['selectSession'];
   sendMessage: HomePageController['sendMessage'];
+}
+
+type SessionRuntimeSelectionApplier = (selection: SessionRuntimeSelection | null | undefined) => Promise<void>;
+type ComposerModelState = Pick<HomePageController, 'activeModelOption' | 'modelOptions'>;
+
+interface CodexModelCatalogState {
+  catalog: CodexModelCatalog;
+  error: string;
+  loading: boolean;
 }
 
 function useSettingsQueryState(): SettingsQueryState {
@@ -129,24 +151,45 @@ export function useHomePageController(): HomePageController {
   const settings = useSettingsPanelState(router);
   const sessions = useSessions({ autoRefresh: true });
   const config = useBridgeConfig({ autoRefresh: !settings.showConfig });
+  const codexCatalog = useCodexModelCatalog();
+  const [agentMode, setAgentMode] = useState<AgentModeSelection>(null);
+  const [codexModel, setCodexModel] = useState('');
   const chat = useBridgeChat({
     currentSessionId: sessions.currentSessionId,
     externalCodexPermissionMode: config.config?.external_codex_permission_mode,
     externalProjectRoot: config.config?.project_root,
     onSessionResolved: sessions.setCurrentSessionId,
   });
-  const actions = useHomePageActions(sessions, chat);
+  const selectActiveModel = useComposerModelSelection(
+    agentMode,
+    config.selectActiveModel,
+    setCodexModel,
+    codexCatalog.catalog,
+  );
+  const applySessionRuntimeSelection = useSessionRuntimeSelectionApplier(
+    config.selectActiveModel,
+    setAgentMode,
+    setCodexModel,
+    codexCatalog.catalog,
+  );
+  const actions = useHomePageActions(sessions, chat, applySessionRuntimeSelection);
   const derived = buildDerivedHomeState({
     chat,
     config,
     sessions,
     showConfig: settings.showConfig,
   });
+  const modelState = useMemo(() => {
+    return buildComposerModelState(agentMode, config.activeModelOption, config.modelOptions, codexModel, codexCatalog.catalog);
+  }, [agentMode, codexCatalog.catalog, codexModel, config.activeModelOption, config.modelOptions]);
 
   return {
     ...sessionControllerState(sessions, chat),
     ...chatControllerState(chat),
     ...configControllerState(config),
+    configError: config.configError || (agentMode !== null ? codexCatalog.error : ''),
+    modelOptionsLoading: config.modelOptionsLoading || (agentMode !== null && codexCatalog.loading),
+    ...modelState,
     ...derived,
     showConfig: settings.showConfig,
     settingsTabFromQuery: settings.settingsTabFromQuery,
@@ -155,7 +198,9 @@ export function useHomePageController(): HomePageController {
     loadOlderHistory: chat.loadOlderHistory,
     stopCurrentRun: chat.stopCurrentRun,
     saveConfig: config.saveConfig,
-    selectActiveModel: config.selectActiveModel,
+    selectActiveModel,
+    agentMode,
+    setAgentMode,
     refreshConfig: config.refreshConfig,
     openConfig: settings.openConfig,
     closeConfig: settings.closeConfig,
@@ -166,6 +211,38 @@ export function useHomePageController(): HomePageController {
     openWorkflowCreate: settings.openWorkflowCreate,
     openWorkflowEdit: settings.openWorkflowEdit,
   };
+}
+
+function useCodexModelCatalog(): CodexModelCatalogState {
+  const [state, setState] = useState<CodexModelCatalogState>({
+    catalog: EMPTY_CODEX_MODEL_CATALOG,
+    error: '',
+    loading: true,
+  });
+
+  useEffect(() => {
+    let active = true;
+    getCodexModelCatalog()
+      .then((catalog) => {
+        if (active) {
+          setState({ catalog, error: '', loading: false });
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setState({
+            catalog: EMPTY_CODEX_MODEL_CATALOG,
+            error: toErrorMessage(error, 'Codex 模型列表加载失败'),
+            loading: false,
+          });
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return state;
 }
 
 function useSettingsPanelState(router: RouterController): SettingsPanelState {
@@ -212,6 +289,7 @@ function useSettingsPanelState(router: RouterController): SettingsPanelState {
 function useHomePageActions(
   sessions: SessionsController,
   chat: ChatController,
+  applySessionRuntimeSelection: SessionRuntimeSelectionApplier,
 ): HomePageActions {
   const sendMessage = useCallback(async (input: ChatSendInput) => {
     await chat.sendChatMessage(input);
@@ -221,10 +299,13 @@ function useHomePageActions(
   const selectSession = useCallback((id: string) => {
     sessions.setCurrentSessionId(id);
     chat.clearBackgroundCompletion(id);
-    if (chat.shouldLoadSessionHistory(id)) {
-      ignorePromise(chat.loadSessionHistory(id));
-    }
-  }, [chat, sessions]);
+    const detail = chat.shouldLoadSessionHistory(id)
+      ? chat.loadSessionHistory(id)
+      : loadSessionRuntimeSelectionDetail(id);
+    ignorePromise(detail.then((sessionDetail) => {
+      return applySessionRuntimeSelection(sessionDetail?.last_runtime_selection ?? null);
+    }));
+  }, [applySessionRuntimeSelection, chat, sessions]);
 
   const deleteSession = useCallback(async (id: string) => {
     await sessions.deleteSession(id);
@@ -240,4 +321,130 @@ function useHomePageActions(
   }, [chat, sessions]);
 
   return { deleteSession, newChat, selectSession, sendMessage };
+}
+
+function useSessionRuntimeSelectionApplier(
+  selectActiveModel: HomePageController['selectActiveModel'],
+  setAgentMode: (mode: AgentModeSelection) => void,
+  setCodexModel: (model: string) => void,
+  codexCatalog: CodexModelCatalog,
+): SessionRuntimeSelectionApplier {
+  return useCallback(async (selection) => {
+    if (!selection) {
+      return;
+    }
+
+    setAgentMode(agentModeForRuntimeSelection(selection));
+    if (selection.runtime === 'codex') {
+      setCodexModel(normalizeCodexModel(selection.model, codexCatalog));
+      return;
+    }
+
+    const option = providerModelOptionForRuntimeSelection(selection);
+    if (!option) {
+      return;
+    }
+    await selectActiveModel(option);
+  }, [codexCatalog, selectActiveModel, setAgentMode, setCodexModel]);
+}
+
+function useComposerModelSelection(
+  agentMode: AgentModeSelection,
+  selectActiveModel: HomePageController['selectActiveModel'],
+  setCodexModel: (model: string) => void,
+  codexCatalog: CodexModelCatalog,
+): HomePageController['selectActiveModel'] {
+  return useCallback(async (option) => {
+    if (agentMode !== null && option.providerType === 'codex') {
+      setCodexModel(normalizeCodexModel(option.model, codexCatalog));
+      return true;
+    }
+
+    return selectActiveModel(option);
+  }, [agentMode, codexCatalog, selectActiveModel, setCodexModel]);
+}
+
+async function loadSessionRuntimeSelectionDetail(sessionId: string) {
+  return getSession(sessionId, { limit: 1 });
+}
+
+function agentModeForRuntimeSelection(selection: SessionRuntimeSelection): AgentModeSelection {
+  if (selection.runtime !== 'codex') {
+    return null;
+  }
+  return selection.mode === 'plan' ? 'plan' : 'normal';
+}
+
+function providerModelOptionForRuntimeSelection(
+  selection: SessionRuntimeSelection,
+): ProviderModelOption | null {
+  const model = selection.model?.trim();
+  if (!model) {
+    return null;
+  }
+
+  const providerType = selection.runtime === 'codex'
+    ? 'codex'
+    : selection.provider_type ?? 'custom';
+  const providerName = selection.runtime === 'codex'
+    ? selection.provider?.trim() || 'codex'
+    : selection.provider?.trim() || providerType;
+  if (!providerName) {
+    return null;
+  }
+  return {
+    providerName,
+    providerType,
+    model,
+  };
+}
+
+function buildComposerModelState(
+  agentMode: AgentModeSelection,
+  activeModelOption: ProviderModelOption | null,
+  modelOptions: ProviderModelOption[],
+  codexModel: string,
+  codexCatalog: CodexModelCatalog,
+): ComposerModelState {
+  if (agentMode === null) {
+    return {
+      activeModelOption,
+      modelOptions,
+    };
+  }
+
+  const codexOptions = buildCodexModelOptions(codexCatalog);
+  return {
+    activeModelOption: resolveActiveCodexModelOption(codexModel, activeModelOption, codexOptions, codexCatalog),
+    modelOptions: codexOptions,
+  };
+}
+
+function buildCodexModelOptions(catalog: CodexModelCatalog): ProviderModelOption[] {
+  return catalog.models.map((model) => ({
+    providerName: 'codex',
+    providerType: 'codex',
+    model,
+  }));
+}
+
+function resolveActiveCodexModelOption(
+  codexModel: string,
+  activeModelOption: ProviderModelOption | null,
+  codexOptions: ProviderModelOption[],
+  catalog: CodexModelCatalog,
+): ProviderModelOption | null {
+  const activeCodexModel = activeModelOption?.providerType === 'codex'
+    ? activeModelOption.model.trim()
+    : normalizeCodexModel(codexModel, catalog);
+  const targetModel = activeCodexModel || catalog.default_model;
+
+  return codexOptions.find((option) => sameModel(option.model, targetModel))
+    ?? codexOptions.find((option) => sameModel(option.model, catalog.default_model))
+    ?? codexOptions[0]
+    ?? null;
+}
+
+function sameModel(left: string, right: string): boolean {
+  return left.trim().toLowerCase() === right.trim().toLowerCase();
 }

@@ -1,14 +1,20 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AssistantReply, ChatBubble } from "./Messages";
-import type { AgentPayload, StatusMessage } from "../../mobileTypes";
+import { AssistantReply, ChatBubble, ConversationMessageList } from "./Messages";
+import type { AgentPayload, MobileConversationMessage, StatusMessage } from "../../mobileTypes";
 
 const successStatus: StatusMessage = { tone: "success", text: "回复已返回" };
 
 const markdownMock = vi.hoisted(() => (
   vi.fn((_: { content: string; final?: boolean; showCopyButton?: boolean }) => null)
 ));
+const copyTextToClipboardMock = vi.hoisted(() => vi.fn());
+
+vi.mock("../../../../shared/browserClipboard", () => ({
+  COPY_FEEDBACK_RESET_DELAY_MS: 2000,
+  copyTextToClipboard: copyTextToClipboardMock,
+}));
 
 vi.mock("./AssistantMarkdownContent", () => ({
   AssistantMarkdownContent: (props: { content: string; final?: boolean; showCopyButton?: boolean }) => (
@@ -22,6 +28,8 @@ vi.mock("./AssistantMarkdownContent", () => ({
 describe("AssistantReply", () => {
   beforeEach(() => {
     markdownMock.mockClear();
+    copyTextToClipboardMock.mockReset();
+    copyTextToClipboardMock.mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -128,6 +136,34 @@ describe("AssistantReply", () => {
     expect(screen.getByText("/repo")).toBeTruthy();
   });
 
+  it("copies the expanded command and output from a tool card", async () => {
+    render(
+      <AssistantReply
+        reply={agentReply({
+          tools: [
+            {
+              id: "tool-1",
+              input: JSON.stringify({ cmd: "pwd" }),
+              output: "/repo",
+              status: "success",
+              toolCallId: "call-1",
+              toolName: "bash_exec",
+            },
+          ],
+        })}
+        status={successStatus}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "已运行 pwd" }));
+    fireEvent.click(screen.getByRole("button", { name: "复制" }));
+
+    await waitFor(() => {
+      expect(copyTextToClipboardMock).toHaveBeenCalledWith("pwd\n/repo");
+      expect(screen.getByRole("button", { name: "已复制" })).toBeTruthy();
+    });
+  });
+
   it("renders assistant text and tool cards in reply part order", () => {
     const { container } = render(
       <AssistantReply
@@ -180,7 +216,7 @@ describe("AssistantReply", () => {
     expect(markdownMock).toHaveBeenCalledWith(expect.objectContaining({
       content: "partial",
       final: false,
-      showCopyButton: false,
+      showCopyButton: true,
     }));
   });
 });
@@ -198,6 +234,28 @@ describe("ChatBubble", () => {
   });
 });
 
+describe("ConversationMessageList", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("renders the active reply after the optimistic user message", () => {
+    const { container } = render(
+      <ConversationMessageList
+        messages={[conversationMessage("pending:user:1", "user", "先执行")]}
+        reply={agentReply({ message: "正在处理" })}
+        registerUserMessageRow={() => () => undefined}
+        status={{ tone: "loading", text: "正在回复" }}
+      />,
+    );
+
+    const rows = [...container.querySelectorAll(".conversation-list > .message-row")];
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.textContent).toBe("先执行");
+    expect(rows[1]?.textContent).toContain("正在处理");
+  });
+});
+
 function agentReply(patch: Partial<AgentPayload>): AgentPayload {
   return {
     message: patch.message ?? "",
@@ -207,5 +265,17 @@ function agentReply(patch: Partial<AgentPayload>): AgentPayload {
     session_id: patch.session_id ?? "session-1",
     thinking: patch.thinking,
     tools: patch.tools,
+  };
+}
+
+function conversationMessage(
+  id: string,
+  role: MobileConversationMessage["role"],
+  text: string,
+): MobileConversationMessage {
+  return {
+    id,
+    role,
+    text,
   };
 }

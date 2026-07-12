@@ -11,7 +11,7 @@ import { useComposerSkills } from '@/hooks/useComposerSkills';
 import { createChatImageDrafts } from '@/lib/chatImageDrafts';
 import { toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
-import type { AgentRuntimeType, ChatImageDraft, ChatSelectedSkill, ChatSendInput, ProviderModelOption } from '@/lib/types';
+import type { AgentModeSelection, ChatImageDraft, ChatSelectedSkill, ChatSendInput, ProviderModelOption } from '@/lib/types';
 
 interface ChatInputProps {
   loading: boolean;
@@ -20,10 +20,12 @@ interface ChatInputProps {
   disabled: boolean;
   awaitingQuestion?: boolean;
   modelLoading?: boolean;
+  agentMode?: AgentModeSelection;
   activeModel?: ProviderModelOption | null;
   availableModels?: ProviderModelOption[];
   onSend: (input: ChatSendInput) => Promise<void>;
   onStop?: () => Promise<void>;
+  onChangeAgentMode?: (mode: AgentModeSelection) => void;
   onSelectModel?: (option: ProviderModelOption) => Promise<boolean>;
 }
 
@@ -34,28 +36,27 @@ export const ChatInput: FC<ChatInputProps> = ({
   disabled,
   awaitingQuestion = false,
   modelLoading = false,
+  agentMode: controlledAgentMode,
   activeModel = null,
   availableModels = [],
   onSend,
   onStop,
+  onChangeAgentMode,
   onSelectModel,
 }) => {
   const { copy } = useWebLocale();
   const [draft, setDraft] = useState('');
-  const [agentRuntime, setAgentRuntime] = useState<AgentRuntimeType>('ghost');
+  const [uncontrolledAgentMode, setUncontrolledAgentMode] = useState<AgentModeSelection>(null);
+  const agentMode = controlledAgentMode ?? uncontrolledAgentMode;
+  const setAgentMode = onChangeAgentMode ?? setUncontrolledAgentMode;
   const [pendingImages, setPendingImages] = useState<ChatImageDraft[]>([]);
   const [imageError, setImageError] = useState('');
   const [selectedSkill, setSelectedSkill] = useState<ChatSelectedSkill | null>(null);
   const { skillError, skills, skillsLoading, refreshSkills } = useComposerSkills();
   const canSubmit = draft.trim().length > 0 || pendingImages.length > 0 || selectedSkill !== null;
-  const codexModeEnabled = agentRuntime === 'codex';
-  const codexModeBlockedByImages = pendingImages.length > 0;
-  const codexModeDisabledMessage = codexModeBlockedByImages
-    ? copy.chat.composerCodexImagesUnsupported
-    : copy.chat.composerCodexUnavailable;
 
   const handleSubmit = useCallback(async () => {
-    const input = buildChatSendInput(draft, pendingImages, selectedSkill, agentRuntime);
+    const input = buildChatSendInput(draft, pendingImages, selectedSkill, agentMode, activeModel);
     if (!canSubmitChatInput(input)) {
       return;
     }
@@ -76,7 +77,7 @@ export const ChatInput: FC<ChatInputProps> = ({
       setSelectedSkill(previousSkill);
       throw error;
     }
-  }, [agentRuntime, draft, onSend, pendingImages, selectedSkill]);
+  }, [activeModel, agentMode, draft, onSend, pendingImages, selectedSkill]);
 
   const handleSelectFiles = useCallback(async (files: FileList) => {
     try {
@@ -95,14 +96,14 @@ export const ChatInput: FC<ChatInputProps> = ({
 
   return (
     <ChatComposer
-      agentRuntime={agentRuntime}
-      canEnableCodexMode={canEnableCodexMode && !codexModeBlockedByImages}
-      codexModeDisabledMessage={codexModeDisabledMessage}
+      agentMode={agentMode}
+      canEnableCodexMode={canEnableCodexMode}
+      codexModeDisabledMessage={copy.chat.composerCodexUnavailable}
       value={draft}
       onChange={setDraft}
       onSubmit={handleSubmit}
       onStop={onStop}
-      onSwitchAgentRuntime={setAgentRuntime}
+      onChangeAgentMode={setAgentMode}
       onSelectFiles={handleSelectFiles}
       sending={loading}
       canStop={canStop}
@@ -120,32 +121,80 @@ export const ChatInput: FC<ChatInputProps> = ({
       onRefreshSkills={refreshSkills}
       onSelectSkill={(skill) => setSelectedSkill({ id: skill.id, name: skill.name })}
       hint={buildHint(copy, imageError, pendingImages)}
-      toolbar={onSelectModel && !codexModeEnabled ? (
-        <ModelSelector
-          value={activeModel}
-          options={availableModels}
-          loading={modelLoading}
-          disabled={disabled || loading}
-          onChange={onSelectModel}
-        />
-      ) : undefined}
+      toolbar={buildModelSelector({
+        activeModel,
+        availableModels,
+        disabled: disabled || loading,
+        modelLoading,
+        onSelectModel,
+      })}
       status={awaitingQuestion ? copy.chat.composerAwaitingQuestion : undefined}
     />
   );
 };
 
+function buildModelSelector(options: {
+  activeModel: ProviderModelOption | null;
+  availableModels: ProviderModelOption[];
+  disabled: boolean;
+  modelLoading: boolean;
+  onSelectModel?: (option: ProviderModelOption) => Promise<boolean>;
+}): ReactNode {
+  if (!options.onSelectModel) {
+    return undefined;
+  }
+  return (
+    <ModelSelector
+      value={options.activeModel}
+      options={options.availableModels}
+      loading={options.modelLoading}
+      disabled={options.disabled}
+      onChange={options.onSelectModel}
+    />
+  );
+}
+
 function buildChatSendInput(
   message: string,
   images: ChatImageDraft[],
   selectedSkill: ChatSelectedSkill | null,
-  agentRuntime: AgentRuntimeType,
+  agentMode: AgentModeSelection,
+  activeModel: ProviderModelOption | null,
 ): ChatSendInput {
+  const codexModeEnabled = agentMode !== null;
   const input: ChatSendInput = {
-    agentRuntime,
+    agentRuntime: codexModeEnabled ? 'codex' : undefined,
+    codexMode: resolveCodexMode(agentMode),
     message: message.trim(),
+    model: resolveCodexModel(agentMode, activeModel),
     images,
   };
   return selectedSkill ? { ...input, selectedSkill } : input;
+}
+
+function resolveCodexMode(agentMode: AgentModeSelection): ChatSendInput['codexMode'] {
+  if (agentMode === 'normal') {
+    return 'default';
+  }
+  if (agentMode === 'plan') {
+    return 'plan';
+  }
+  return undefined;
+}
+
+function resolveCodexModel(
+  agentMode: AgentModeSelection,
+  activeModel: ProviderModelOption | null,
+): string | undefined {
+  if (agentMode === null) {
+    return undefined;
+  }
+
+  if (activeModel?.providerType === 'codex') {
+    return activeModel.model.trim() || undefined;
+  }
+
+  return undefined;
 }
 
 function canSubmitChatInput(input: ChatSendInput): boolean {

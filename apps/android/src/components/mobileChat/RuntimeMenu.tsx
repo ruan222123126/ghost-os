@@ -1,16 +1,21 @@
 import type {
   AgentRuntimeType,
   ConfigPayload,
+  CodexModelCatalogPayload,
   ExternalCodexPermissionMode,
   ProviderConfigPayload,
   ProviderListPayload,
   StatusMessage,
 } from "../../mobileTypes";
+import { EMPTY_CODEX_MODEL_CATALOG, normalizeCodexModel } from "../../lib/codexModels";
 import { UiIcon } from "./icons";
 import "./RuntimeMenu.css";
 
 interface RuntimeMenuProps {
   agentRuntime: AgentRuntimeType;
+  codexModel?: string;
+  codexModelCatalog?: CodexModelCatalogPayload;
+  codexModelCatalogError?: string;
   codexPermissionMode?: ExternalCodexPermissionMode;
   config: ConfigPayload | undefined;
   providerList: ProviderListPayload | undefined;
@@ -18,6 +23,7 @@ interface RuntimeMenuProps {
   open: boolean;
   onClose: () => void;
   onSwitchAgentRuntime: (runtime: AgentRuntimeType) => void;
+  onSwitchCodexModel?: (model: string) => void;
   onSwitchModel: (model: string) => Promise<boolean>;
 }
 
@@ -58,7 +64,7 @@ function modelOptions(props: RuntimeMenuProps): ModelOption[] {
     return [{
       id: "not-connected",
       model: "未连接",
-      desc: props.status.text,
+      desc: props.codexModelCatalogError || props.status.text,
       selected: true,
       disabled: true,
     }];
@@ -76,8 +82,32 @@ function modelOptions(props: RuntimeMenuProps): ModelOption[] {
   });
 }
 
+function codexModelOptions(props: RuntimeMenuProps): ModelOption[] {
+  const catalog = props.codexModelCatalog ?? EMPTY_CODEX_MODEL_CATALOG;
+  const activeModel = normalizeCodexModel(props.codexModel, catalog);
+  if (catalog.models.length === 0) {
+    return [{
+      id: "codex-models-unavailable",
+      model: "暂无可用模型",
+      desc: props.status.text,
+      selected: true,
+      disabled: true,
+    }];
+  }
+  return catalog.models.map((model) => {
+    const selected = model === activeModel;
+    return {
+      id: `codex:${model}`,
+      model,
+      desc: selected ? "当前 Codex 模型" : "Codex",
+      selected,
+      disabled: props.status.tone === "loading",
+    };
+  });
+}
+
 export function RuntimeMenu(props: RuntimeMenuProps) {
-  const options = modelOptions(props);
+  const options = props.agentRuntime === "codex" ? codexModelOptions(props) : modelOptions(props);
 
   function selectAgentRuntime(runtime: AgentRuntimeType): void {
     props.onSwitchAgentRuntime(runtime);
@@ -90,6 +120,11 @@ export function RuntimeMenu(props: RuntimeMenuProps) {
       return;
     }
     if (option.disabled) {
+      return;
+    }
+    if (props.agentRuntime === "codex") {
+      props.onSwitchCodexModel?.(option.model);
+      props.onClose();
       return;
     }
     const didSwitch = await props.onSwitchModel(option.model);
@@ -129,12 +164,17 @@ export function RuntimeMenu(props: RuntimeMenuProps) {
             <span className="runtime-check">{props.agentRuntime === "codex" ? <UiIcon name="check" /> : null}</span>
             <span className="runtime-option-copy">
               <strong>Codex</strong>
-              <span>{props.codexPermissionMode ?? "default"}</span>
+              <span>
+                {normalizeCodexModel(
+                  props.codexModel,
+                  props.codexModelCatalog ?? EMPTY_CODEX_MODEL_CATALOG,
+                ) || "自动"} / {props.codexPermissionMode ?? "default"}
+              </span>
             </span>
           </button>
         </div>
         <div className="runtime-menu-options">
-          {props.agentRuntime === "ghost" ? options.map((option) => (
+          {options.map((option) => (
             <button
               key={option.id}
               className={`runtime-menu-option ${option.selected ? "is-selected" : ""}`}
@@ -149,7 +189,7 @@ export function RuntimeMenu(props: RuntimeMenuProps) {
                 <span>{option.desc}</span>
               </span>
             </button>
-          )) : null}
+          ))}
         </div>
       </div>
     </>

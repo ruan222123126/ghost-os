@@ -65,14 +65,6 @@ const SESSION_TOGGLE_TEXTS = [
     },
   },
   {
-    field: 'toolCallCompactOutputEnabled',
-    label: { zh: '精简工具调用输出', en: 'Compact Tool Call Output' },
-    description: {
-      zh: '启用后，工具详情仅显示 step 序列与失败 error 行。',
-      en: 'When enabled, tool details only show ordered steps plus a failure error line.',
-    },
-  },
-  {
     field: 'memoryModeEnabled',
     label: { zh: '记忆模式', en: 'Memory Mode' },
     description: {

@@ -19,9 +19,6 @@ func (s Service) Execute(
 	if err != nil {
 		return bus.ServiceResult{}, err
 	}
-	if result, handled, err := s.executeSpecial(ctx, prepared, traceID); handled {
-		return result, err
-	}
 	return s.executeStandard(ctx, prepared, traceID)
 }
 
@@ -40,55 +37,6 @@ func (s Service) Prepare(
 	return prepared, nil
 }
 
-func (s Service) executeSpecial(
-	ctx context.Context,
-	prepared PreparedRequest,
-	traceID string,
-) (bus.ServiceResult, bool, error) {
-	if prepared.Mode == ModePlan {
-		result, err := s.executePlan(ctx, prepared, traceID)
-		return result, true, err
-	}
-	return bus.ServiceResult{}, false, nil
-}
-
-func (s Service) executePlan(
-	ctx context.Context,
-	prepared PreparedRequest,
-	traceID string,
-) (bus.ServiceResult, error) {
-	if s.Special == nil {
-		return specialRunnerMissing()
-	}
-	if prepared.RuntimeOverrides != nil {
-		err := errors.New("runtime_overrides are not supported in plan mode")
-		s.log(traceID, bus.ActionAgentSend, "error", err)
-		return bus.ServiceResult{}, bus.WrapError(bus.ServiceErrorInvalidInput, err)
-	}
-	return s.executeSpecialTurn(ctx, prepared, traceID, s.Special.RunPlan)
-}
-
-func specialRunnerMissing() (bus.ServiceResult, error) {
-	err := errors.New("special mode runner is not configured")
-	return bus.ServiceResult{}, bus.WrapError(bus.ServiceErrorInternal, err)
-}
-
-func (s Service) executeSpecialTurn(
-	ctx context.Context,
-	prepared PreparedRequest,
-	traceID string,
-	run func(context.Context, PreparedRequest, string) (api.AgentResponse, int, error),
-) (bus.ServiceResult, error) {
-	s.log(traceID, bus.ActionAgentSend, "running", nil)
-	payload, code, err := run(ctx, prepared, traceID)
-	if err != nil {
-		s.log(traceID, bus.ActionAgentSend, "error", err)
-		return bus.ServiceResult{}, bus.WrapError(bus.ErrorKindFromStatus(code), err)
-	}
-	s.publishSpecial(traceID, payload)
-	return resultFromStatus(payload, code), nil
-}
-
 func (s Service) executeStandard(
 	ctx context.Context,
 	prepared PreparedRequest,
@@ -104,15 +52,4 @@ func (s Service) executeStandard(
 		return s.handleStandardError(traceID, sessionID, WrapErrorWithSessionID(err, sessionID))
 	}
 	return s.completeStandardTurn(traceID, response, sessionID)
-}
-
-func resultFromStatus(payload any, statusCode int) bus.ServiceResult {
-	switch bus.OutcomeFromStatus(statusCode) {
-	case bus.ServiceOutcomeCreated:
-		return bus.ResultCreated(payload)
-	case bus.ServiceOutcomeAccepted:
-		return bus.ResultAccepted(payload)
-	default:
-		return bus.ResultSuccess(payload)
-	}
 }

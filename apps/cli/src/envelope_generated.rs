@@ -111,6 +111,8 @@ pub struct ExternalAgentRequest {
     #[serde(default)]
     pub permission_mode: Option<String>,
     #[serde(default)]
+    pub mode: Option<String>,
+    #[serde(default)]
     pub model: Option<String>,
     #[serde(default)]
     pub effort: Option<String>,
@@ -159,6 +161,12 @@ pub struct ExternalAgentApprovalResponse {
     pub approval_id: String,
     pub decision: String,
     pub accepted: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct CodexModelCatalog {
+    pub models: Vec<String>,
+    pub default_model: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -392,6 +400,38 @@ pub struct SessionMetadata {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionRunState {
+    pub session_id: String,
+    pub title: String,
+    pub status: String,
+    pub trace_id: String,
+    pub started_at: String,
+    pub updated_at: String,
+    pub terminal_at: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionRuntimeSelection {
+    pub runtime: String,
+    #[serde(default)]
+    pub provider: Option<String>,
+    #[serde(default)]
+    pub provider_type: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub mode: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionRunStatesGetRequest {
+    #[serde(default)]
+    pub limit: Option<i64>,
+    #[serde(default)]
+    pub session_ids: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct SessionSidebarPartition {
     pub id: String,
     pub name: String,
@@ -491,6 +531,8 @@ pub struct SessionDetail {
     pub message_count: i64,
     pub page: SessionMessagePage,
     pub token_count: i64,
+    #[serde(default)]
+    pub last_runtime_selection: Option<SessionRuntimeSelection>,
     #[serde(default)]
     pub turn_draft: Option<SessionTurnDraft>,
 }
@@ -870,6 +912,16 @@ pub struct OrchestrationAgentNode {
     pub message: String,
     #[serde(default)]
     pub runtime_overrides: Option<TaskRuntimeOverrides>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct ProviderExportRequest {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub provider_id: Option<String>,
+    #[serde(default)]
+    pub trace_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]

@@ -23,6 +23,20 @@ func (r *runtimeSession) registerApproval(id string) chan string {
 	return ch
 }
 
+func (m *Manager) persistCancelledRun(sessionID string, traceID string) error {
+	if m == nil || m.SessionStore == nil {
+		return fmt.Errorf("session store is not configured")
+	}
+	sess, err := m.SessionStore.Load(sessionID)
+	if err != nil {
+		return err
+	}
+	if !sess.SetLastRunState(session.RunStatusCancelled, traceID, time.Now().UTC()) {
+		return nil
+	}
+	return m.SessionStore.Save(sess)
+}
+
 func (r *runtimeSession) resolveApproval(id string, decision string) error {
 	r.mu.Lock()
 	ch := r.pending[strings.TrimSpace(id)]
@@ -58,6 +72,7 @@ func (m *Manager) handleApproval(ctx context.Context, runtime *runtimeSession, a
 		CreatedAt: time.Now().UTC(),
 	}
 	_ = m.addPendingApproval(active.sessionID, record)
+	_ = m.flushPendingAssistantMessage(runtime, active.sessionID)
 	_ = m.appendApprovalToolCall(active.sessionID, approval.ID, record.Payload)
 	_ = emitApprovalEvent(ctx, active, approval)
 	select {

@@ -1,4 +1,4 @@
-use super::{default_media_mounts, merge_path_lists, normalize_existing_dirs, parse_path_list_csv};
+use super::{merge_path_lists, normalize_existing_dirs, parse_path_list_csv};
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -37,50 +37,6 @@ fn test_normalize_existing_dirs_canonicalizes_and_deduplicates() {
 }
 
 #[test]
-fn test_default_media_mounts_discovers_files_and_apps_dirs() {
-    let media_root = make_temp_dir("media_root");
-    let home_dir = media_root.join("home").join("demo");
-    let fake_media = media_root.join("media").join("demo");
-    fs::create_dir_all(&home_dir).expect("create home dir");
-    fs::create_dir_all(fake_media.join("Files")).expect("create Files dir");
-    fs::create_dir_all(fake_media.join("Apps")).expect("create Apps dir");
-
-    let mounts = default_media_mounts_for_base(&home_dir, &media_root.join("media"));
-
-    assert_eq!(mounts.len(), 2);
-    assert!(
-        mounts
-            .iter()
-            .any(|path| path.ends_with("/media/demo/Files"))
-    );
-    assert!(mounts.iter().any(|path| path.ends_with("/media/demo/Apps")));
-
-    fs::remove_dir_all(media_root).ok();
-}
-
-fn default_media_mounts_for_base(
-    home_dir: &std::path::Path,
-    media_base: &std::path::Path,
-) -> Vec<String> {
-    let Some(user_name) = home_dir.file_name().and_then(|name| name.to_str()) else {
-        return Vec::new();
-    };
-
-    ["Files", "Apps", "App"]
-        .into_iter()
-        .map(|name| media_base.join(user_name).join(name))
-        .filter(|path| path.is_dir())
-        .map(|path| path.to_string_lossy().to_string())
-        .collect()
-}
-
-#[test]
-fn test_default_media_mounts_handles_unknown_user_dir() {
-    let mounts = default_media_mounts(PathBuf::from("/").as_path());
-    assert!(mounts.is_empty());
-}
-
-#[test]
 fn test_parse_path_list_csv_trims_and_discards_empty_items() {
     let parsed = parse_path_list_csv(" /tmp/a, ,/tmp/b ,, /tmp/c ");
     assert_eq!(
@@ -106,7 +62,7 @@ fn test_merge_path_lists_deduplicates_and_preserves_order() {
 }
 
 #[test]
-fn test_merge_path_lists_returns_dot_when_base_and_extra_are_empty() {
+fn test_merge_path_lists_returns_empty_when_base_and_extra_are_empty() {
     let merged = merge_path_lists(Vec::new(), Vec::new());
-    assert_eq!(merged, vec![".".to_string()]);
+    assert!(merged.is_empty());
 }

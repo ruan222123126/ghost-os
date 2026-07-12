@@ -1,30 +1,32 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { FormEvent } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, KeyboardEvent } from "react";
 import {
   AssistantIntro,
-  AssistantReply,
-  ChatBubble,
-  ChatComposer,
   ChatHeader,
+  ConversationMessageList,
+  MobileChatComposer,
   MobileSidebar,
   MoreActionSheet,
   ScrollDownButton,
 } from "./components/MobileChatHome";
+import type { MobileChatComposerHandle } from "./components/MobileChatHome";
 import { MobileConnectionPanel } from "./components/MobileConnectionPanel";
 import { MobileSearchPage } from "./components/MobileSearchPage";
 import { MobileSettingsPanel } from "./components/MobileSettingsPanel";
 import { useBodyScrollLock } from "./hooks/useBodyScrollLock";
 import { useChatFeedScroll } from "./hooks/useChatFeedScroll";
 import { useMobileBridge } from "./hooks/useMobileBridge";
+import { useMobileSessionCompletionNotifications } from "./hooks/useMobileSessionCompletionNotifications";
 import { useMobileSessions } from "./hooks/useMobileSessions";
+import { normalizeCodexModel } from "./lib/codexModels";
+import type { SessionCompletionEvent } from "./lib/mobileSessionRunTracker";
 import type {
-  AgentPayload,
+  AgentModeSelection,
   AgentRuntimeType,
   ChatSelectedSkill,
   ConfigPayload,
-  MobileConversationMessage,
   ProviderListPayload,
-  StatusMessage,
+  SessionRuntimeSelection,
   StoredSettings,
 } from "./mobileTypes";
 import "markstream-react/index.css";
@@ -33,18 +35,33 @@ import "./components/mobileChat/Messages.css";
 import "./components/mobileChat/ToolCards.css";
 import "./App.overlays.css";
 
-function isNonEmptyMessage(value: string): boolean {
-  return value.trim().length > 0;
+const SIDEBAR_CLOSE_DEFER_MS = 320;
+const COMPLETION_NOTIFICATION_STACK_LIMIT = 8;
+
+interface CompletionNotification {
+  id: string;
+  title: string;
 }
 
-function displayRuntime(agentRuntime: AgentRuntimeType, config: ReturnType<typeof useMobileBridge>["config"]): string {
+function displayRuntime(
+  agentRuntime: AgentRuntimeType,
+  config: ReturnType<typeof useMobileBridge>["config"],
+  codexModel: string,
+): string {
   if (agentRuntime === "codex") {
-    return `Codex / ${config?.external_codex_permission_mode ?? "default"}`;
+    return codexModel ? `Codex / ${codexModel}` : "Codex";
   }
   if (config?.provider && config.model) {
     return `${config.provider} / ${config.model}`;
   }
   return config?.provider || config?.model || "Bridge Runtime";
+}
+
+function resolveEffectiveAgentRuntime(
+  agentRuntime: AgentRuntimeType,
+  agentMode: AgentModeSelection,
+): AgentRuntimeType {
+  return agentMode === null ? agentRuntime : "codex";
 }
 
 function resolveLocalProvider(providerList: ProviderListPayload | undefined, settings: StoredSettings) {
@@ -66,10 +83,6 @@ function buildLocalRuntimeConfig(
   };
 }
 
-function assistantMessageStatus(): StatusMessage {
-  return { tone: "success", text: "回复已返回" };
-}
-
 function App() {
   const {
     activateProvider,
@@ -77,6 +90,8 @@ function App() {
     approveExternalAgent,
     bridgeUrl,
     config,
+    codexModelCatalog,
+    codexModelCatalogError,
     connectBridge,
     connectionStatus,
     createProvider,
@@ -86,6 +101,7 @@ function App() {
     deleteTask,
     getFullSession,
     getSession,
+    getSessionRunStates,
     host,
     orchestrationList,
     orchestrationListError,
@@ -101,6 +117,7 @@ function App() {
     sessions,
     sessionsLoaded,
     setSettings,
+    setStatus,
     setOrchestrationEnabled,
     setTaskEnabled,
     settings,
@@ -108,6 +125,7 @@ function App() {
     skillListError,
     stopAgentRun,
     switchModel,
+    switchRuntimeSelection,
     taskList,
     taskListError,
     status,
@@ -115,36 +133,72 @@ function App() {
     updateExternalCodexPermissionMode,
     updateProvider,
   } = useMobileBridge();
-  const [message, setMessage] = useState("");
-  const [selectedSkill, setSelectedSkill] = useState<ChatSelectedSkill | null>(null);
   const [agentRuntime, setAgentRuntime] = useState<AgentRuntimeType>("ghost");
+  const [agentMode, setAgentMode] = useState<AgentModeSelection>(null);
+  const [codexModel, setCodexModel] = useState<string>("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isConnectionOpen, setIsConnectionOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isRuntimeMenuOpen, setIsRuntimeMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [historySelectionPending, setHistorySelectionPending] = useState(false);
   const [pinnedHistoryIds, setPinnedHistoryIds] = useState<string[]>([]);
+  const [completionNotifications, setCompletionNotifications] = useState<CompletionNotification[]>([]);
+  const composerRef = useRef<MobileChatComposerHandle>(null);
+  const virtualScrollToBottomRef = useRef<(() => void) | null>(null);
+  const historySelectionRequestIdRef = useRef(0);
+  const pendingSelectHistoryTimeoutRef = useRef<number | null>(null);
   const localRuntimeConfig = useMemo(() => buildLocalRuntimeConfig(providerList, settings), [providerList, settings]);
   const chatConfig = settings.remoteExecutionEnabled ? config : localRuntimeConfig;
   const chatProviderList = providerList;
+  const activeCodexModel = normalizeCodexModel(codexModel, codexModelCatalog);
+  const effectiveAgentRuntime = resolveEffectiveAgentRuntime(agentRuntime, agentMode);
+  const effectiveRuntimeConfig = effectiveAgentRuntime === "codex" ? config : chatConfig;
+  const connectionScope = `${settings.connectionMode}:${bridgeUrl}:${settings.pairing?.deviceId ?? ""}:${settings.pairing?.pcId ?? ""}:${settings.pairing?.signalingUrl ?? ""}`;
   const sendAgentMessageForRuntime = useCallback(
-    (options: Parameters<typeof sendAgentMessage>[0]) => sendAgentMessage({ ...options, agentRuntime }),
-    [agentRuntime, sendAgentMessage],
+    (options: Parameters<typeof sendAgentMessage>[0]) => sendAgentMessage({
+      ...options,
+      agentRuntime: effectiveAgentRuntime,
+      mode: agentMode === "plan" ? "plan" : undefined,
+      codexModel: effectiveAgentRuntime === "codex" ? activeCodexModel : undefined,
+    }),
+    [activeCodexModel, agentMode, effectiveAgentRuntime, sendAgentMessage],
   );
   const stopAgentRunForRuntime = useCallback(
-    (input: Parameters<typeof stopAgentRun>[0]) => stopAgentRun({ ...input, agentRuntime }),
-    [agentRuntime, stopAgentRun],
+    (input: Parameters<typeof stopAgentRun>[0]) => stopAgentRun({ ...input, agentRuntime: effectiveAgentRuntime }),
+    [effectiveAgentRuntime, stopAgentRun],
+  );
+  const applySessionRuntimeSelection = useCallback(
+    async (selection: SessionRuntimeSelection | null | undefined): Promise<void> => {
+      if (!selection) {
+        return;
+      }
+      if (selection.runtime === "codex" || selection.mode === "plan") {
+        setAgentRuntime("codex");
+        setAgentMode(selection.mode === "plan" ? "plan" : "normal");
+        if (selection.runtime === "codex" && selection.model?.trim()) {
+          setCodexModel(normalizeCodexModel(selection.model, codexModelCatalog));
+        }
+        return;
+      }
+
+      setAgentRuntime("ghost");
+      setAgentMode(null);
+      await switchRuntimeSelection(selection);
+    },
+    [codexModelCatalog, switchRuntimeSelection],
   );
   const mobileSessions = useMobileSessions({
     bridgeConnected: Boolean(config),
     appendSessionMessages,
-    computerSessionSyncScope: `${settings.connectionMode}:${bridgeUrl}:${settings.pairing?.deviceId ?? ""}:${settings.pairing?.pcId ?? ""}:${settings.pairing?.signalingUrl ?? ""}`,
+    computerSessionSyncScope: connectionScope,
     getFullSession,
     getSession,
+    onSessionRuntimeSelection: applySessionRuntimeSelection,
     pinnedHistoryIds,
     persistComputerSessionsEnabled: settings.persistComputerSessionsEnabled,
-    sendAvailable: agentRuntime === "codex"
+    sendAvailable: effectiveAgentRuntime === "codex"
       ? Boolean(config)
       : settings.remoteExecutionEnabled
       ? Boolean(config)
@@ -154,29 +208,67 @@ function App() {
     sessionsLoaded,
     stopAgentRun: stopAgentRunForRuntime,
   });
+  const handleSessionCompleted = useCallback((event: SessionCompletionEvent): void => {
+    setCompletionNotifications((current) => [
+      ...current.filter((notification) => notification.id !== event.sessionId),
+      { id: event.sessionId, title: event.title.trim() || "该会话" },
+    ].slice(-COMPLETION_NOTIFICATION_STACK_LIMIT));
+  }, []);
+  const knownSessionIds = useMemo(
+    () => [...new Set([...sessions.map((session) => session.id), ...mobileSessions.historyItems.map((item) => item.id)])],
+    [mobileSessions.historyItems, sessions],
+  );
+  useMobileSessionCompletionNotifications({
+    activeSessionId: mobileSessions.activeSessionId,
+    connected: connectionStatus.tone === "success",
+    connectionScope,
+    getSessionRunStates,
+    knownSessionIds,
+    liveSessionRuns: mobileSessions.liveSessionRuns,
+    onInAppCompletion: handleSessionCompleted,
+    onStatus: setStatus,
+    selectSession: mobileSessions.selectSession,
+    sessionsLoaded,
+  });
   const displayStatus = mobileSessions.activeStatus.tone === "idle" ? status : mobileSessions.activeStatus;
-  const supportsComposerSkills = Boolean(config) && (agentRuntime === "codex" || settings.remoteExecutionEnabled);
-  const canSubmit = isNonEmptyMessage(message) || selectedSkill !== null;
+  const supportsComposerSkills = Boolean(config) && (effectiveAgentRuntime === "codex" || settings.remoteExecutionEnabled);
   const runtimeLabel = useMemo(
-    () => displayRuntime(agentRuntime, agentRuntime === "codex" ? config : chatConfig),
-    [agentRuntime, chatConfig, config],
+    () => displayRuntime(effectiveAgentRuntime, effectiveRuntimeConfig, activeCodexModel),
+    [activeCodexModel, effectiveAgentRuntime, effectiveRuntimeConfig],
   );
   const isModalOpen = isSidebarOpen || isSearchOpen || isConnectionOpen || isSettingsOpen || isMoreMenuOpen;
   const hasLocalConversation = mobileSessions.hasConversation;
+  const showEmptyIntro = !hasLocalConversation && !mobileSessions.loadingSessionMessages;
+  const showTopLoadingBar = historySelectionPending
+    || mobileSessions.loadingSessionMessages
+    || mobileSessions.loadingOlderHistory;
   const {
     handleScroll,
+    handleUserScrollEnd,
+    handleUserScrollIntent,
+    handleUserScrollStart,
+    historySentinelRef,
     registerUserMessageRow,
     resetScrollDown,
     scrollRef,
     scrollToBottom,
     showScrollDown,
+    trailingSpacerRef,
     trailingSpacerPx,
   } = useChatFeedScroll({
+    hasOlderHistory: mobileSessions.hasOlderHistory,
+    loadingOlderHistory: mobileSessions.loadingOlderHistory,
     messages: mobileSessions.activeMessages,
+    onLoadOlderHistory: mobileSessions.loadOlderHistory,
     postSendFocusRequest: mobileSessions.postSendFocusRequest,
     reply: mobileSessions.activeReply,
+    sessionId: mobileSessions.activeSessionId,
     statusTone: mobileSessions.activeStatus.tone,
   });
+  const selectSessionRef = useRef(mobileSessions.selectSession);
+  const sendMessageRef = useRef(mobileSessions.sendMessage);
+  const stopCurrentRunRef = useRef(mobileSessions.stopCurrentRun);
+  const refreshSkillsRef = useRef(refreshSkills);
   const activeHistoryItem = useMemo(
     () => mobileSessions.historyItems.find((item) => item.id === mobileSessions.activeSessionId),
     [mobileSessions.activeSessionId, mobileSessions.historyItems],
@@ -185,35 +277,84 @@ function App() {
   useBodyScrollLock(isModalOpen);
 
   useEffect(() => {
-    if (!supportsComposerSkills && selectedSkill !== null) {
-      setSelectedSkill(null);
-    }
-  }, [selectedSkill, supportsComposerSkills]);
+    selectSessionRef.current = mobileSessions.selectSession;
+  }, [mobileSessions.selectSession]);
 
-  async function sendMessage(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault();
-    const trimmed = message.trim();
-    if (!trimmed && !selectedSkill) {
+  useEffect(() => {
+    sendMessageRef.current = mobileSessions.sendMessage;
+    stopCurrentRunRef.current = mobileSessions.stopCurrentRun;
+    refreshSkillsRef.current = refreshSkills;
+  }, [mobileSessions.sendMessage, mobileSessions.stopCurrentRun, refreshSkills]);
+
+  const sendComposerMessage = useCallback(
+    (text: string, selectedSkill?: ChatSelectedSkill) => sendMessageRef.current(text, selectedSkill),
+    [],
+  );
+  const stopComposerRun = useCallback(() => stopCurrentRunRef.current(), []);
+  const refreshComposerSkills = useCallback(() => refreshSkillsRef.current(), []);
+
+  useEffect(() => {
+    return () => {
+      historySelectionRequestIdRef.current += 1;
+      clearPendingSelectHistory();
+    };
+  }, []);
+
+  function switchAgentRuntime(runtime: AgentRuntimeType): void {
+    setAgentRuntime(runtime);
+    if (runtime !== "codex") {
+      setAgentMode(null);
+    }
+  }
+
+  function selectHistory(sessionId: string): void {
+    composerRef.current?.reset();
+    const shouldDeferSelection = isSidebarOpen;
+    clearPendingSelectHistory();
+    const requestId = historySelectionRequestIdRef.current + 1;
+    historySelectionRequestIdRef.current = requestId;
+    setHistorySelectionPending(true);
+    setIsSidebarOpen(false);
+    if (shouldDeferSelection) {
+      pendingSelectHistoryTimeoutRef.current = window.setTimeout(() => {
+        pendingSelectHistoryTimeoutRef.current = null;
+        startHistorySelection(sessionId, requestId);
+      }, SIDEBAR_CLOSE_DEFER_MS);
       return;
     }
+    startHistorySelection(sessionId, requestId);
+  }
 
-    const previousMessage = message;
-    const previousSkill = selectedSkill;
-    setMessage("");
-    setSelectedSkill(null);
-    const sent = await mobileSessions.sendMessage(trimmed, selectedSkill);
-    if (!sent) {
-      setMessage(previousMessage);
-      setSelectedSkill(previousSkill);
+  function dismissCompletionNotification(sessionId: string): void {
+    setCompletionNotifications((current) => current.filter((notification) => notification.id !== sessionId));
+  }
+
+  function openCompletionNotification(sessionId: string): void {
+    dismissCompletionNotification(sessionId);
+    selectHistory(sessionId);
+  }
+
+  function startHistorySelection(sessionId: string, requestId: number): void {
+    startTransition(() => {
+      void selectSessionRef.current(sessionId).finally(() => {
+        if (historySelectionRequestIdRef.current === requestId) {
+          setHistorySelectionPending(false);
+        }
+      });
+    });
+  }
+
+  function clearPendingSelectHistory(): void {
+    if (pendingSelectHistoryTimeoutRef.current === null) {
+      return;
     }
+    window.clearTimeout(pendingSelectHistoryTimeoutRef.current);
+    pendingSelectHistoryTimeoutRef.current = null;
   }
 
-  async function selectHistory(sessionId: string): Promise<void> {
-    setMessage("");
-    setSelectedSkill(null);
-    setIsSidebarOpen(false);
-    await mobileSessions.selectSession(sessionId);
-  }
+  const setChatFeedRef = useCallback((node: HTMLElement | null) => {
+    scrollRef.current = node;
+  }, [scrollRef]);
 
   function openSidebar(): void {
     setIsSearchOpen(false);
@@ -252,8 +393,7 @@ function App() {
   }
 
   function startNewSession(): void {
-    setMessage("");
-    setSelectedSkill(null);
+    composerRef.current?.reset();
     mobileSessions.startNewSession();
     setIsConnectionOpen(false);
     setIsRuntimeMenuOpen(false);
@@ -263,7 +403,7 @@ function App() {
   }
 
   function clearLocalConversation(): void {
-    setSelectedSkill(null);
+    composerRef.current?.reset();
     mobileSessions.clearCurrentConversation();
     setIsMoreMenuOpen(false);
     resetScrollDown();
@@ -294,7 +434,7 @@ function App() {
         onClose={() => setIsSidebarOpen(false)}
         onNewSession={startNewSession}
         onOpenSearch={openSearch}
-        onSelectHistory={(sessionId) => void selectHistory(sessionId)}
+        onSelectHistory={selectHistory}
         onConnect={connectBridge}
         onOpenSettings={openSettings}
       />
@@ -304,8 +444,14 @@ function App() {
         bridgeConnected={Boolean(config)}
         historyItems={mobileSessions.historyItems}
         onClose={() => setIsSearchOpen(false)}
-        onSelectHistory={(sessionId) => void selectHistory(sessionId)}
+        onSelectHistory={selectHistory}
         onSearchSessions={searchSessions}
+      />
+
+      <CompletionNotificationStack
+        notifications={completionNotifications}
+        onDismiss={dismissCompletionNotification}
+        onOpen={openCompletionNotification}
       />
 
       <div
@@ -315,8 +461,11 @@ function App() {
       >
         <ChatHeader
           runtimeLabel={runtimeLabel}
-          agentRuntime={agentRuntime}
-          config={agentRuntime === "codex" ? config : chatConfig}
+          agentRuntime={effectiveAgentRuntime}
+          codexModel={activeCodexModel}
+          codexModelCatalog={codexModelCatalog}
+          codexModelCatalogError={codexModelCatalogError}
+          config={effectiveRuntimeConfig}
           codexPermissionMode={config?.external_codex_permission_mode}
           providerList={chatProviderList}
           status={displayStatus}
@@ -326,7 +475,8 @@ function App() {
           onToggleRuntimeMenu={() => setIsRuntimeMenuOpen((current) => !current)}
           onCloseRuntimeMenu={() => setIsRuntimeMenuOpen(false)}
           onSwitchModel={switchModel}
-          onSwitchAgentRuntime={setAgentRuntime}
+          onSwitchAgentRuntime={switchAgentRuntime}
+          onSwitchCodexModel={setCodexModel}
           onOpenConnection={openConnection}
           onOpenMoreMenu={() => {
             setIsRuntimeMenuOpen(false);
@@ -335,62 +485,65 @@ function App() {
           onNewSession={startNewSession}
         />
 
+        {showTopLoadingBar ? <MobileTopLoadingBar label="消息加载中" /> : null}
+
         <main
-          ref={scrollRef}
+          ref={setChatFeedRef}
           onScroll={handleScroll}
-          className={`chat-feed ${hasLocalConversation ? "" : "is-empty"}`}
+          onPointerCancel={handleUserScrollEnd}
+          onPointerDown={handleUserScrollStart}
+          onPointerUp={handleUserScrollEnd}
+          onTouchCancel={handleUserScrollEnd}
+          onTouchEnd={handleUserScrollEnd}
+          onTouchMove={handleUserScrollIntent}
+          onTouchStart={handleUserScrollStart}
+          onWheel={handleUserScrollIntent}
+          className={`chat-feed ${showEmptyIntro ? "is-empty" : ""}`}
         >
-          {!hasLocalConversation ? (
-            <AssistantIntro onSelectSuggestion={setMessage} />
+          {showEmptyIntro ? (
+            <AssistantIntro onSelectSuggestion={(value) => composerRef.current?.setDraft(value)} />
           ) : null}
 
-          {mobileSessions.activeMessages.map((item) =>
-            item.role === "user" ? (
-              <ChatBubble
-                key={item.id}
-                ref={registerUserMessageRow(item.id)}
-                selectedSkill={item.selectedSkill}
-              >
-                {item.text}
-              </ChatBubble>
-            ) : (
-              <AssistantReply
-                key={item.id}
-                reply={conversationMessageToAgentPayload(item)}
-                status={assistantMessageStatus()}
-                onApproveExternalAgent={approveExternalAgent}
-              />
-            ),
-          )}
-          <AssistantReply
-            reply={mobileSessions.activeReply}
-            status={displayStatus}
+          {!showEmptyIntro ? (
+            <div ref={historySentinelRef} className="chat-feed-history-sentinel" aria-hidden="true" />
+          ) : null}
+
+          <ConversationMessageList
+            messages={mobileSessions.activeMessages}
             onApproveExternalAgent={approveExternalAgent}
+            postSendFocusRequest={mobileSessions.postSendFocusRequest}
+            registerUserMessageRow={registerUserMessageRow}
+            reply={mobileSessions.activeReply}
+            scrollElementRef={scrollRef}
+            scrollToBottomRef={virtualScrollToBottomRef}
+            status={displayStatus}
           />
-          <div aria-hidden="true" style={{ height: trailingSpacerPx }} />
+          <div
+            ref={trailingSpacerRef}
+            aria-hidden="true"
+            className="chat-feed-trailing-spacer"
+            style={{ minHeight: trailingSpacerPx }}
+          />
         </main>
 
-        {showScrollDown ? <ScrollDownButton onClick={() => scrollToBottom()} /> : null}
+        {showScrollDown ? (
+          <ScrollDownButton
+            onClick={() => scrollToBottom("smooth", virtualScrollToBottomRef.current ?? undefined)}
+          />
+        ) : null}
 
-        <ChatComposer
-          agentRuntime={agentRuntime}
+        <MobileChatComposer
+          ref={composerRef}
+          agentMode={agentMode}
           canEnableCodexMode={Boolean(config)}
-          canSubmit={canSubmit}
-          disabled={!mobileSessions.canSend}
-          value={message}
-          canStop={(settings.remoteExecutionEnabled || agentRuntime === "codex") && mobileSessions.canStop}
+          canSend={mobileSessions.canSend}
+          canStop={(settings.remoteExecutionEnabled || effectiveAgentRuntime === "codex") && mobileSessions.canStop}
           loading={mobileSessions.activeStatus.tone === "loading"}
-          selectedSkill={selectedSkill}
           skills={supportsComposerSkills ? skillList : undefined}
-          onClearSelectedSkill={() => setSelectedSkill(null)}
-          onRefreshSkills={supportsComposerSkills ? refreshSkills : undefined}
-          onSelectSkill={supportsComposerSkills ? (skill) => setSelectedSkill({ id: skill.id, name: skill.name }) : undefined}
-          onSwitchAgentRuntime={setAgentRuntime}
-          onSubmit={sendMessage}
-          onStop={(settings.remoteExecutionEnabled || agentRuntime === "codex") ? async () => {
-            await mobileSessions.stopCurrentRun();
-          } : undefined}
-          onChange={setMessage}
+          onChangeAgentMode={setAgentMode}
+          onRefreshSkills={supportsComposerSkills ? refreshComposerSkills : undefined}
+          onSend={sendComposerMessage}
+          onStop={(settings.remoteExecutionEnabled || effectiveAgentRuntime === "codex") ? stopComposerRun : undefined}
         />
       </div>
 
@@ -449,15 +602,64 @@ function App() {
   );
 }
 
-function conversationMessageToAgentPayload(message: MobileConversationMessage): AgentPayload {
-  return {
-    message: message.text,
-    parts: message.parts,
-    session_ended: false,
-    session_id: message.sessionId ?? "",
-    thinking: message.thinking,
-    tools: message.tools,
-  };
+function MobileTopLoadingBar(props: { label: string }) {
+  return (
+    <div className="mobile-top-loading-bar" role="status" aria-label={props.label}>
+      <div className="mobile-top-loading-bar-fill" aria-hidden="true" />
+    </div>
+  );
+}
+
+function CompletionNotificationStack(props: {
+  notifications: CompletionNotification[];
+  onDismiss: (sessionId: string) => void;
+  onOpen: (sessionId: string) => void;
+}) {
+  if (props.notifications.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="completion-notification-stack" aria-live="polite">
+      {props.notifications.map((notification, index) => {
+        const depth = props.notifications.length - 1 - index;
+        return (
+          <div
+            key={notification.id}
+            className="completion-notification-card"
+            role="button"
+            style={{
+              left: `${depth * 8}px`,
+              top: `${depth * 8}px`,
+              transform: `scale(${1 - depth * 0.025})`,
+              zIndex: props.notifications.length - depth,
+            } as CSSProperties}
+            tabIndex={0}
+            onClick={() => props.onOpen(notification.id)}
+            onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                props.onOpen(notification.id);
+              }
+            }}
+          >
+            <span>{notification.title}会话已完成</span>
+            <button
+              className="completion-notification-close"
+              type="button"
+              aria-label="关闭"
+              onClick={(event) => {
+                event.stopPropagation();
+                props.onDismiss(notification.id);
+              }}
+            >
+              <span aria-hidden="true">×</span>
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export default App;

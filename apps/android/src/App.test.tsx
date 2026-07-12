@@ -1,0 +1,365 @@
+// @vitest-environment jsdom
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import App from "./App";
+
+interface MockSendAgentMessageOptions {
+  history: unknown[];
+  message: string;
+  onReply: (reply: unknown) => void;
+  onSessionId: (sessionId: string) => void;
+  onStatus: (status: unknown) => void;
+  selectedSkill?: unknown;
+}
+
+interface MockMobileSessionsOptions {
+  sendAgentMessage: (options: MockSendAgentMessageOptions) => Promise<{ ok: boolean }>;
+}
+
+interface MockHistoryItem {
+  id: string;
+  pinned: boolean;
+  status?: "running" | "success" | "error";
+  title: string;
+  updatedAt: string;
+}
+
+const mocks = vi.hoisted(() => ({
+  bridgeSendAgentMessage: vi.fn(),
+  bridgeStopAgentRun: vi.fn(),
+  useCompletionTracker: vi.fn(),
+  useMobileSessions: vi.fn((options: MockMobileSessionsOptions) => ({
+    activeMessages: [],
+    activeReply: undefined,
+    activeSessionId: undefined as string | undefined,
+    activeStatus: { tone: "idle", text: "首页" },
+    canSend: true,
+    canStop: false,
+    clearCurrentConversation: vi.fn(),
+    computerSessionPersistStatus: { tone: "idle", text: "未开启" },
+    hasConversation: false,
+    hasOlderHistory: false,
+    historyItems: [] as MockHistoryItem[],
+    liveSessionRuns: [],
+    loadOlderHistory: vi.fn(),
+    loadingOlderHistory: false,
+    loadingSessionMessages: false,
+    postSendFocusRequest: null,
+    selectSession: vi.fn(async (_sessionId: string) => undefined) as (sessionId: string) => Promise<void>,
+    sendMessage: async (message: string, selectedSkill?: unknown) => {
+      const result = await options.sendAgentMessage({
+        history: [],
+        message,
+        onReply: vi.fn(),
+        onSessionId: vi.fn(),
+        onStatus: vi.fn(),
+        selectedSkill,
+      });
+      return result.ok;
+    },
+    startNewSession: vi.fn(),
+    stopCurrentRun: vi.fn(),
+  })),
+}));
+
+vi.mock("./hooks/useBodyScrollLock", () => ({
+  useBodyScrollLock: vi.fn(),
+}));
+
+vi.mock("./hooks/useChatFeedScroll", () => ({
+  useChatFeedScroll: () => ({
+    handleScroll: vi.fn(),
+    handleUserScrollEnd: vi.fn(),
+    handleUserScrollIntent: vi.fn(),
+    handleUserScrollStart: vi.fn(),
+    historySentinelRef: { current: null },
+    registerUserMessageRow: vi.fn(() => vi.fn()),
+    resetScrollDown: vi.fn(),
+    scrollRef: { current: null },
+    scrollToBottom: vi.fn(),
+    showScrollDown: false,
+    trailingSpacerRef: { current: null },
+    trailingSpacerPx: 0,
+  }),
+}));
+
+vi.mock("./hooks/useMobileBridge", () => ({
+  useMobileBridge: () => ({
+    activateProvider: vi.fn(),
+    appendSessionMessages: vi.fn(),
+    approveExternalAgent: vi.fn(),
+    bridgeUrl: "http://127.0.0.1:8080",
+    config: {
+      external_codex_permission_mode: "default",
+      model: "deepseek-pro",
+      project_root: "/tmp/ghost-os",
+      provider: "DeepSeek",
+    },
+    codexModelCatalog: {
+      models: ["gpt-5.5", "gpt-5.4"],
+      default_model: "gpt-5.5",
+    },
+    codexModelCatalogError: "",
+    connectBridge: vi.fn(),
+    connectionStatus: { tone: "success", text: "HTTP fallback 已连接" },
+    createProvider: vi.fn(),
+    deleteOrchestration: vi.fn(),
+    deleteProvider: vi.fn(),
+    deleteSkill: vi.fn(),
+    deleteTask: vi.fn(),
+    getFullSession: vi.fn(),
+    getSession: vi.fn(),
+    host: { mobile: true, productName: "Ghost OS", target: "android", version: "test" },
+    orchestrationList: undefined,
+    orchestrationListError: "",
+    providerList: { active_provider: "DeepSeek", providers: [] },
+    refreshOrchestrations: vi.fn(),
+    refreshProviders: vi.fn(),
+    refreshSkills: vi.fn(),
+    refreshTasks: vi.fn(),
+    runTaskNow: vi.fn(),
+    runningTaskId: "",
+    searchSessions: vi.fn(),
+    sendAgentMessage: mocks.bridgeSendAgentMessage,
+    sessions: [],
+    sessionsLoaded: true,
+    setOrchestrationEnabled: vi.fn(),
+    setSettings: vi.fn(),
+    setStatus: vi.fn(),
+    setTaskEnabled: vi.fn(),
+    settings: {
+      autoConnectEnabled: false,
+      bridgeUrl: "http://127.0.0.1:8080",
+      connectionMode: "http",
+      persistComputerSessionsEnabled: false,
+      remoteExecutionEnabled: false,
+    },
+    skillList: [],
+    skillListError: "",
+    status: { tone: "idle", text: "首页" },
+    stopAgentRun: mocks.bridgeStopAgentRun,
+    switchModel: vi.fn(),
+    switchRuntimeSelection: vi.fn(),
+    taskList: undefined,
+    taskListError: "",
+    updateExternalCodexPermissionMode: vi.fn(),
+    updateProvider: vi.fn(),
+    updateSkill: vi.fn(),
+  }),
+}));
+
+vi.mock("./hooks/useMobileSessionCompletionTracker", () => ({
+  useMobileSessionCompletionTracker: mocks.useCompletionTracker,
+}));
+
+vi.mock("./hooks/useMobileSessions", () => ({
+  useMobileSessions: mocks.useMobileSessions,
+}));
+
+describe("App Codex mode routing", () => {
+  beforeEach(() => {
+    mocks.bridgeSendAgentMessage.mockResolvedValue({ mode: "remote", ok: true });
+    mocks.bridgeStopAgentRun.mockResolvedValue({ ok: true, status: "stopped" });
+    mocks.useCompletionTracker.mockClear();
+    mocks.useMobileSessions.mockClear();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("routes composer plan mode through Codex instead of Ghost plan", async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "添加内容" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "功能" }));
+    fireEvent.click(screen.getByRole("button", { name: "plan" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "请制定执行计划" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送任务" }));
+
+    await waitFor(() => {
+      expect(mocks.bridgeSendAgentMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agentRuntime: "codex",
+          codexModel: "gpt-5.5",
+          mode: "plan",
+        }),
+      );
+    });
+  });
+
+  it("shows a persistent completion card and opens the completed session", async () => {
+    const selectSession = vi.fn(async (_sessionId: string) => undefined);
+    mocks.useMobileSessions.mockImplementation((options: MockMobileSessionsOptions) =>
+      mockMobileSessions(options, {
+        activeSessionId: "session-2",
+        historyItems: [
+          historyItem("session-1", "设计复盘", "running"),
+          historyItem("session-2", "当前会话", undefined),
+        ],
+        selectSession,
+      })
+    );
+
+    render(<App />);
+
+    expect(screen.queryByText("设计复盘会话已完成")).toBeNull();
+    act(() => {
+      trackerOptions().onCompleted({
+        notificationKey: "session:session-1:trace:trace-1:status:success",
+        sessionId: "session-1",
+        title: "设计复盘",
+        traceId: "trace-1",
+      });
+    });
+
+    const card = await screen.findByText("设计复盘会话已完成");
+    fireEvent.click(card);
+
+    expect(selectSession).toHaveBeenCalledWith("session-1");
+    await waitFor(() => {
+      expect(screen.queryByText("设计复盘会话已完成")).toBeNull();
+    });
+  });
+
+  it("does not notify when the currently viewed session completes", async () => {
+    mocks.useMobileSessions.mockImplementation((options: MockMobileSessionsOptions) =>
+      mockMobileSessions(options, {
+        activeSessionId: "session-1",
+        historyItems: [historyItem("session-1", "当前会话", "running")],
+      })
+    );
+
+    render(<App />);
+    act(() => {
+      trackerOptions().onCompleted({
+        notificationKey: "session:session-1:trace:trace-1:status:success",
+        sessionId: "session-1",
+        title: "当前会话",
+        traceId: "trace-1",
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("当前会话会话已完成")).toBeNull();
+    });
+  });
+
+  it("shows the shared black loading bar immediately while switching history sessions", async () => {
+    let resolveSelection: (() => void) | undefined;
+    const selectSession = vi.fn(
+      (_sessionId: string) => new Promise<void>((resolve) => {
+        resolveSelection = resolve;
+      }),
+    );
+    mocks.useMobileSessions.mockImplementation((options: MockMobileSessionsOptions) =>
+      mockMobileSessions(options, {
+        activeSessionId: "session-2",
+        historyItems: [
+          historyItem("session-1", "设计复盘", undefined),
+          historyItem("session-2", "当前会话", undefined),
+        ],
+        selectSession,
+      })
+    );
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "打开侧边栏" }));
+    fireEvent.click(screen.getByRole("button", { name: "设计复盘" }));
+
+    const loadingBar = screen.getByRole("status", { name: "消息加载中" });
+    expect(loadingBar.classList.contains("mobile-top-loading-bar")).toBe(true);
+    await waitFor(() => expect(selectSession).toHaveBeenCalledWith("session-1"));
+
+    resolveSelection?.();
+
+    await waitFor(() => {
+      expect(screen.queryByRole("status", { name: "消息加载中" })).toBeNull();
+    });
+  });
+
+  it("does not notify for sessions that were already completed before this app lifecycle", async () => {
+    mocks.useMobileSessions.mockImplementation((options: MockMobileSessionsOptions) =>
+      mockMobileSessions(options, {
+        historyItems: [
+          historyItem("session-1", "已完成任务", "success"),
+          historyItem("session-2", "状态补全任务", undefined),
+        ],
+      })
+    );
+
+    render(<App />);
+
+    expect(screen.queryByText("已完成任务会话已完成")).toBeNull();
+
+    await waitFor(() => {
+      expect(screen.queryByText("状态补全任务会话已完成")).toBeNull();
+    });
+  });
+});
+
+function mockMobileSessions(
+  options: MockMobileSessionsOptions,
+  overrides: {
+    activeSessionId?: string;
+    historyItems?: MockHistoryItem[];
+    selectSession?: (sessionId: string) => Promise<void>;
+  } = {},
+) {
+  return {
+    activeMessages: [],
+    activeReply: undefined,
+    activeSessionId: overrides.activeSessionId,
+    activeStatus: { tone: "idle", text: "首页" },
+    canSend: true,
+    canStop: false,
+    clearCurrentConversation: vi.fn(),
+    computerSessionPersistStatus: { tone: "idle", text: "未开启" },
+    hasConversation: false,
+    hasOlderHistory: false,
+    historyItems: overrides.historyItems ?? [],
+    liveSessionRuns: [],
+    loadOlderHistory: vi.fn(),
+    loadingOlderHistory: false,
+    loadingSessionMessages: false,
+    postSendFocusRequest: null,
+    selectSession: overrides.selectSession ?? (vi.fn(async (_sessionId: string) => undefined) as (sessionId: string) => Promise<void>),
+    sendMessage: async (message: string, selectedSkill?: unknown) => {
+      const result = await options.sendAgentMessage({
+        history: [],
+        message,
+        onReply: vi.fn(),
+        onSessionId: vi.fn(),
+        onStatus: vi.fn(),
+        selectedSkill,
+      });
+      return result.ok;
+    },
+    startNewSession: vi.fn(),
+    stopCurrentRun: vi.fn(),
+  };
+}
+
+function trackerOptions(): {
+  onCompleted: (event: {
+    notificationKey: string;
+    sessionId: string;
+    title: string;
+    traceId: string;
+  }) => void;
+} {
+  const calls = mocks.useCompletionTracker.mock.calls;
+  return calls[calls.length - 1]?.[0] as ReturnType<typeof trackerOptions>;
+}
+
+function historyItem(id: string, title: string, status: MockHistoryItem["status"]): MockHistoryItem {
+  return {
+    id,
+    pinned: false,
+    status,
+    title,
+    updatedAt: "2026-07-09T00:00:00.000Z",
+  };
+}

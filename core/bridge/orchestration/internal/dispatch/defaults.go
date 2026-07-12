@@ -20,34 +20,37 @@ type SkillUpdateParams struct {
 }
 
 type DefaultHandlers struct {
-	AgentSend            TypedHandler[api.AgentParams]
-	AgentStop            TypedHandler[api.AgentStopParams]
-	ExternalAgentStart   TypedHandler[api.ExternalAgentRequest]
-	ExternalAgentSend    TypedHandler[api.ExternalAgentRequest]
-	ExternalAgentStop    TypedHandler[api.ExternalAgentStopParams]
-	ExternalAgentApprove TypedHandler[api.ExternalAgentApprovalParams]
-	ConfigGet            TraceHandler
-	ConfigUpdate         TypedHandler[api.ConfigUpdateRequest]
-	ConfigProvidersGet   TraceHandler
-	ConfigProviderCreate TypedHandler[api.ProviderConfigInput]
-	ConfigProviderUpdate TypedHandler[api.ProviderBusUpdateRequest]
-	ConfigProviderDelete TypedHandler[api.ProviderBusDeleteRequest]
-	HumanResponse        TypedHandler[api.HumanResponseParams]
-	SessionsList         TraceHandler
-	SessionsSearch       TypedHandler[api.SessionSearchParams]
-	SessionGet           TypedHandler[api.SessionGetParams]
-	SessionAppend        TypedHandler[api.SessionAppendRequest]
-	SkillList            TraceHandler
-	SkillUpdate          TypedHandler[SkillUpdateParams]
-	SkillDelete          TypedHandler[SkillIDParams]
-	TaskCreate           TypedHandler[api.TaskCreateParams]
-	TaskList             TypedHandler[api.TaskListParams]
-	TaskGet              TypedHandler[api.TaskIDParams]
-	TaskUpdate           TypedHandler[api.TaskUpdateParams]
-	TaskRunNow           TypedHandler[api.TaskRunNowParams]
-	TaskStop             TypedHandler[api.TaskStopParams]
-	TaskLogs             TypedHandler[api.TaskLogsParams]
-	TaskDelete           TypedHandler[api.TaskIDParams]
+	AgentSend              TypedHandler[api.AgentParams]
+	AgentStop              TypedHandler[api.AgentStopParams]
+	ExternalAgentStart     TypedHandler[api.ExternalAgentRequest]
+	ExternalAgentSend      TypedHandler[api.ExternalAgentRequest]
+	ExternalAgentStop      TypedHandler[api.ExternalAgentStopParams]
+	ExternalAgentApprove   TypedHandler[api.ExternalAgentApprovalParams]
+	ExternalAgentModelsGet TraceHandler
+	ConfigGet              TraceHandler
+	ConfigUpdate           TypedHandler[api.ConfigUpdateRequest]
+	ConfigProvidersGet     TraceHandler
+	ConfigProviderExport   TypedHandler[api.ProviderExportRequest]
+	ConfigProviderCreate   TypedHandler[api.ProviderConfigInput]
+	ConfigProviderUpdate   TypedHandler[api.ProviderBusUpdateRequest]
+	ConfigProviderDelete   TypedHandler[api.ProviderBusDeleteRequest]
+	HumanResponse          TypedHandler[api.HumanResponseParams]
+	SessionsList           TraceHandler
+	SessionsSearch         TypedHandler[api.SessionSearchParams]
+	SessionRunStatesGet    TypedHandler[api.SessionRunStatesGetRequest]
+	SessionGet             TypedHandler[api.SessionGetParams]
+	SessionAppend          TypedHandler[api.SessionAppendRequest]
+	SkillList              TraceHandler
+	SkillUpdate            TypedHandler[SkillUpdateParams]
+	SkillDelete            TypedHandler[SkillIDParams]
+	TaskCreate             TypedHandler[api.TaskCreateParams]
+	TaskList               TypedHandler[api.TaskListParams]
+	TaskGet                TypedHandler[api.TaskIDParams]
+	TaskUpdate             TypedHandler[api.TaskUpdateParams]
+	TaskRunNow             TypedHandler[api.TaskRunNowParams]
+	TaskStop               TypedHandler[api.TaskStopParams]
+	TaskLogs               TypedHandler[api.TaskLogsParams]
+	TaskDelete             TypedHandler[api.TaskIDParams]
 }
 
 func RegisterDefaultActions(router *Router, handlers DefaultHandlers) {
@@ -66,12 +69,14 @@ func registerAgentActions(router *Router, handlers DefaultHandlers) {
 	RegisterTyped(router, bus.ActionExternalAgentSend, handlers.ExternalAgentSend)
 	RegisterTyped(router, bus.ActionExternalAgentStop, handlers.ExternalAgentStop)
 	RegisterTyped(router, bus.ActionExternalAgentApprove, handlers.ExternalAgentApprove)
+	RegisterTrace(router, bus.ActionExternalAgentModelsGet, handlers.ExternalAgentModelsGet)
 }
 
 func registerConfigActions(router *Router, handlers DefaultHandlers) {
 	RegisterTrace(router, bus.ActionConfigGet, handlers.ConfigGet)
 	RegisterTyped(router, bus.ActionConfigUpdate, handlers.ConfigUpdate)
 	RegisterTrace(router, appconfig.ActionProvidersGet, handlers.ConfigProvidersGet)
+	RegisterTyped(router, appconfig.ActionProviderExport, handlers.ConfigProviderExport)
 	RegisterTyped(router, appconfig.ActionProviderCreate, handlers.ConfigProviderCreate)
 	RegisterTyped(router, appconfig.ActionProviderUpdate, handlers.ConfigProviderUpdate)
 	RegisterTyped(router, appconfig.ActionProviderDelete, handlers.ConfigProviderDelete)
@@ -84,6 +89,7 @@ func registerHumanActions(router *Router, handlers DefaultHandlers) {
 func registerSessionActions(router *Router, handlers DefaultHandlers) {
 	RegisterTrace(router, bus.ActionSessionsList, handlers.SessionsList)
 	RegisterTyped(router, bus.ActionSessionsSearch, handlers.SessionsSearch)
+	RegisterTyped(router, bus.ActionSessionRunStatesGet, handlers.SessionRunStatesGet)
 	RegisterTyped(router, bus.ActionSessionGet, handlers.SessionGet)
 	RegisterTyped(router, bus.ActionSessionAppend, handlers.SessionAppend)
 }

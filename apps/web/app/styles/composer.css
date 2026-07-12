@@ -338,9 +338,21 @@
 }
 
 .composer-feature-mode-switch {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+  padding-top: 17px;
+}
+
+.composer-feature-mode-label {
+  position: absolute;
+  top: 0;
+  left: 2px;
+  color: rgb(107 114 128);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
 }
 
 .composer-feature-mode-switch button {
@@ -348,8 +360,8 @@
   padding: 0 14px;
   border: 1px solid rgb(229 231 235);
   border-radius: 999px;
-  background: rgb(249 250 251);
-  color: rgb(75 85 99);
+  background: rgb(255 255 255);
+  color: rgb(17 24 39);
   cursor: pointer;
   font-size: 14px;
   font-weight: 650;
@@ -362,13 +374,20 @@
 
 .composer-feature-mode-switch button:hover:not(:disabled),
 .composer-feature-mode-switch button:focus-visible:not(:disabled) {
-  border-color: rgb(209 213 219);
-  background: rgb(243 244 246);
+  border-color: rgb(17 24 39);
+  background: rgb(255 255 255);
   color: rgb(17 24 39);
   outline: none;
 }
 
 .composer-feature-mode-switch button.is-active {
+  border-color: rgb(17 24 39);
+  background: rgb(17 24 39);
+  color: rgb(255 255 255);
+}
+
+.composer-feature-mode-switch button.is-active:hover:not(:disabled),
+.composer-feature-mode-switch button.is-active:focus-visible:not(:disabled) {
   border-color: rgb(17 24 39);
   background: rgb(17 24 39);
   color: rgb(255 255 255);

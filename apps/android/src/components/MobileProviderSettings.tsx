@@ -8,6 +8,7 @@ import type {
   ProviderListPayload,
   ProviderType,
 } from "../mobileTypes";
+import { stringsEqualIgnoreCase } from "../lib/textCompare";
 import "./MobileProviderSettings.css";
 
 interface MobileProviderSettingsProps {
@@ -413,10 +414,6 @@ function providerSummary(provider: string, model: string | undefined): string {
     return `${provider} / ${model}`;
   }
   return provider || model || "未激活";
-}
-
-function stringsEqualIgnoreCase(left: string, right: string): boolean {
-  return left.trim().toLowerCase() === right.trim().toLowerCase();
 }
 
 async function runProviderAction(

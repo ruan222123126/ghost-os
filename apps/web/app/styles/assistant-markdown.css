@@ -12,6 +12,15 @@
   margin-bottom: 0;
 }
 
+.assistant-markdown-block {
+  width: 100%;
+}
+
+.assistant-markdown-block.is-active-streaming-block {
+  contain: layout paint;
+  overflow-anchor: none;
+}
+
 .assistant-markdown h1,
 .assistant-markdown h2,
 .assistant-markdown h3,
@@ -112,6 +121,68 @@
   font-family: var(--font-mono), monospace;
   font-size: 0.9em;
   white-space: break-spaces;
+}
+
+.assistant-code-block-card {
+  width: 100%;
+  margin: 14px 0;
+  overflow: hidden;
+  border: 1px solid rgb(39 39 42);
+  border-radius: 8px;
+  background: rgb(24 24 27);
+  box-shadow: 0 12px 28px rgb(24 24 27 / 0.16);
+}
+
+.assistant-code-block-header {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px 7px 12px;
+  border-bottom: 1px solid rgb(63 63 70);
+  background: rgb(39 39 42);
+}
+
+.assistant-code-block-language {
+  color: rgb(212 212 216);
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.assistant-code-block-pre {
+  margin: 0;
+  padding: 14px;
+  overflow-x: auto;
+  background: rgb(24 24 27);
+  color: rgb(244 244 245);
+  font-family: var(--font-mono), monospace;
+  font-size: 13px;
+  line-height: 1.65;
+  tab-size: 4;
+  white-space: pre;
+}
+
+.assistant-code-block-pre code {
+  display: block;
+  min-width: max-content;
+  font: inherit;
+}
+
+.assistant-code-block-card .copy-button.is-code-block {
+  color: rgb(161 161 170);
+}
+
+.assistant-code-block-card .copy-button.is-code-block:hover {
+  color: rgb(250 250 250);
+  background: rgb(63 63 70);
+}
+
+.assistant-code-block-card .copy-button.is-code-block.is-copied {
+  color: rgb(74 222 128);
 }
 
 @media (max-width: 768px) {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useChatHistory } from './useChatHistory';
 import { useChatQuestionActions } from './useChatQuestionActions';
 import { useChatRunControl } from './useChatRunControl';
@@ -16,13 +16,24 @@ interface BridgeChatResultOptions {
     stopCurrentRun: UseBridgeChatResult['stopCurrentRun'];
   };
   clearMessages: UseBridgeChatResult['clearMessages'];
+  postSendFocusRequest: UseBridgeChatResult['postSendFocusRequest'];
   state: ChatStateControls;
 }
 
 export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResult {
   const state = useChatState(options.currentSessionId);
   const currentSessionIdRef = useCurrentSessionIdRef(options.currentSessionId);
+  const postSendFocusTokenRef = useRef(0);
+  const [postSendFocusRequest, setPostSendFocusRequest] =
+    useState<UseBridgeChatResult['postSendFocusRequest']>(null);
   const getCurrentSessionId = useCallback(() => currentSessionIdRef.current, [currentSessionIdRef]);
+  const requestPostSendFocus = useCallback((messageId: string) => {
+    postSendFocusTokenRef.current += 1;
+    setPostSendFocusRequest({
+      messageId,
+      token: postSendFocusTokenRef.current,
+    });
+  }, []);
   const { loadOlderHistory, loadSessionHistory, syncRecentHistory } = useChatHistory(state);
   const { runAgentStream, runHumanStream } = useChatStreamController({
     ...state,
@@ -37,6 +48,7 @@ export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResul
     externalProjectRoot: options.externalProjectRoot,
     getCurrentSessionId,
     onSessionResolved: options.onSessionResolved,
+    requestPostSendFocus,
     runAgentStream,
     syncRecentHistory,
   });
@@ -50,6 +62,7 @@ export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResul
   }, [loadOlderHistory, options.currentSessionId]);
   const clearMessages = useCallback((sessionId = options.currentSessionId) => {
     state.clearMessages(sessionId);
+    setPostSendFocusRequest(null);
   }, [options.currentSessionId, state]);
 
   return buildBridgeChatResult({
@@ -62,6 +75,7 @@ export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResul
       stopCurrentRun,
     },
     clearMessages,
+    postSendFocusRequest,
     state,
   });
 }
@@ -75,7 +89,7 @@ function useCurrentSessionIdRef(currentSessionId: string) {
 }
 
 function buildBridgeChatResult(options: BridgeChatResultOptions): UseBridgeChatResult {
-  const { actions, clearMessages, state } = options;
+  const { actions, clearMessages, postSendFocusRequest, state } = options;
   return {
     committedMessages: state.committedMessages,
     streamingAssistantSegments: state.streamingAssistantSegments,
@@ -92,6 +106,7 @@ function buildBridgeChatResult(options: BridgeChatResultOptions): UseBridgeChatR
     hasPendingQuestion: state.pendingQuestions.length > 0,
     canStop: canStopActiveRun(state.activeRun, state.loading, state.stopPending),
     hasOlderHistory: state.hasOlderHistory,
+    postSendFocusRequest,
     sendChatMessage: actions.sendChatMessage,
     stopCurrentRun: actions.stopCurrentRun,
     answerQuestion: actions.answerQuestion,

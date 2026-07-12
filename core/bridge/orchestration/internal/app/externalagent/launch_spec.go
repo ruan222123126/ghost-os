@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 )
 
@@ -94,94 +92,6 @@ func resolveExplicitPath(path string, kind string, hint string) (string, error) 
 	)
 }
 
-func lookPath(name string) string {
-	path, err := exec.LookPath(name)
-	if err != nil {
-		return ""
-	}
-	return path
-}
-
-func runtimeCandidateDirs(nodeExecutablePath string) []string {
-	dirs := []string{}
-	if dir := codexDirFromNodeBinPath(nodeExecutablePath); dir != "" {
-		dirs = append(dirs, dir)
-	}
-	if dir := codexDirFromNodeBinPath(os.Getenv("NODE_BIN_PATH")); dir != "" {
-		dirs = append(dirs, dir)
-	}
-	dirs = append(dirs, commonCodexDirs()...)
-	return dedupeDirs(dirs)
-}
-
-func nodeBinPathFromValue(value string) string {
-	path := strings.TrimSpace(value)
-	if isRunnableFile(path) {
-		return path
-	}
-	return ""
-}
-
-func codexDirFromNodeBinPath(nodeBinPath string) string {
-	path := strings.TrimSpace(nodeBinPath)
-	if path == "" {
-		return ""
-	}
-	dir := filepath.Dir(path)
-	if dir == "." || dir == "" {
-		return ""
-	}
-	return dir
-}
-
-func findNamedExecutableInDirs(dirs []string, names []string) string {
-	for _, dir := range dirs {
-		if path := findNamedExecutableInDir(dir, names); path != "" {
-			return path
-		}
-	}
-	return ""
-}
-
-func findNamedExecutableInDir(dir string, names []string) string {
-	for _, name := range names {
-		candidate := filepath.Join(dir, name)
-		if isRunnableFile(candidate) {
-			return candidate
-		}
-	}
-	return ""
-}
-
-func codexCandidateNames() []string {
-	if runtime.GOOS == "windows" {
-		return []string{"codex.cmd", "codex.exe", "codex.bat", "codex"}
-	}
-	return []string{"codex"}
-}
-
-func nodeCandidateNames() []string {
-	if runtime.GOOS == "windows" {
-		return []string{"node.exe", "node"}
-	}
-	return []string{"node"}
-}
-
-func isRunnableFile(path string) bool {
-	trimmed := strings.TrimSpace(path)
-	if trimmed == "" {
-		return false
-	}
-	info, err := os.Stat(trimmed)
-	if err != nil || info.IsDir() {
-		return false
-	}
-	if runtime.GOOS == "windows" {
-		return true
-	}
-	return info.Mode().Perm()&0o111 != 0
-}
-
 func launcherRequiresNode(path string) (bool, error) {
 	ext := strings.ToLower(filepath.Ext(path))
 	if ext == ".cmd" || ext == ".bat" {
@@ -205,20 +115,4 @@ func launcherRequiresNode(path string) (bool, error) {
 		strings.HasPrefix(normalized, "env node") ||
 		strings.HasPrefix(normalized, "/usr/bin/env -S node") ||
 		strings.HasPrefix(normalized, "env -S node"), nil
-}
-
-func prependPathDir(dir string, currentPath string) (string, error) {
-	trimmedDir := strings.TrimSpace(dir)
-	if trimmedDir == "" {
-		return "", fmt.Errorf("path dir is empty")
-	}
-	entries := []string{trimmedDir}
-	for _, entry := range filepath.SplitList(currentPath) {
-		trimmed := strings.TrimSpace(entry)
-		if trimmed == "" || dirKey(trimmed) == dirKey(trimmedDir) {
-			continue
-		}
-		entries = append(entries, trimmed)
-	}
-	return strings.Join(entries, string(os.PathListSeparator)), nil
 }

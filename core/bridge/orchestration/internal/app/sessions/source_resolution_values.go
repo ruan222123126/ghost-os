@@ -10,15 +10,6 @@ func addSessionSourceID(ids map[string]struct{}, value string) {
 	ids[id] = struct{}{}
 }
 
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
-}
-
 func stringFromRecord(record map[string]any, key string) string {
 	return stringFromAny(record[key])
 }

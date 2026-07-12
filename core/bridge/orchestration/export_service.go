@@ -143,15 +143,16 @@ func (s *Service) Close() {
 func (s *Service) DispatchAction(ctx context.Context, action string, params json.RawMessage, traceID string) (ServiceResult, error) {
 	return s.inner.dispatchAction(ctx, action, params, traceID)
 }
-
 func (s *Service) ExecuteAgentAction(ctx context.Context, params AgentParams, traceID string) (ServiceResult, error) {
 	return s.inner.executeAgentAction(ctx, params, traceID)
 }
-
 func ServiceErrorKindOf(err error) ServiceErrorKind        { return bus.ErrorKindOf(err) }
 func ServiceErrorKindFromError(err error) ServiceErrorKind { return ServiceErrorKindOf(err) }
 func (s *Service) ExecuteProvidersGetAction(traceID string) (ServiceResult, error) {
 	return s.inner.executeProvidersGetAction(traceID)
+}
+func (s *Service) ExecuteProviderExportAction(req ProviderExportRequest, traceID string) (ServiceResult, error) {
+	return s.inner.executeProviderExportAction(req, traceID)
 }
 func (s *Service) ExecuteProviderCreateAction(req ProviderCreateRequest, traceID string) (ServiceResult, error) {
 	return s.inner.executeProviderCreateAction(req, traceID)
@@ -162,7 +163,6 @@ func (s *Service) ExecuteProviderUpdateAction(name string, req ProviderUpdateReq
 func (s *Service) ExecuteProviderDeleteAction(name string, traceID string) (ServiceResult, error) {
 	return s.inner.executeProviderDeleteAction(name, traceID)
 }
-
 func (s *Service) ExecuteSetActiveProviderAction(req SetActiveProviderRequest, traceID string) (ServiceResult, error) {
 	return s.inner.executeSetActiveProviderAction(req, traceID)
 }

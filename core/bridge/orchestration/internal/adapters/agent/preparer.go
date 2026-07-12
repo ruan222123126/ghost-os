@@ -138,6 +138,7 @@ func sessionPrepDependencies(deps RuntimeDependencies) sessionprep.RuntimeDepend
 		SystemPrompt:         deps.SystemPrompt(),
 		SystemPromptOverride: deps.SystemPromptOverride(),
 		SystemPromptFiles:    deps.SystemPromptFiles(),
+		RuntimeSelection:     session.CloneRuntimeSelection(deps.RuntimeSelection()),
 		Cleanup:              deps.Close,
 	}
 }
@@ -168,6 +169,10 @@ func (d runtimeDependencies) SystemPromptOverride() bool {
 
 func (d runtimeDependencies) SystemPromptFiles() *bridgeconfig.SystemPromptFiles {
 	return d.deps.SystemPromptFiles
+}
+
+func (d runtimeDependencies) RuntimeSelection() *session.RuntimeSelection {
+	return session.CloneRuntimeSelection(d.deps.RuntimeSelection)
 }
 
 func (d runtimeDependencies) Close() {

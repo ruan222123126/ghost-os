@@ -285,3 +285,15 @@ func (r *SessionAgentRunner) RunTurnStreamInputWithOverrides(
 	defer turn.Close()
 	return turnstate.RunPreparedTurnStream(ctx, turn, input, sink, parseSessionEndForStream)
 }
+
+func (s *bridgeService) executeSessionRunStatesGetAction(params sessionRunStatesGetRequest, traceID string) (ServiceResult, error) {
+	usecase, err := s.sessionUsecase()
+	if err != nil {
+		return ServiceResult{}, err
+	}
+	states, err := usecase.RunStates(params, traceID)
+	if err != nil {
+		return ServiceResult{}, bus.WrapError(mapSessionAppErrorKind(err), err)
+	}
+	return bus.ResultSuccess(states), nil
+}

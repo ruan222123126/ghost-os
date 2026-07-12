@@ -130,6 +130,54 @@ describe('hooks/chat/useChatHistory mergeLatestCommittedMessages', () => {
     ]);
   });
 
+  it('replaces stream ids without reordering Codex text and tool segments', () => {
+    const previous = [
+      buildUserMessage('local:user:trace-codex', 'run tests'),
+      buildAssistantMessage('stream-segment:assistant:1', '先检查项目。'),
+      buildToolMessage('stream-tool:trace-codex:exec-1', 'ok', 'exec-1'),
+      buildAssistantMessage('stream-segment:assistant:2', '测试通过。'),
+    ];
+
+    const latest = [
+      buildUserMessage('session:user:1', 'run tests'),
+      buildAssistantMessage('session:assistant:1', '先检查项目。'),
+      buildToolMessage('session:tool:2', 'ok', 'exec-1'),
+      buildAssistantMessage('session:assistant:3', '测试通过。'),
+    ];
+
+    const merged = mergeLatestCommittedMessages(previous, latest);
+
+    expect(merged.map((message) => message.id)).toEqual([
+      'session:user:1',
+      'session:assistant:1',
+      'session:tool:2',
+      'session:assistant:3',
+    ]);
+  });
+
+  it('drops split Codex assistant fragments when history collapses them into one assistant message', () => {
+    const previous = [
+      buildUserMessage('local:user:trace-codex', 'run tests'),
+      buildAssistantMessage('stream-segment:assistant:1', '先检查项目。'),
+      buildToolMessage('stream-tool:trace-codex:exec-1', 'ok', 'exec-1'),
+      buildAssistantMessage('stream-segment:assistant:2', '测试通过。'),
+    ];
+
+    const latest = [
+      buildUserMessage('session:user:1', 'run tests'),
+      buildAssistantMessage('session:assistant:1', '先检查项目。测试通过。'),
+      buildToolMessage('session:tool:2', 'ok', 'exec-1'),
+    ];
+
+    const merged = mergeLatestCommittedMessages(previous, latest);
+
+    expect(merged.map((message) => message.id)).toEqual([
+      'session:user:1',
+      'session:assistant:1',
+      'session:tool:2',
+    ]);
+  });
+
   it('keeps the current assistant reply visible when synced history has only caught up to the user message', () => {
     const previous = [
       buildUserMessage('session:user:old', 'old question'),

@@ -2,6 +2,7 @@
   min-width: 0;
   max-width: 100%;
   position: relative;
+  contain: layout style;
 }
 
 .assistant-reply-parts {
@@ -133,6 +134,7 @@
   color: #3c4043;
   white-space: normal;
   overflow-wrap: anywhere;
+  contain: layout style;
 }
 
 .assistant-markdown > * {
@@ -146,6 +148,16 @@
 
 .assistant-markdown > :last-child {
   margin-bottom: 0;
+}
+
+.assistant-markdown-streaming pre {
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .assistant-markdown h1,
@@ -234,12 +246,76 @@
   white-space: break-spaces;
 }
 
+.assistant-code-block-card {
+  width: 100%;
+  margin: 14px 0;
+  overflow: hidden;
+  border: 1px solid #27272a;
+  border-radius: 8px;
+  background: #18181b;
+}
+
+.assistant-code-block-header {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px 7px 12px;
+  background: #18181b;
+}
+
+.assistant-code-block-language {
+  color: #d4d4d8;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.assistant-code-block-pre {
+  margin: 0;
+  padding: 14px;
+  overflow-x: auto;
+  background: #18181b;
+  color: #f4f4f5;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
+  font-size: 0.78rem;
+  line-height: 1.65;
+  tab-size: 4;
+  white-space: pre;
+}
+
+.assistant-code-block-pre code {
+  display: block;
+  min-width: max-content;
+  font: inherit;
+}
+
+.assistant-code-block-card .copy-button.is-code-block {
+  color: #a1a1aa;
+}
+
+.assistant-code-block-card .copy-button.is-code-block:hover,
+.assistant-code-block-card .copy-button.is-code-block:focus-visible {
+  color: #fafafa;
+  background: #3f3f46;
+}
+
+.assistant-code-block-card .copy-button.is-code-block.is-copied {
+  color: #4ade80;
+}
+
 .copy-button {
   min-height: 28px;
+  border: 0;
   padding: 4px 8px;
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  -webkit-appearance: none;
+  appearance: none;
   border-radius: 6px;
   color: #5f6368;
   background: transparent;

@@ -199,7 +199,9 @@ code {
   padding: 0 16px 124px;
   display: flex;
   flex-direction: column;
-  scroll-behavior: smooth;
+  overflow-anchor: auto;
+  overscroll-behavior-y: contain;
+  contain: layout style;
 }
 
 .chat-feed.is-empty {
@@ -209,6 +211,80 @@ code {
 
 .chat-feed.is-empty .message-row {
   margin-top: 0;
+}
+
+.conversation-list {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  flex: 0 0 auto;
+  contain: layout style paint;
+  overflow-anchor: none;
+}
+
+.conversation-virtual-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  padding-bottom: 24px;
+  overflow-anchor: none;
+  contain: layout style;
+}
+
+.conversation-list > .message-row + .message-row {
+  margin-top: 24px;
+}
+
+.chat-feed-trailing-spacer {
+  width: 100%;
+  flex: 0 0 auto;
+  overflow-anchor: none;
+}
+
+.chat-feed-history-sentinel {
+  width: 100%;
+  height: 1px;
+  flex: 0 0 1px;
+  overflow-anchor: none;
+}
+
+@keyframes mobile-top-loading-bar-slide {
+  0% {
+    transform: translateX(-10%) scaleX(0.1);
+  }
+
+  50% {
+    transform: translateX(30%) scaleX(0.5);
+  }
+
+  100% {
+    transform: translateX(100%) scaleX(0.1);
+  }
+}
+
+.mobile-top-loading-bar {
+  position: absolute;
+  top: 64px;
+  left: 0;
+  right: 0;
+  z-index: 29;
+  width: 100%;
+  height: 3px;
+  overflow: hidden;
+  pointer-events: none;
+  background: transparent;
+  transition: opacity 500ms ease-in-out;
+}
+
+.mobile-top-loading-bar-fill {
+  width: 100%;
+  height: 100%;
+  background: #000000;
+  box-shadow: 0 0 8px rgb(0 0 0 / 0.3);
+  transform-origin: left center;
+  animation: mobile-top-loading-bar-slide 1.2s linear infinite;
 }
 
 .empty-state {
@@ -301,10 +377,8 @@ code {
   max-width: 100%;
   margin: 0 auto;
   display: flex;
-}
-
-.message-row + .message-row {
-  margin-top: 24px;
+  overflow-anchor: auto;
+  contain: layout style;
 }
 
 .user-row {

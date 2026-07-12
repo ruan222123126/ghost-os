@@ -6,6 +6,7 @@ import (
 
 	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
+	"ghost-os/bridge/internal/runtimeutil"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/orchestration/internal/app/agentturn"
 	"ghost-os/bridge/orchestration/internal/contracts/bus"
@@ -16,10 +17,6 @@ import (
 	"ghost-os/bridge/tools"
 )
 
-type agentResponseMeta struct {
-	Mode string
-}
-
 type agentRuntimeDependencies struct {
 	cfg                  bridgeconfig.Config
 	client               agent.Completer
@@ -27,6 +24,7 @@ type agentRuntimeDependencies struct {
 	systemPrompt         string
 	systemPromptOverride bool
 	systemPromptFiles    *bridgeconfig.SystemPromptFiles
+	runtimeSelection     *session.RuntimeSelection
 	cleanup              func()
 }
 
@@ -58,6 +56,10 @@ func (d agentRuntimeDependencies) SystemPromptOverride() bool {
 
 func (d agentRuntimeDependencies) SystemPromptFiles() *bridgeconfig.SystemPromptFiles {
 	return d.systemPromptFiles
+}
+
+func (d agentRuntimeDependencies) RuntimeSelection() *session.RuntimeSelection {
+	return session.CloneRuntimeSelection(d.runtimeSelection)
 }
 
 type AgentRuntimeFactory interface {
@@ -119,11 +121,12 @@ func NewRuntimeDependencies(
 	cleanup func(),
 ) RuntimeDependencies {
 	return agentRuntimeDependencies{
-		cfg:          cfg,
-		client:       client,
-		registry:     registry,
-		systemPrompt: systemPrompt,
-		cleanup:      cleanup,
+		cfg:              cfg,
+		client:           client,
+		registry:         registry,
+		systemPrompt:     systemPrompt,
+		runtimeSelection: runtimeutil.BuildGhostRuntimeSelection(nil, cfg, session.RuntimeSelectionModeDefault),
+		cleanup:          cleanup,
 	}
 }
 
@@ -141,11 +144,12 @@ func (f runtimeFactoryAdapter) Build(store bridgeconfig.Store) (agentRuntimeDepe
 		return agentRuntimeDependencies{}, err
 	}
 	return agentRuntimeDependencies{
-		cfg:          deps.Config(),
-		client:       deps.Client(),
-		registry:     deps.Registry(),
-		systemPrompt: deps.SystemPrompt(),
-		cleanup:      deps.Close,
+		cfg:              deps.Config(),
+		client:           deps.Client(),
+		registry:         deps.Registry(),
+		systemPrompt:     deps.SystemPrompt(),
+		runtimeSelection: session.CloneRuntimeSelection(deps.RuntimeSelection()),
+		cleanup:          deps.Close,
 	}, nil
 }
 
@@ -153,7 +157,6 @@ func newAgentRuntimeFactory() AgentRuntimeFactory {
 	return runtimeFactoryAdapter{inner: bridgeruntime.NewAgentRuntimeFactory()}
 }
 
-// parseSessionEndSignal 只识别完整会话结束信号；普通文本/普通 JSON 均按普通回复返回。
 func parseSessionEndSignal(raw string) (message string, signal *assistantSessionEndSignalPayload, err error) {
 	return agentturn.ParseSessionEndSignal(raw)
 }
@@ -163,12 +166,10 @@ func parseSessionEndForStream(response string) (string, bool, error) {
 	return normalized, sessionEnd != nil, err
 }
 
-// newAgentResponsePayload 构造并校验 AGENT_SEND 成功响应，确保会话结束契约稳定。
-func newAgentResponsePayload(message string, sessionID string, sessionEnd *assistantSessionEndSignalPayload, meta agentResponseMeta) (agentResponse, error) {
-	return agentturn.NewResponsePayload(message, sessionID, sessionEnd, agentturn.ResponseMeta{Mode: meta.Mode})
+func newAgentResponsePayload(message string, sessionID string, sessionEnd *assistantSessionEndSignalPayload) (agentResponse, error) {
+	return agentturn.NewResponsePayload(message, sessionID, sessionEnd)
 }
 
-// validateAgentResponsePayload 在跨进程返回前执行最小契约校验。
 func validateAgentResponsePayload(payload agentResponse) error {
 	return agentturn.ValidateResponsePayload(payload)
 }

@@ -42,6 +42,13 @@ func TestStoreSaveAndLoadSession(t *testing.T) {
 			LastCalledTurn: 2,
 		},
 	}
+	s.SetLastRuntimeSelection(RuntimeSelection{
+		Runtime:      RuntimeSelectionGhost,
+		Provider:     "openai-main",
+		ProviderType: string(llm.ProviderOpenAI),
+		Model:        "gpt-5.4",
+		Mode:         RuntimeSelectionModeDefault,
+	})
 	relayTimeoutMS := 0
 	s.StartRelayRuntime("fix config", "ai_decides", 0, &relayTimeoutMS)
 	s.AppendRelayRecord(RelayRecord{
@@ -142,6 +149,9 @@ func TestStoreSaveAndLoadSession(t *testing.T) {
 	}
 	if !reflect.DeepEqual(loaded.DynamicSkillLoads, s.DynamicSkillLoads) {
 		t.Fatalf("dynamic skill loads mismatch: got=%+v want=%+v", loaded.DynamicSkillLoads, s.DynamicSkillLoads)
+	}
+	if !reflect.DeepEqual(loaded.LastRuntimeSelection, s.LastRuntimeSelection) {
+		t.Fatalf("last runtime selection mismatch: got=%+v want=%+v", loaded.LastRuntimeSelection, s.LastRuntimeSelection)
 	}
 	if !reflect.DeepEqual(loaded.RelayRuntime, s.RelayRuntime) {
 		t.Fatalf("relay runtime mismatch: got=%+v want=%+v", loaded.RelayRuntime, s.RelayRuntime)

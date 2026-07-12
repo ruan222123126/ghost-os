@@ -7,6 +7,7 @@ import type {
   SessionMessage,
   SessionMessagePage,
   SessionMetadata,
+  SessionRuntimeSelection,
   SessionSourceAssignment,
   SessionSourceResolution,
   SessionSidebarPartition,
@@ -45,6 +46,20 @@ const SESSION_SOURCE_KINDS = defineStringEnumValues<SessionSourceAssignment['kin
   orchestration: true,
   loop: true,
   task: true,
+});
+const SESSION_RUNTIME_SELECTION_RUNTIMES = defineStringEnumValues<SessionRuntimeSelection['runtime']>({
+  ghost: true,
+  codex: true,
+});
+const SESSION_RUNTIME_SELECTION_PROVIDER_TYPES = defineStringEnumValues<NonNullable<SessionRuntimeSelection['provider_type']>>({
+  openai: true,
+  anthropic: true,
+  custom: true,
+  codex: true,
+});
+const SESSION_RUNTIME_SELECTION_MODES = defineStringEnumValues<NonNullable<SessionRuntimeSelection['mode']>>({
+  default: true,
+  plan: true,
 });
 
 function parseSessionImageContent(
@@ -232,6 +247,31 @@ function parseSessionPage(value: unknown, label: string): SessionMessagePage {
   };
 }
 
+function parseOptionalSessionRuntimeSelection(
+  value: unknown,
+  label: string,
+): SessionRuntimeSelection | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null) {
+    return null;
+  }
+
+  const record = expectRecord(value, label);
+  return {
+    runtime: expectStringEnum(record.runtime, SESSION_RUNTIME_SELECTION_RUNTIMES, `${label}.runtime`),
+    provider: parseOptionalString(record.provider, `${label}.provider`),
+    provider_type: record.provider_type === undefined
+      ? undefined
+      : expectStringEnum(record.provider_type, SESSION_RUNTIME_SELECTION_PROVIDER_TYPES, `${label}.provider_type`),
+    model: parseOptionalString(record.model, `${label}.model`),
+    mode: record.mode === undefined
+      ? undefined
+      : expectStringEnum(record.mode, SESSION_RUNTIME_SELECTION_MODES, `${label}.mode`),
+  };
+}
+
 function parseSessionMetadata(value: unknown, label: string): SessionMetadata {
   const record = expectRecord(value, label);
 
@@ -330,5 +370,9 @@ export function parseSessionDetail(payload: unknown): SessionDetail {
     page: parseSessionPage(record.page, 'session detail.page'),
     token_count: expectNumber(record.token_count, 'session detail.token_count'),
     turn_draft: parseOptionalSessionTurnDraft(record.turn_draft, 'session detail.turn_draft'),
+    last_runtime_selection: parseOptionalSessionRuntimeSelection(
+      record.last_runtime_selection,
+      'session detail.last_runtime_selection',
+    ),
   };
 }

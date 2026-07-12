@@ -110,6 +110,7 @@ const HomePage: FC = () => {
             configError={controller.configError}
             showConfig={controller.showConfig}
             hasOlderHistory={controller.hasOlderHistory}
+            postSendFocusRequest={controller.postSendFocusRequest}
             loadOlderHistory={controller.loadOlderHistory}
             answerQuestion={controller.answerQuestion}
             cancelQuestion={controller.cancelQuestion}
@@ -117,11 +118,13 @@ const HomePage: FC = () => {
             savingConfig={controller.savingConfig}
             hasPendingQuestion={controller.hasPendingQuestion}
             modelOptionsLoading={controller.modelOptionsLoading}
+            agentMode={controller.agentMode}
             activeModelOption={controller.activeModelOption}
             modelOptions={controller.modelOptions}
             canStop={controller.canStop}
             sendMessage={controller.sendMessage}
             stopCurrentRun={controller.stopCurrentRun}
+            setAgentMode={controller.setAgentMode}
             selectActiveModel={controller.selectActiveModel}
           />
         </div>
@@ -231,6 +234,7 @@ const HomePageChatPanel: FC<{
   configError: HomePageController['configError'];
   showConfig: HomePageController['showConfig'];
   hasOlderHistory: HomePageController['hasOlderHistory'];
+  postSendFocusRequest: HomePageController['postSendFocusRequest'];
   loadOlderHistory: HomePageController['loadOlderHistory'];
   answerQuestion: HomePageController['answerQuestion'];
   cancelQuestion: HomePageController['cancelQuestion'];
@@ -238,11 +242,13 @@ const HomePageChatPanel: FC<{
   savingConfig: HomePageController['savingConfig'];
   hasPendingQuestion: HomePageController['hasPendingQuestion'];
   modelOptionsLoading: HomePageController['modelOptionsLoading'];
+  agentMode: HomePageController['agentMode'];
   activeModelOption: HomePageController['activeModelOption'];
   modelOptions: HomePageController['modelOptions'];
   canStop: HomePageController['canStop'];
   sendMessage: HomePageController['sendMessage'];
   stopCurrentRun: HomePageController['stopCurrentRun'];
+  setAgentMode: HomePageController['setAgentMode'];
   selectActiveModel: HomePageController['selectActiveModel'];
 }> = ({
   copy,
@@ -264,6 +270,7 @@ const HomePageChatPanel: FC<{
   configError,
   showConfig,
   hasOlderHistory,
+  postSendFocusRequest,
   loadOlderHistory,
   answerQuestion,
   cancelQuestion,
@@ -271,16 +278,17 @@ const HomePageChatPanel: FC<{
   savingConfig,
   hasPendingQuestion,
   modelOptionsLoading,
+  agentMode,
   activeModelOption,
   modelOptions,
   canStop,
   sendMessage,
   stopCurrentRun,
+  setAgentMode,
   selectActiveModel,
 }) => {
   const showSystemPromptMessages = config?.session_system_prompt_visible_enabled ?? true;
   const assistantMarkdownEnabled = config?.assistant_markdown_enabled ?? true;
-  const toolCallCompactOutputEnabled = config?.tool_call_compact_output_enabled ?? false;
   const modelSelectionHandler = config?.model_selection_enabled
     ? selectActiveModel
     : undefined;
@@ -292,11 +300,13 @@ const HomePageChatPanel: FC<{
       savingConfig={savingConfig}
       hasPendingQuestion={hasPendingQuestion}
       modelOptionsLoading={modelOptionsLoading}
+      agentMode={agentMode}
       activeModelOption={activeModelOption}
       modelOptions={modelOptions}
       canStop={canStop}
       sendMessage={sendMessage}
       stopCurrentRun={stopCurrentRun}
+      setAgentMode={setAgentMode}
       onSelectModel={modelSelectionHandler}
     />
   );
@@ -313,7 +323,6 @@ const HomePageChatPanel: FC<{
       streamingThinkingSegments,
       streamingTools,
       toolCard: {
-        compactOutputEnabled: toolCallCompactOutputEnabled,
         fallbackTitle: copy.chat.toolFallbackName,
         preparingDetails: copy.chat.toolPreparingOutput,
       },
@@ -331,7 +340,6 @@ const HomePageChatPanel: FC<{
     streamingItemOrder,
     streamingThinkingSegments,
     streamingTools,
-    toolCallCompactOutputEnabled,
   ]);
 
   return (
@@ -358,6 +366,7 @@ const HomePageChatPanel: FC<{
             view={messageListView}
             assistantMarkdownEnabled={assistantMarkdownEnabled}
             hasOlderHistory={hasOlderHistory}
+            postSendFocusRequest={postSendFocusRequest}
             loadOlderHistory={loadOlderHistory}
             onAnswerQuestion={answerQuestion}
             onCancelQuestion={cancelQuestion}
@@ -377,11 +386,13 @@ const HomePageComposer: FC<{
   savingConfig: HomePageController['savingConfig'];
   hasPendingQuestion: HomePageController['hasPendingQuestion'];
   modelOptionsLoading: HomePageController['modelOptionsLoading'];
+  agentMode: HomePageController['agentMode'];
   activeModelOption: HomePageController['activeModelOption'];
   modelOptions: HomePageController['modelOptions'];
   canStop: HomePageController['canStop'];
   sendMessage: HomePageController['sendMessage'];
   stopCurrentRun: HomePageController['stopCurrentRun'];
+  setAgentMode: HomePageController['setAgentMode'];
   onSelectModel?: HomePageController['selectActiveModel'];
 }> = ({
   canEnableCodexMode,
@@ -390,11 +401,13 @@ const HomePageComposer: FC<{
   savingConfig,
   hasPendingQuestion,
   modelOptionsLoading,
+  agentMode,
   activeModelOption,
   modelOptions,
   canStop,
   sendMessage,
   stopCurrentRun,
+  setAgentMode,
   onSelectModel,
 }) => {
   return (
@@ -404,11 +417,13 @@ const HomePageComposer: FC<{
       disabled={inputDisabled || savingConfig}
       awaitingQuestion={hasPendingQuestion}
       modelLoading={modelOptionsLoading || savingConfig}
+      agentMode={agentMode}
       activeModel={activeModelOption}
       availableModels={modelOptions}
       canStop={canStop}
       onSend={sendMessage}
       onStop={stopCurrentRun}
+      onChangeAgentMode={setAgentMode}
       onSelectModel={onSelectModel}
     />
   );

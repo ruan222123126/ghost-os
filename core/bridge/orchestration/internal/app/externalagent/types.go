@@ -12,6 +12,11 @@ const (
 )
 
 const (
+	CodexModeDefault = "default"
+	CodexModePlan    = "plan"
+)
+
+const (
 	StatusIdle             = "idle"
 	StatusRunning          = "running"
 	StatusAwaitingApproval = "awaiting_approval"
@@ -54,6 +59,13 @@ type ThreadResult struct {
 	Model    string
 }
 
+type CollaborationModeOptions struct {
+	ThreadID string
+	Mode     string
+	Model    string
+	Effort   string
+}
+
 type TurnOptions struct {
 	ThreadID       string
 	Message        string
@@ -62,6 +74,11 @@ type TurnOptions struct {
 	ApprovalPolicy string
 	Sandbox        string
 	Effort         string
+}
+
+type ModelCatalog struct {
+	Models       []string
+	DefaultModel string
 }
 
 type CodexEvent struct {
@@ -85,8 +102,10 @@ type ApprovalRequest struct {
 
 type CodexClient interface {
 	Connect(context.Context) error
+	ListModels(context.Context) (ModelCatalog, error)
 	StartThread(context.Context, ThreadOptions) (ThreadResult, error)
 	ResumeThread(context.Context, ThreadOptions) (ThreadResult, error)
+	SetCollaborationMode(context.Context, CollaborationModeOptions) error
 	StartTurn(context.Context, TurnOptions) (string, error)
 	InterruptTurn(context.Context, string, string) error
 	SetEventHandler(func(CodexEvent))
