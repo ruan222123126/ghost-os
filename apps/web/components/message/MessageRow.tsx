@@ -227,9 +227,9 @@ const QuestionMessageRow: FC<{
 }> = ({ loading, message, onAnswerQuestion, onCancelQuestion }) => (
   <div className="message-row is-question">
     <div className="message-stack">
-      <div className="message-note is-question">{message.content}</div>
       <QuestionInput
         loading={loading}
+        prompt={message.content}
         selectionMode={message.selectionMode}
         options={message.options}
         onAnswer={(answer) => onAnswerQuestion(message.questionId, answer)}
