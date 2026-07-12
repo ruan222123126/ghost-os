@@ -44,16 +44,20 @@ jobs:
           filters: |
             bridge:
               - 'core/bridge/**'
+              - '.github/workflows/trinity-check.yml'
             contract:
               - 'core/shared/**'
               - 'core/bridge/orchestration/envelope_generated.go'
               - 'apps/web/lib/envelope.generated.ts'
               - 'apps/cli/src/envelope_generated.rs'
               - 'scripts/check_generated_contracts.sh'
+              - '.github/workflows/trinity-check.yml'
             native:
               - 'drivers/native/**'
+              - '.github/workflows/trinity-check.yml'
             web:
               - 'apps/web/**'
+              - '.github/workflows/trinity-check.yml'
 
   contract-check:
     name: Shared Contract Generated Sync
@@ -104,6 +108,17 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux native dependencies
+        run: sudo apt-get update && sudo apt-get install --yes libxcb1-dev ripgrep
+
+      - name: Compile tests
+        run: |
+          if [ -n "${{ matrix.feature_args }}" ]; then
+            cargo test --manifest-path drivers/native/Cargo.toml ${{ matrix.feature_args }} --no-run
+          else
+            cargo test --manifest-path drivers/native/Cargo.toml --no-run
+          fi
 
       - name: Run tests
         run: |
