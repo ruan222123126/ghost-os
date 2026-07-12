@@ -51,7 +51,7 @@ jobs:
       # The one merge commit created from PR #3 needs the same narrow range on
       # main; later pushes immediately return to the standard incremental gate.
       - name: Run recovery merge complexity and boundary checks
-        if: github.event_name == 'push' && contains(github.event.head_commit.message, 'Merge pull request #3')
+        if: "github.event_name == 'push' && contains(github.event.head_commit.message, 'Merge pull request #3')"
         env:
           COMPLEXITY_DIFF_BASE: HEAD^2
         run: python3 scripts/check_complexity_limits.py
