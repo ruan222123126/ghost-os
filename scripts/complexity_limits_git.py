@@ -33,6 +33,12 @@ def event_base_head() -> tuple[str, str] | None:
 
 
 def diff_range() -> tuple[str, str]:
+    override_base = os.environ.get("COMPLEXITY_DIFF_BASE", "").strip()
+    if override_base:
+        base = run_git(["rev-parse", override_base]).strip()
+        head = run_git(["rev-parse", "HEAD"]).strip()
+        return base, head
+
     from_event = event_base_head()
     if from_event:
         return from_event
